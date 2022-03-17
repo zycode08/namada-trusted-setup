@@ -2,16 +2,18 @@
 extern crate rocket;
 use rand::RngCore;
 use rocket::serde::{json::Json, Deserialize};
-use rocket::State;
+use rocket::{State};
 
 const SEED_LENGTH: usize = 32;
 type Seed = [u8; SEED_LENGTH];
 
 use phase1_coordinator::{
 	authentication::{Dummy, Signature},
-	environment::{Development, Environment, Parameters},
+	environment::{Development, Environment, Parameters, Settings},
 	Coordinator, Participant,
 };
+
+use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
 
 type SigningKey = String;
 use std::{net::IpAddr, sync::Arc};
@@ -26,8 +28,8 @@ pub struct ConfirmationKey {
 }
 
 #[get("/")]
-fn index() -> String {
-	format!("Hello my dear!",)
+fn index(remote_ip: IpAddr) -> String {
+	format!("Hello my dear! {}", remote_ip)
 }
 
 fn create_contributor(id: &str) -> (Participant, SigningKey, Seed) {
@@ -42,19 +44,22 @@ fn create_contributor(id: &str) -> (Participant, SigningKey, Seed) {
 
 // TODO: authorize client with its private/public key pair
 // TOOD: 1. POST `/contributor/join_queue/`
-#[post("/contributor/join_queue", data = "<contributor_public_key>")]
+#[post("/contributor/join_queue", data = "<contributor_public_key_data>")]
 async fn join_queue(
 	coordinator: &State<Arc<RwLock<Coordinator>>>,
-	contributor_public_key: Json<ConfirmationKey>,
-) -> () {
-	let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
-	let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
-	let contributor = Participant::new_contributor("test-contributor");
+	contributor_public_key_data: Json<String>,
+	contributor_ip: IpAddr,
+) -> Json<bool> {
+	let contributor_public_key: &str = &contributor_public_key_data.into_inner();
+	let contributor = Participant::new_contributor(contributor_public_key);
+
 	coordinator
 		.write()
 		.await
-		.add_to_queue(contributor, Some(contributor_1_ip), 10)
+		.add_to_queue(contributor, Some(contributor_ip), 10)
 		.unwrap();
+
+	Json(true)
 }
 
 // TODO: 2. POST `/contributor/lock_chunk/`
@@ -71,6 +76,7 @@ async fn lock_chunk(coordinator: &State<Arc<RwLock<Coordinator>>>) -> () {
 
 // TODO: * POST `/contributor/heartbeat/`
 // TODO: * GET `/contributor/get_tasks_left/`
+// TODO: * POST `/v1/contributor/status`
 
 #[get("/update")]
 async fn update_coordinator(coordinator: &State<Arc<RwLock<Coordinator>>>) -> () {
@@ -87,12 +93,27 @@ fn instantiate_coordinator(environment: &Environment, signature: Arc<dyn Signatu
 async fn main() -> Result<(), rocket::Error> {
 	tracing_subscriber::fmt::init();
 	// Set the environment.
-	let environment: Environment = Development::from(Parameters::TestCustom {
-		number_of_chunks: 8,
-		power: 12,
-		batch_size: 256,
-	})
-	.into();
+
+	// let environment: Environment = Development::from(Parameters::TestCustom {
+	// 	number_of_chunks: 8,
+	// 	power: 12,
+	// 	batch_size: 256,
+	// })
+	// .into();
+
+	// let environment: Production = Default::default();
+
+	// This parameters are to be exposed publicly to the REST API
+	let parameters = Parameters::Custom(Settings::new(
+		ContributionMode::Full,
+		ProvingSystem::Groth16,
+		CurveKind::Bls12_377,
+		6,  /* power */
+		16, /* batch_size */
+		16, /* chunk_size */
+	));
+
+	let environment: Development = Development::from(parameters);
 
 	// Instantiate the coordinator.
 	let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(

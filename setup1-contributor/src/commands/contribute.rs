@@ -14,7 +14,8 @@ use crate::{
     },
 };
 
-use phase1::helpers::converters::CurveKind;
+use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
+
 use phase1_cli::contribute;
 use phase1_coordinator::{
     environment::Environment,
@@ -24,6 +25,10 @@ use setup1_shared::structures::{ContributorStatus, LockResponse, PublicSettings,
 use setup_utils::calculate_hash;
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine};
 use snarkvm_dpc::{parameters::testnet2::Testnet2Parameters, Address, PrivateKey, ViewKey};
+
+use phase1_coordinator::{
+	environment::{Development, Parameters, Settings},
+};
 
 use age::DecryptError;
 use anyhow::{Context, Result};
@@ -56,9 +61,9 @@ const DELAY_POLL_CEREMONY: Duration = Duration::from_secs(5);
 const HEARTBEAT_POLL_DELAY: Duration = Duration::from_secs(30);
 
 // Version constants
-const MAJOR: u8 = 0;
-const MINOR: u8 = 1;
-const PATCH: u8 = 0;
+// const MAJOR: u8 = 0;
+// const MINOR: u8 = 1;
+// const PATCH: u8 = 0;
 
 #[derive(Clone)]
 pub struct Contribute {
@@ -344,7 +349,7 @@ impl Contribute {
     }
 
     async fn join_queue<R: Rng + CryptoRng>(&self, auth_rng: &mut R) -> Result<bool> {
-        let join_queue_path = format!("/v1/queue/contributor/join/{}/{}/{}", MAJOR, MINOR, PATCH);
+        let join_queue_path = format!("/contributor/join_queue");
         let join_queue_path_url = self.server_url.join(&join_queue_path)?;
         let client = reqwest::Client::new();
         let authorization = get_authorization_value(&self.private_key, "POST", &join_queue_path, auth_rng)?;
@@ -769,20 +774,30 @@ async fn request_coordinator_public_settings(coordinator_url: &Url) -> anyhow::R
 }
 
 pub async fn contribute_subcommand(opts: &ContributeOptions) -> anyhow::Result<()> {
-    let public_settings = request_coordinator_public_settings(&opts.api_url)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch the coordinator public settings");
-            e
-        })
-        .with_context(|| "Failed to fetch the coordinator public settings".to_owned())?;
+    // let public_settings = request_coordinator_public_settings(&opts.api_url)
+    //     .await
+    //     .map_err(|e| {
+    //         tracing::error!("Failed to fetch the coordinator public settings");
+    //         e
+    //     })
+    //     .with_context(|| "Failed to fetch the coordinator public settings".to_owned())?;
 
-    start_contributor(opts, &public_settings).await
+    start_contributor(opts).await
 }
 
-async fn start_contributor(opts: &ContributeOptions, public_settings: &PublicSettings) -> Result<()> {
-    let environment = crate::utils::environment_by_setup_kind(&public_settings.setup);
+async fn start_contributor(opts: &ContributeOptions) -> Result<()> {
+    // let environment = crate::utils::environment_by_setup_kind(&public_settings.setup);
 
+    let parameters = Parameters::Custom(Settings::new(
+        ContributionMode::Full,
+        ProvingSystem::Groth16,
+        CurveKind::Bls12_377,
+        6,  /* power */
+        16, /* batch_size */
+        16, /* chunk_size */
+    ));
+
+    let environment: Development = Development::from(parameters);
     // Initialize tracing logger. Stored to `aleo-setup.log`.
     let appender = tracing_appender::rolling::never(".", "aleo-setup.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(appender);
@@ -798,13 +813,13 @@ async fn start_contributor(opts: &ContributeOptions, public_settings: &PublicSet
     // Initialize the contributor.
     let mut contribute = Contribute::new(opts, &environment, private_key, seed);
 
-    if public_settings.check_reliability {
-        println!("Checking CPU performance, it may take a few minutes");
-        tracing::info!("Checking reliability score before joining the queue");
-        crate::reliability::check(&opts.api_url, &contribute.private_key).await?;
-        println!("CPU check complete");
-        tracing::info!("Reliability checks completed successfully");
-    }
+    // if public_settings.check_reliability {
+    //     println!("Checking CPU performance, it may take a few minutes");
+    //     tracing::info!("Checking reliability score before joining the queue");
+    //     crate::reliability::check(&opts.api_url, &contribute.private_key).await?;
+    //     println!("CPU check complete");
+    //     tracing::info!("Reliability checks completed successfully");
+    // }
 
     // Run the contributor.
     let contribution = match curve_kind {
