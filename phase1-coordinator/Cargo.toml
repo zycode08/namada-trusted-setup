@@ -13,10 +13,6 @@ name = "phase1-coordinator"
 path = "src/main.rs"
 required-features = ["parallel"]
 
-[[bin]]
-name = "coordinator-server"
-path = "src/server.rs"
-
 [dependencies]
 phase1 = { path = "../phase1" }
 setup-utils = { path = "../setup-utils" }
@@ -31,6 +27,7 @@ memmap = { version = "0.7.0" }
 once_cell = { version = "1.5.2" }
 rand = { version = "0.8" }
 rayon = { version = "1.4.1" }
+rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde-aux = { version = "3.0" }
 serde-diff = { version = "0.4" }
@@ -41,10 +38,6 @@ time = { version = "0.3", features = ["serde-human-readable", "macros"] }
 tokio = { version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
-
-[dependencies.rocket]
-version = "0.5.0-rc.1"
-features = ["json"]
 
 [dev-dependencies]
 serial_test = { version = "0.5" }

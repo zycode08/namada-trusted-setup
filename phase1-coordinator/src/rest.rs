@@ -1,11 +1,8 @@
-#[macro_use]
-extern crate rocket;
+//! REST API endpoints.
+
 use rand::RngCore;
 use rocket::serde::{json::Json, Deserialize};
-use rocket::{State};
-
-const SEED_LENGTH: usize = 32;
-type Seed = [u8; SEED_LENGTH];
+use rocket::{get, error, post, routes, State};
 
 use phase1_coordinator::{
 	authentication::{Dummy, Signature},
@@ -15,21 +12,21 @@ use phase1_coordinator::{
 
 use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
 
-type SigningKey = String;
 use std::{net::IpAddr, sync::Arc};
 use tracing_subscriber;
 
 use tokio::sync::RwLock;
 
+
+const SEED_LENGTH: usize = 32;
+
+type Seed = [u8; SEED_LENGTH];
+type SigningKey = String;
+
 #[derive(Deserialize)]
 pub struct ConfirmationKey {
 	address: String,
 	private_key: String,
-}
-
-#[get("/")]
-fn index(remote_ip: IpAddr) -> String {
-	format!("Hello my dear! {}", remote_ip)
 }
 
 fn create_contributor(id: &str) -> (Participant, SigningKey, Seed) {
@@ -42,10 +39,17 @@ fn create_contributor(id: &str) -> (Participant, SigningKey, Seed) {
 	(contributor, contributor_signing_key, seed)
 }
 
+
+
+//
+// -- REST API ENDPOINTS --
+//
+
+
 // TODO: authorize client with its private/public key pair
 // TOOD: 1. POST `/contributor/join_queue/`
 #[post("/contributor/join_queue", data = "<contributor_public_key_data>")]
-async fn join_queue(
+pub async fn join_queue(
 	coordinator: &State<Arc<RwLock<Coordinator>>>,
 	contributor_public_key_data: Json<String>,
 	contributor_ip: IpAddr,
@@ -79,61 +83,8 @@ async fn lock_chunk(coordinator: &State<Arc<RwLock<Coordinator>>>) -> () {
 // TODO: * POST `/v1/contributor/status`
 
 #[get("/update")]
-async fn update_coordinator(coordinator: &State<Arc<RwLock<Coordinator>>>) -> () {
+pub async fn update_coordinator(coordinator: &State<Arc<RwLock<Coordinator>>>) -> () {
 	if let Err(error) = coordinator.write().await.update() {
 		error!("{}", error);
 	}
-}
-
-fn instantiate_coordinator(environment: &Environment, signature: Arc<dyn Signature>) -> anyhow::Result<Coordinator> {
-	Ok(Coordinator::new(environment.clone(), signature)?)
-}
-
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-	tracing_subscriber::fmt::init();
-	// Set the environment.
-
-	// let environment: Environment = Development::from(Parameters::TestCustom {
-	// 	number_of_chunks: 8,
-	// 	power: 12,
-	// 	batch_size: 256,
-	// })
-	// .into();
-
-	// let environment: Production = Default::default();
-
-	// This parameters are to be exposed publicly to the REST API
-	let parameters = Parameters::Custom(Settings::new(
-		ContributionMode::Full,
-		ProvingSystem::Groth16,
-		CurveKind::Bls12_377,
-		6,  /* power */
-		16, /* batch_size */
-		16, /* chunk_size */
-	));
-
-	let environment: Development = Development::from(parameters);
-
-	// Instantiate the coordinator.
-	let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
-		instantiate_coordinator(&environment, Arc::new(Dummy)).unwrap(),
-	));
-
-	let ceremony_coordinator = coordinator.clone();
-
-	// Initialize the coordinator.
-	ceremony_coordinator.write().await.initialize().unwrap();
-
-	let rocket = rocket::build()
-		.mount("/", routes![index, update_coordinator, join_queue])
-		.manage(ceremony_coordinator)
-		.ignite()
-		.await?;
-	println!("Hello, Rocket: {:?}", rocket);
-
-	let result = rocket.launch().await;
-	println!("The server shutdown: {:?}", result);
-
-	result
 }

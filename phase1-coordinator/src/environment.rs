@@ -1,5 +1,5 @@
 use crate::{objects::Participant, storage::Disk};
-use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
+pub use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
 use setup_utils::{CheckForCorrectness, UseCompression};
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
