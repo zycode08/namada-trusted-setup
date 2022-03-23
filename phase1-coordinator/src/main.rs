@@ -161,7 +161,7 @@ pub async fn main() -> anyhow::Result<()> {
 
     // Set the environment.
     let environment: Environment = Development::from(Parameters::TestCustom {
-        number_of_chunks: 8,
+        number_of_chunks: 1,
         power: 12,
         batch_size: 256,
     })
