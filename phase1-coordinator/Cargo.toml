@@ -43,6 +43,7 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 
 # Dependencies from Sapling MPC 
+
 phase2 = "0.2.1"
 pairing = "0.14"
 # rand = "0.4"
@@ -60,6 +61,7 @@ optional = true
 [dependencies.hex-literal]
 version = "0.1"
 optional = true
+
 # End: Dependencies from Sapling MPC 
 
 [dependencies.rocket]
@@ -75,3 +77,7 @@ default = []
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []
+# Dependencies from Sapling MPC 
+verification = ["sapling-crypto"]
+u128-support = ["pairing/u128-support"]
+beacon = ["byteorder", "hex-literal"]
