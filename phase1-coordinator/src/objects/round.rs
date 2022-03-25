@@ -36,7 +36,7 @@ where
 }
 
 /// Locators for files that are locked by [Round::try_lock_chunk()]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LockedLocators {
     previous_contribution: ContributionLocator,
     current_contribution: ContributionLocator,

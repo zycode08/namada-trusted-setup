@@ -2259,9 +2259,8 @@ impl Coordinator {
     /// Returns a mutable reference to the instantiation of `Storage`
     /// that this coordinator is using.
     ///
-    #[cfg(test)]
     #[inline]
-    pub(super) fn storage_mut(&mut self) -> &mut Disk {
+    pub fn storage_mut(&mut self) -> &mut Disk {
         &mut self.storage
     }
 

@@ -1,12 +1,13 @@
 use phase1_coordinator::{
     authentication::{Dummy, Signature},
-    environment::{Production, Environment, Parameters, Settings, CurveKind, ContributionMode, ProvingSystem},
+    environment::{Development, Production, Environment, Parameters, Settings, CurveKind, ContributionMode, ProvingSystem},
     objects::{task::Task, LockedLocators, Participant},
     Coordinator,
 };
 use serde::{Deserialize, Serialize};
 use tracing_subscriber;
 mod rest;
+use std::ops::Deref;
 
 use rocket::{main, routes};
 
@@ -32,10 +33,6 @@ pub static TEST_CONTRIBUTOR_IP_1: Lazy<IpAddr> = Lazy::new(|| IpAddr::V4("0.0.0.
 pub static TEST_CONTRIBUTOR_ID_2: Lazy<Participant> =
     Lazy::new(|| Participant::Contributor("testing-coordinator-contributor-2".to_string()));
 pub static TEST_CONTRIBUTOR_IP_2: Lazy<IpAddr> = Lazy::new(|| IpAddr::V4("0.0.0.2".parse().unwrap()));
-
-fn coordinator(environment: &Environment, signature: Arc<dyn Signature>) -> anyhow::Result<Coordinator> {
-    Ok(Coordinator::new(environment.clone(), signature)?)
-}
 
 // // 1. Join the ceremony queue.
 // async fn join_ceremony_queue(coordinator: &Arc<RwLock<Coordinator>>, contributor: Participant) -> anyhow::Result<()> {
@@ -136,16 +133,20 @@ pub async fn main() {
 		16, /* chunk_size */
 	));
 
+    #[cfg(debug_assertions)]
+	let environment: Development = Development::from(parameters);
+
+    #[cfg(not(debug_assertions))]
 	let environment: Production = Production::from(parameters);
 
 	// Instantiate the coordinator
-	let coordinator: RwLock<Coordinator> = Arc::new(RwLock::new(
-		coordinator(&environment, Arc::new(Dummy)).unwrap(), //FIXME: proper signature
+	let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
+		Coordinator::new(environment.deref().to_owned(), Arc::new(Dummy)).unwrap(), //FIXME: proper signature?
 	));
 
-	let ceremony_coordinator = coordinator.clone();
+    coordinator.write().await.initialize().unwrap();
 
-	//  // Initialize the coordinator. FIXME: separate thread? -> Probably not need this part, just pass the coordinator to rocket server
+	//  // Initialize the coordinator.
     //  let ceremony = task::spawn(async move {
     //     // Initialize the coordinator.
     //     ceremony_coordinator.write().await.initialize().unwrap();
@@ -170,8 +171,8 @@ pub async fn main() {
 
     // Launch Rocket REST server
 	let build_rocket = rocket::build()
-		.mount("/", routes![rest::update_coordinator, rest::join_queue])// FIXME: imports these routes from server.rs
-		.manage(ceremony_coordinator);
+		.mount("/", routes![rest::join_queue, rest::lock_chunk, rest::get_chunk, rest::post_contribution_chunk, rest::contribute_chunk, rest::update_coordinator, rest::heartbeat, rest::get_tasks_left])// FIXME: imports these routes from server.rs
+		.manage(coordinator);
 
     
 	let ignite_rocket = match build_rocket.ignite().await {
