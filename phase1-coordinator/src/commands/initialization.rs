@@ -14,6 +14,11 @@ use tracing::{debug, error, info, trace};
 
 pub(crate) struct Initialization;
 
+extern crate pairing;
+extern crate phase2;
+#[cfg(feature = "verification")]
+extern crate sapling_crypto;
+
 impl Initialization {
     ///
     /// Runs chunk initialization for a given environment, round height, and chunk ID.
@@ -39,23 +44,23 @@ impl Initialization {
         storage.initialize(contribution_locator.clone(), expected_challenge_size as u64)?;
 
         // Run ceremony initialization on chunk.
-        let settings = environment.parameters();
+        // let settings = environment.parameters();
 
-        if let Err(error) = match settings.curve() {
-            CurveKind::Bls12_377 => Self::initialization(
-                storage.writer(&contribution_locator)?.as_mut(),
-                environment.compressed_inputs(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-            ),
-            CurveKind::BW6 => Self::initialization(
-                storage.writer(&contribution_locator)?.as_mut(),
-                environment.compressed_inputs(),
-                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
-            ),
-        } {
-            error!("Initialization failed with {}", error);
-            return Err(CoordinatorError::InitializationFailed.into());
-        }
+        // if let Err(error) = match settings.curve() {
+        //     CurveKind::Bls12_377 => Self::initialization(
+        //         storage.writer(&contribution_locator)?.as_mut(),
+        //         environment.compressed_inputs(),
+        //         &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+        //     ),
+        //     CurveKind::BW6 => Self::initialization(
+        //         storage.writer(&contribution_locator)?.as_mut(),
+        //         environment.compressed_inputs(),
+        //         &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
+        //     ),
+        // } {
+        //     error!("Initialization failed with {}", error);
+        //     return Err(CoordinatorError::InitializationFailed.into());
+        // }
 
         // Copy the current transcript to the next transcript.
         // This operation will *overwrite* the contents of `next_transcript`.
@@ -76,13 +81,16 @@ impl Initialization {
 
     /// Runs Phase 1 initialization on the given parameters.
     #[inline]
+    #[cfg(feature = "verification")]
     fn initialization<T: Engine + Sync>(
         mut writer: &mut [u8],
         compressed: UseCompression,
         parameters: &Phase1Parameters<T>,
     ) -> Result<(), CoordinatorError> {
-        trace!("Initializing Powers of Tau on 2^{}", parameters.total_size_in_log2);
-        trace!("In total will generate up to {} powers", parameters.powers_g1_length);
+        // trace!("Initializing Powers of Tau on 2^{}", parameters.total_size_in_log2);
+        // trace!("In total will generate up to {} powers", parameters.powers_g1_length);
+
+        trace!("Initializing Parameters for phase 2 ");
 
         let hash = blank_hash();
         (&mut writer[0..]).write_all(hash.as_slice())?;
@@ -90,7 +98,25 @@ impl Initialization {
         debug!("Empty challenge hash is {}", pretty_hash!(&hash));
 
         trace!("Starting Phase 1 initialization operation");
-        Phase1::initialization(&mut writer, compressed, &parameters)?;
+        // Add here your MPC Parameters init function
+        let jubjub_params = sapling_crypto::jubjub::JubjubBls12::new();
+
+        // Sapling spend circuit
+        phase2::MPCParameters::new(sapling_crypto::circuit::sapling::Spend {
+            params: &jubjub_params,
+            value_commitment: None,
+            proof_generation_key: None,
+            payment_address: None,
+            commitment_randomness: None,
+            ar: None,
+            auth_path: vec![None; 32], // Tree depth is 32 for sapling
+            anchor: None,
+        })
+        .unwrap()
+        .write(&mut writer)
+        .unwrap();
+
+        // Phase1::initialization(&mut writer, compressed, &parameters)?;
         writer.flush()?;
         trace!("Completed Phase 1 initialization operation");
 
@@ -181,6 +207,65 @@ mod tests {
                     chunk_id,
                     pretty_hash!(&contribution_hash)
                 );
+            }
+        }
+
+        #[test]
+        #[serial]
+        fn test_initialization_run_anoma() {
+            initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
+
+            // Define test parameters.
+            let round_height = 0;
+            let number_of_chunks = TEST_ENVIRONMENT_ANOMA.number_of_chunks();
+
+            // Define test storage.
+            let mut storage = test_storage(&TEST_ENVIRONMENT_ANOMA);
+
+            // Initialize the previous contribution hash with a no-op value.
+            let mut previous_contribution_hash: GenericArray<u8, _> =
+                GenericArray::from_slice(vec![0; 64].as_slice()).clone();
+
+            // Generate a new challenge for the given parameters.
+            for chunk_id in 0..number_of_chunks {
+                debug!("Initializing test chunk {}", chunk_id);
+
+                // Execute the ceremony initialization
+                let candidate_hash =
+                    Initialization::run(&TEST_ENVIRONMENT_ANOMA, &mut storage, round_height, chunk_id).unwrap();
+
+                // Open the contribution locator file.
+                let locator = Locator::ContributionFile(ContributionLocator::new(round_height, chunk_id, 0, true));
+                let reader = storage.reader(&locator).unwrap();
+
+                // Check that the contribution chunk was generated based on the blank hash.
+                let hash = blank_hash();
+                for (i, (expected, candidate)) in
+                    hash.iter().zip(reader.as_ref().chunks(64).next().unwrap()).enumerate()
+                {
+                    trace!("Checking byte {} of expected hash", i);
+                    assert_eq!(expected, candidate);
+                }
+
+                // If chunk ID is under (number_of_chunks / 2), the contribution hash
+                // of each iteration will match with Groth16 and Marlin.
+                if chunk_id < (number_of_chunks / 2) as u64 {
+                    // Sanity only - Check that the current contribution hash matches the previous one.
+                    let contribution_hash = calculate_hash(reader.as_ref());
+                    assert_eq!(contribution_hash.to_vec(), candidate_hash);
+                    match chunk_id == 0 {
+                        true => previous_contribution_hash = contribution_hash,
+                        false => {
+                            assert_eq!(previous_contribution_hash, contribution_hash);
+                            previous_contribution_hash = contribution_hash;
+                        }
+                    }
+                    trace!(
+                        "The contribution hash of chunk {} is {}",
+                        chunk_id,
+                        pretty_hash!(&contribution_hash)
+                    );
+                }
             }
         }
     }
