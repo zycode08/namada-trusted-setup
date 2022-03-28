@@ -1,8 +1,7 @@
 //! REST API endpoints.
 
-use phase1_coordinator::coordinator;
-use phase1_coordinator::objects::Task;
-use phase1_coordinator::storage::{ContributionLocator, Locator, Object, Disk};
+use crate::objects::Task;
+use crate::storage::{ContributionLocator, Locator, Object, Disk};
 use rand::RngCore;
 use rand::distributions::Standard;
 use rocket::http::{ContentType, Status};
@@ -10,7 +9,7 @@ use rocket::response::{Responder, Response};
 use rocket::serde::{json::Json, Deserialize};
 use rocket::{get, error, post, routes, State, Request};
 
-use phase1_coordinator::{
+use crate::{
 	authentication::{Dummy, Signature},
 	environment::{Development, Environment, Parameters, Settings},
 	objects::LockedLocators,
@@ -33,7 +32,7 @@ const SEED_LENGTH: usize = 32;
 
 type Seed = [u8; SEED_LENGTH];
 type SigningKey = String;
-type Coordinator = Arc<RwLock<phase1_coordinator::Coordinator>>;
+type Coordinator = Arc<RwLock<crate::Coordinator>>;
 
 #[derive(Deserialize)]
 pub struct ConfirmationKey {
@@ -168,6 +167,7 @@ pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json
 pub async fn post_contribution_chunk(coordinator: &State<Coordinator>, post_chunk_request: Json<PostChunkRequest>) -> Result<()> {
 	let request = post_chunk_request.into_inner();
 
+	//FIXME: use contribute()?
 	match coordinator.write().await.storage_mut().update(&Locator::ContributionFile(request.locator), Object::ContributionFile(request.contribution)) {
 		Ok(_) => Ok(()),
 		Err(e) => Err(ResponseError::CoordinatorError(e))

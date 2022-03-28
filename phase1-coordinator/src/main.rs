@@ -3,10 +3,10 @@ use phase1_coordinator::{
     environment::{Development, Production, Environment, Parameters, Settings, CurveKind, ContributionMode, ProvingSystem},
     objects::{task::Task, LockedLocators, Participant},
     Coordinator,
+    rest
 };
 use serde::{Deserialize, Serialize};
 use tracing_subscriber;
-mod rest;
 use std::ops::Deref;
 
 use rocket::{main, routes};

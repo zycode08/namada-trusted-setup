@@ -52,6 +52,8 @@ pub use objects::{ContributionFileSignature, ContributionState, Participant, Rou
 
 pub mod storage;
 
+pub mod rest;
+
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
