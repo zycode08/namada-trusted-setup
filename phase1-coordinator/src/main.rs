@@ -141,7 +141,7 @@ pub async fn main() {
 
 	// Instantiate the coordinator
 	let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
-		Coordinator::new(environment.deref().to_owned(), Arc::new(Dummy)).unwrap(), //FIXME: proper signature?
+		Coordinator::new(environment.into(), Arc::new(Dummy)).unwrap(), //FIXME: proper signature?
 	));
 
     coordinator.write().await.initialize().unwrap();

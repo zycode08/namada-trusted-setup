@@ -220,5 +220,3 @@ pub async fn get_tasks_left(coordinator: &State<Coordinator>, contributor_public
 			None => Err(ResponseError::UnknownContributor(pubkey))
 		}
 }
-
-// TODO: test passing wrong parameters to the requests
