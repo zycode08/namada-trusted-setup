@@ -823,8 +823,8 @@ async fn start_contributor(opts: &ContributeOptions) -> Result<()> {
 
     // Run the contributor.
     let contribution = match curve_kind {
-        // NOTE: the run_and_catch_errros is not implemented for Bls12_281
-        CurveKind::Bls12_281 => contribute.run_and_catch_errors::<Bls12_377>().await,
+        // NOTE: the run_and_catch_errros is not implemented for Bls12_381
+        CurveKind::Bls12_381 => contribute.run_and_catch_errors::<Bls12_377>().await,
         CurveKind::Bls12_377 => contribute.run_and_catch_errors::<Bls12_377>().await,
         CurveKind::BW6 => contribute.run_and_catch_errors::<BW6_761>().await,
     };

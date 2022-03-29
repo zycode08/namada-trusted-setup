@@ -68,7 +68,7 @@ impl Computation {
         let settings = environment.parameters();
         let curve = settings.curve();
         if let Err(error) = match curve {
-            CurveKind::Bls12_281 => Self::contribute(
+            CurveKind::Bls12_381 => Self::contribute(
                 environment,
                 storage.reader(challenge_locator)?.as_ref(),
                 storage.writer(response_locator)?.as_mut(),
@@ -188,7 +188,7 @@ impl Computation {
         //     &private_key,
         //     &parameters,
         // )?;
-        response_writer.flush()?;
+        // response_writer.flush()?;
         trace!("Finishing writing your contribution to response file");
 
         // Write the public key.
@@ -318,7 +318,6 @@ mod tests {
         }
 
         // Generate a new challenge for the given parameters.
-        /*
         let round_height = 1;
         for chunk_id in 0..number_of_chunks {
             trace!("Running computation on test chunk {}", chunk_id);
@@ -335,11 +334,13 @@ mod tests {
             );
 
             if !storage.exists(response_locator) {
-                let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
+                // let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
+                let expected_filesize = 100_000_000;
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {
-                let expected_filesize = Object::contribution_file_signature_size(false);
+                // let expected_filesize = Object::contribution_file_signature_size(false);
+                let expected_filesize = 100_000_000;
                 storage
                     .initialize(contribution_file_signature_locator.clone(), expected_filesize)
                     .unwrap();
@@ -375,6 +376,5 @@ mod tests {
                 assert_eq!(expected, candidate);
             }
         }
-        */
     }
 }

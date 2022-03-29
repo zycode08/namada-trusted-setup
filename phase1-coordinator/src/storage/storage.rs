@@ -155,7 +155,7 @@ impl Object {
 
         match settings.curve() {
             // TODO: change round_filesize
-            CurveKind::Bls12_281 => round_filesize!(Bls12_377, settings, compressed),
+            CurveKind::Bls12_381 => round_filesize!(Bls12_377, settings, compressed),
             CurveKind::Bls12_377 => round_filesize!(Bls12_377, settings, compressed),
             CurveKind::BW6 => round_filesize!(BW6_761, settings, compressed),
         }
@@ -175,8 +175,8 @@ impl Object {
 
         match (curve, verified) {
             // TODO: add correct verified_contribution_size
-            (CurveKind::Bls12_281, true) => verified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
-            (CurveKind::Bls12_281, false) => unverified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
+            (CurveKind::Bls12_381, true) => verified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
+            (CurveKind::Bls12_381, false) => unverified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::Bls12_377, true) => verified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::Bls12_377, false) => unverified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::BW6, true) => verified_contribution_size!(BW6_761, settings, chunk_id, compressed),

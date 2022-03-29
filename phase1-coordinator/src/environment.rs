@@ -187,9 +187,9 @@ impl Parameters {
     fn test_custom(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
         let proving_system = ProvingSystem::Groth16;
         Settings::new(
-            ContributionMode::Chunked,
+            ContributionMode::Full,
             proving_system,
-            CurveKind::Bls12_377,
+            CurveKind::Bls12_381,
             *power,
             *batch_size,
             chunk_size!(number_of_chunks, proving_system, power),
