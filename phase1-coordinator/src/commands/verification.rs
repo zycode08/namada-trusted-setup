@@ -170,6 +170,13 @@ impl Verification {
         // Execute ceremony verification on chunk.
         let settings = environment.parameters();
         let result = match settings.curve() {
+            // TODO: change phase1_chunked_parameters
+            CurveKind::Bls12_281 => Self::transform_pok_and_correctness(
+                environment,
+                storage.reader(&challenge_locator)?.as_ref(),
+                storage.reader(&response_locator)?.as_ref(),
+                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+            ),
             CurveKind::Bls12_377 => Self::transform_pok_and_correctness(
                 environment,
                 storage.reader(&challenge_locator)?.as_ref(),
@@ -216,6 +223,12 @@ impl Verification {
             }
 
             match settings.curve() {
+                CurveKind::Bls12_281 => Self::decompress(
+                    storage.reader(&response_locator)?.as_ref(),
+                    storage.writer(&next_challenge_locator)?.as_mut(),
+                    response_hash.as_ref(),
+                    &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+                )?,
                 CurveKind::Bls12_377 => Self::decompress(
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),

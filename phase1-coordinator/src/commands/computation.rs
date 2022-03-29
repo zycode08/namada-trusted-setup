@@ -10,12 +10,21 @@ use setup_utils::{calculate_hash, derive_rng_from_seed, UseCompression};
 
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine as Engine};
 
-use rand::{CryptoRng, Rng};
+use rand::{rngs::StdRng, CryptoRng, Rng, SeedableRng};
 use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
 
 pub const SEED_LENGTH: usize = 32;
 pub type Seed = [u8; SEED_LENGTH];
+
+extern crate blake2_rfc;
+extern crate pairing;
+extern crate phase2;
+extern crate rand_04;
+
+use blake2_rfc::blake2b::Blake2b;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Cursor};
 
 pub(crate) struct Computation;
 
@@ -59,6 +68,13 @@ impl Computation {
         let settings = environment.parameters();
         let curve = settings.curve();
         if let Err(error) = match curve {
+            CurveKind::Bls12_281 => Self::contribute(
+                environment,
+                storage.reader(challenge_locator)?.as_ref(),
+                storage.writer(response_locator)?.as_mut(),
+                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+                derive_rng_from_seed(&seed[..]),
+            ),
             CurveKind::Bls12_377 => Self::contribute(
                 environment,
                 storage.reader(challenge_locator)?.as_ref(),
@@ -151,15 +167,27 @@ impl Computation {
 
         // Perform the transformation
         trace!("Computing and writing your contribution, this could take a while");
-        Phase1::computation(
-            challenge_reader,
-            response_writer,
-            compressed_inputs,
-            compressed_outputs,
-            check_input_for_correctness,
-            &private_key,
-            &parameters,
-        )?;
+        let mut challenge_reader_buff = Cursor::new(challenge_reader);
+        let mut sapling_spend =
+            phase2::MPCParameters::read(&mut challenge_reader_buff, false).expect("couldn't deserialize Sapling Spend params");
+
+        let rng_sapling = &mut rand_04::OsRng::new().expect("couldn't create RNG");
+
+        sapling_spend.contribute(rng_sapling);
+
+        sapling_spend
+            .write(&mut response_writer)
+            .expect("couldn't write new Sapling Spend params");
+
+        // Phase1::computation(
+        //     challenge_reader,
+        //     response_writer,
+        //     compressed_inputs,
+        //     compressed_outputs,
+        //     check_input_for_correctness,
+        //     &private_key,
+        //     &parameters,
+        // )?;
         response_writer.flush()?;
         trace!("Finishing writing your contribution to response file");
 
@@ -264,5 +292,89 @@ mod tests {
                 assert_eq!(expected, candidate);
             }
         }
+    }
+
+    #[test]
+    #[serial]
+    fn test_computation_run_anoma() {
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
+
+        // Define signature scheme.
+        let signature: Arc<dyn Signature> = Arc::new(Dummy);
+
+        // Define test parameters.
+        let number_of_chunks = TEST_ENVIRONMENT_ANOMA.number_of_chunks();
+
+        // Define test storage.
+        let mut storage = test_storage(&TEST_ENVIRONMENT_ANOMA);
+
+        // Generate a new challenge for the given parameters.
+        let round_height = 0;
+        for chunk_id in 0..number_of_chunks {
+            debug!("Initializing test chunk {}", chunk_id);
+
+            // Run initialization on chunk.
+            Initialization::run(&TEST_ENVIRONMENT_ANOMA, &mut storage, round_height, chunk_id).unwrap();
+        }
+
+        // Generate a new challenge for the given parameters.
+        /*
+        let round_height = 1;
+        for chunk_id in 0..number_of_chunks {
+            trace!("Running computation on test chunk {}", chunk_id);
+
+            // Fetch the challenge locator.
+            let challenge_locator =
+                &Locator::ContributionFile(ContributionLocator::new(round_height, chunk_id, 0, true));
+            // Fetch the response locator.
+            let response_locator =
+                &Locator::ContributionFile(ContributionLocator::new(round_height, chunk_id, 1, false));
+            // Fetch the contribution file signature locator.
+            let contribution_file_signature_locator = &Locator::ContributionFileSignature(
+                ContributionSignatureLocator::new(round_height, chunk_id, 1, false),
+            );
+
+            if !storage.exists(response_locator) {
+                let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
+                storage.initialize(response_locator.clone(), expected_filesize).unwrap();
+            }
+            if !storage.exists(contribution_file_signature_locator) {
+                let expected_filesize = Object::contribution_file_signature_size(false);
+                storage
+                    .initialize(contribution_file_signature_locator.clone(), expected_filesize)
+                    .unwrap();
+            }
+
+            // Run computation on chunk.
+            let contributor_signing_key = "secret_key".to_string();
+            let mut seed: Seed = [0; SEED_LENGTH];
+            rand::thread_rng().fill_bytes(&mut seed[..]);
+            Computation::run(
+                &TEST_ENVIRONMENT_ANOMA,
+                &mut storage,
+                signature.clone(),
+                &contributor_signing_key,
+                challenge_locator,
+                response_locator,
+                contribution_file_signature_locator,
+                &seed,
+            )
+            .unwrap();
+
+            // Check that the current contribution was generated based on the previous contribution hash.
+            let challenge_hash = calculate_hash(&storage.reader(&challenge_locator).unwrap());
+            let saved_challenge_hash = storage
+                .reader(&response_locator)
+                .unwrap()
+                .chunks(64)
+                .next()
+                .unwrap()
+                .to_vec();
+            for (i, (expected, candidate)) in (challenge_hash.iter().zip(&saved_challenge_hash)).enumerate() {
+                trace!("Checking byte {} of expected hash", i);
+                assert_eq!(expected, candidate);
+            }
+        }
+        */
     }
 }

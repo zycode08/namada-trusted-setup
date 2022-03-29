@@ -2153,6 +2153,7 @@ dependencies = [
  "pairing",
  "phase1",
  "phase2 0.2.2",
+ "rand 0.4.6",
  "rand 0.8.4",
  "rayon",
  "rocket",
