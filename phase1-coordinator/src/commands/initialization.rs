@@ -9,14 +9,16 @@ use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
 
 use snarkvm_curves::PairingEngine as Engine;
 
-use std::{io::Write, time::Instant};
+use std::io::Cursor;
+use std::{io::Write, time::Instant, io::BufWriter};
 use tracing::{debug, error, info, trace};
+use std::fs::File;
+
 
 pub(crate) struct Initialization;
 
 extern crate pairing;
 extern crate phase2;
-#[cfg(feature = "verification")]
 extern crate sapling_crypto;
 
 impl Initialization {
@@ -36,7 +38,9 @@ impl Initialization {
         let start = Instant::now();
 
         // Determine the expected challenge size.
-        let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
+        // let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
+        // TODO: implement calculate size macro for our curves
+        let expected_challenge_size = 100_000_000; //FIXME: improve this with contribution_file_size
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
         // Initialize and fetch a writer for the contribution locator so the output is saved.
@@ -44,23 +48,29 @@ impl Initialization {
         storage.initialize(contribution_locator.clone(), expected_challenge_size as u64)?;
 
         // Run ceremony initialization on chunk.
-        // let settings = environment.parameters();
+        let settings = environment.parameters();
 
-        // if let Err(error) = match settings.curve() {
-        //     CurveKind::Bls12_377 => Self::initialization(
-        //         storage.writer(&contribution_locator)?.as_mut(),
-        //         environment.compressed_inputs(),
-        //         &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-        //     ),
-        //     CurveKind::BW6 => Self::initialization(
-        //         storage.writer(&contribution_locator)?.as_mut(),
-        //         environment.compressed_inputs(),
-        //         &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
-        //     ),
-        // } {
-        //     error!("Initialization failed with {}", error);
-        //     return Err(CoordinatorError::InitializationFailed.into());
-        // }
+        if let Err(error) = match settings.curve() {
+            // TODO: change phase1_chunked_parameters, not used by phase2
+            CurveKind::Bls12_281 => Self::initialization(
+                storage.writer(&contribution_locator)?.as_mut(),
+                environment.compressed_inputs(),
+                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+            ),
+            CurveKind::Bls12_377 => Self::initialization(
+                storage.writer(&contribution_locator)?.as_mut(),
+                environment.compressed_inputs(),
+                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+            ),
+            CurveKind::BW6 => Self::initialization(
+                storage.writer(&contribution_locator)?.as_mut(),
+                environment.compressed_inputs(),
+                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
+            ),
+        } {
+            error!("Initialization failed with {}", error);
+            return Err(CoordinatorError::InitializationFailed.into());
+        }
 
         // Copy the current transcript to the next transcript.
         // This operation will *overwrite* the contents of `next_transcript`.
@@ -81,27 +91,33 @@ impl Initialization {
 
     /// Runs Phase 1 initialization on the given parameters.
     #[inline]
-    #[cfg(feature = "verification")]
     fn initialization<T: Engine + Sync>(
         mut writer: &mut [u8],
         compressed: UseCompression,
         parameters: &Phase1Parameters<T>,
+
     ) -> Result<(), CoordinatorError> {
         // trace!("Initializing Powers of Tau on 2^{}", parameters.total_size_in_log2);
         // trace!("In total will generate up to {} powers", parameters.powers_g1_length);
 
         trace!("Initializing Parameters for phase 2 ");
 
-        let hash = blank_hash();
-        (&mut writer[0..]).write_all(hash.as_slice())?;
-        writer.flush()?;
-        debug!("Empty challenge hash is {}", pretty_hash!(&hash));
+        // let hash = blank_hash();
+        // let mut writer_buff = Cursor::new(writer);
+        // writer_buff.write_all(hash.as_slice())?;
+        // writer_buff.flush()?;
+        // debug!("Empty challenge hash is {}", pretty_hash!(&hash));
 
         trace!("Starting Phase 1 initialization operation");
         // Add here your MPC Parameters init function
         let jubjub_params = sapling_crypto::jubjub::JubjubBls12::new();
-
         // Sapling spend circuit
+        // const size: usize = 1024 * 1024 *2;
+        // let mut writer: Vec<u8> = Vec::with_capacity(size);
+        // let mut writer: Vec<u8> = vec![];
+        // let mut writer = BufWriter::with_capacity(1024 * 1024, writer_tmp);
+
+
         phase2::MPCParameters::new(sapling_crypto::circuit::sapling::Spend {
             params: &jubjub_params,
             value_commitment: None,
@@ -116,8 +132,12 @@ impl Initialization {
         .write(&mut writer)
         .unwrap();
 
+        //param.get_params().serialize(writer)?;
+
+        // writer.flush()?;
+
         // Phase1::initialization(&mut writer, compressed, &parameters)?;
-        writer.flush()?;
+        // writer_buff.flush()?;
         trace!("Completed Phase 1 initialization operation");
 
         Ok(())
