@@ -171,7 +171,7 @@ impl Verification {
         let settings = environment.parameters();
         let result = match settings.curve() {
             // TODO: change phase1_chunked_parameters
-            CurveKind::Bls12_281 => Self::transform_pok_and_correctness(
+            CurveKind::Bls12_381 => Self::transform_pok_and_correctness(
                 environment,
                 storage.reader(&challenge_locator)?.as_ref(),
                 storage.reader(&response_locator)?.as_ref(),
@@ -223,7 +223,7 @@ impl Verification {
             }
 
             match settings.curve() {
-                CurveKind::Bls12_281 => Self::decompress(
+                CurveKind::Bls12_381 => Self::decompress(
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),
                     response_hash.as_ref(),

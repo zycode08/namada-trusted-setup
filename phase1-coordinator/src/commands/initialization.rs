@@ -52,7 +52,7 @@ impl Initialization {
 
         if let Err(error) = match settings.curve() {
             // TODO: change phase1_chunked_parameters, not used by phase2
-            CurveKind::Bls12_281 => Self::initialization(
+            CurveKind::Bls12_381 => Self::initialization(
                 storage.writer(&contribution_locator)?.as_mut(),
                 environment.compressed_inputs(),
                 &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),

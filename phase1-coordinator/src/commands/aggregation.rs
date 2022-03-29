@@ -49,7 +49,7 @@ impl Aggregation {
         let result = match curve {
             // NOTE: we don't use the chunked mode for phase 2, the aggregation function is here set a placeholder to remove error warnings
             // TODO: if needed port your aggregation function
-            CurveKind::Bls12_281 => Phase1::aggregation(
+            CurveKind::Bls12_381 => Phase1::aggregation(
                 &contribution_readers,
                 (storage.writer(&round_locator)?.as_mut(), compressed_input),
                 &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
@@ -75,7 +75,7 @@ impl Aggregation {
         let curve = settings.curve();
         match curve {
             // TODO: if needed port your aggregate_verification function
-            CurveKind::Bls12_281 => Phase1::aggregate_verification(
+            CurveKind::Bls12_381 => Phase1::aggregate_verification(
                 (
                     &storage.reader(&round_locator)?.as_ref(),
                     setup_utils::UseCompression::No,

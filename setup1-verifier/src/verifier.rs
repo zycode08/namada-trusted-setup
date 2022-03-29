@@ -206,7 +206,7 @@ impl Verifier {
 
         let start = Instant::now();
         match settings.curve() {
-            CurveKind::Bls12_281 => transform_pok_and_correctness(
+            CurveKind::Bls12_381 => transform_pok_and_correctness(
                 compressed_challenge,
                 &challenge_file_locator,
                 compressed_response,
