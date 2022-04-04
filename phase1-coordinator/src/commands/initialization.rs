@@ -102,7 +102,8 @@ impl Initialization {
         // trace!("In total will generate up to {} powers", parameters.powers_g1_length);
 
         let hash = blank_hash();
-        (&mut writer[0..]).write_all(hash.as_slice())?;
+        // (&mut writer[0..]).write_all(hash.as_slice())?;
+        writer.write_all(&hash.as_slice())?;
         writer.flush()?;
         debug!("Empty challenge hash is {}", pretty_hash!(&hash));
         // debug!("Empty challenge is {}", pretty_hash!(&writer));
@@ -129,7 +130,6 @@ impl Initialization {
         // .write(&mut writer)
         // .unwrap();
 
-        /*
         // MASP spend circuit
         let spend_params = MPCParameters::new(
             masp_proofs::circuit::sapling::Spend {
@@ -150,53 +150,52 @@ impl Initialization {
         spend_params
             .write(&mut writer)
             .expect("unable to write MASP Spend params");
+/*
+        println!("Creating initial parameters for MASP Output...");
+        // MASP output circuit
+        let output_params = MPCParameters::new(
+            masp_proofs::circuit::sapling::Output {
+                value_commitment: None,
+                payment_address: None,
+                commitment_randomness: None,
+                esk: None,
+                asset_identifier: vec![None; 256],
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
+
+        println!("Writing initial MASP Output parameters to .",);
+
+        output_params
+            .write(&mut writer)
+            .expect("unable to write MASP Output params");
+
+        println!("Creating initial parameters for MASP Convert...");
+        // MASP Convert circuit
+        let convert_params = MPCParameters::new(
+            masp_proofs::circuit::convert::Convert {
+                value_commitment: None,
+                auth_path: vec![None; 32], // Tree depth is 32 for sapling
+                anchor: None,
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
+
+        println!("Writing initial MASP Convert parameters to .",);
+
+        convert_params
+            .write(&mut writer)
+            .expect("unable to write MASP Convert params");
 
             */
 
-        // println!("Creating initial parameters for MASP Output...");
-        // // MASP output circuit
-        // let output_params = MPCParameters::new(
-        //     masp_proofs::circuit::sapling::Output {
-        //         value_commitment: None,
-        //         payment_address: None,
-        //         commitment_randomness: None,
-        //         esk: None,
-        //         asset_identifier: vec![None; 256],
-        //     },
-        //     //should_filter_points_at_infinity,
-        //     //radix_directory,
-        // )
-        // .unwrap();
-
-        // println!("Writing initial MASP Output parameters to .",);
-
-        // output_params
-        //     .write(&mut writer)
-        //     .expect("unable to write MASP Output params");
-
-        // println!("Creating initial parameters for MASP Convert...");
-        // // MASP Convert circuit
-        // let convert_params = MPCParameters::new(
-        //     masp_proofs::circuit::convert::Convert {
-        //         value_commitment: None,
-        //         auth_path: vec![None; 32], // Tree depth is 32 for sapling
-        //         anchor: None,
-        //     },
-        //     //should_filter_points_at_infinity,
-        //     //radix_directory,
-        // )
-        // .unwrap();
-
-        // println!("Writing initial MASP Convert parameters to .",);
-
-        // convert_params
-        //     .write(&mut writer)
-        //     .expect("unable to write MASP Convert params");
-
         // param.get_params().serialize(writer)?;
-
-        Phase1::initialization(&mut writer, compressed, &parameters)?;
-        writer.flush()?;
+        // Phase1::initialization(&mut writer, compressed, &parameters)?;
+        // writer.flush()?;
         trace!("Completed Phase 1 initialization operation");
 
         Ok(())
@@ -268,7 +267,7 @@ mod tests {
             debug!("blank hash is {}", pretty_hash!(&hash));
             let challenge_hash = calculate_hash(&reader);
             debug!("reader hash is {}", pretty_hash!(challenge_hash));
-            debug!("reader is {}", pretty_hash!(&reader[0..64]));
+            debug!("reader is {}", pretty_hash!(&reader[0..255]));
             for (i, (expected, candidate)) in hash.iter().zip(reader.as_ref().chunks(64).next().unwrap()).enumerate() {
                 trace!(
                     "Checking byte {} of expected hash: {:02x} =? {:02x}",
