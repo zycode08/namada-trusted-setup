@@ -228,9 +228,8 @@ impl Computation {
         let mut progress_update_interval: u32 = 0;
 
         let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
-/*
         let mut output_params =
-            MPCParameters::read(challenge_reader, false).expect("unable to read MASP Output params");
+            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Output params");
 
         println!("Contributing to MASP Output...");
         let mut progress_update_interval: u32 = 0;
@@ -238,17 +237,16 @@ impl Computation {
         let output_hash = output_params.contribute(&mut rng, &progress_update_interval);
 
         let mut convert_params =
-            MPCParameters::read(challenge_reader, false).expect("unable to read MASP Convert params");
+            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Convert params");
 
         println!("Contributing to MASP Convert...");
         let mut progress_update_interval: u32 = 0;
         let convert_hash = convert_params.contribute(&mut rng, &progress_update_interval);
-        */
 
         let mut h = Blake2b512::new();
         h.update(&spend_hash);
-        // h.update(&output_hash);
-        // h.update(&convert_hash);
+        h.update(&output_hash);
+        h.update(&convert_hash);
         let h = h.finalize();
 
         println!("Contribution hash: 0x{:02x}", h.iter().format(""));
@@ -258,15 +256,15 @@ impl Computation {
             .write(&mut response_writer)
             .expect("failed to write updated MASP Spend parameters");
 
-        // println!("Writing MASP Output parameters to .");
-        // output_params
-        //     .write(&mut response_writer)
-        //     .expect("failed to write updated MASP Output parameters");
+        println!("Writing MASP Output parameters to .");
+        output_params
+            .write(&mut response_writer)
+            .expect("failed to write updated MASP Output parameters");
 
-        // println!("Writing MASP Convert parameters to .");
-        // convert_params
-        //     .write(&mut response_writer)
-        //     .expect("failed to write updated MASP Convert parameters");
+        println!("Writing MASP Convert parameters to .");
+        convert_params
+            .write(&mut response_writer)
+            .expect("failed to write updated MASP Convert parameters");
 
         // END: MASP MPC
 
