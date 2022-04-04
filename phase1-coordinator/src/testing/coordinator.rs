@@ -29,8 +29,8 @@ pub static TEST_ENVIRONMENT_3: Lazy<Environment> = Lazy::new(|| Testing::from(Pa
 pub static TEST_ENVIRONMENT_ANOMA: Lazy<Environment> = Lazy::new(|| {
     Testing::from(Parameters::TestCustom {
         number_of_chunks: 1,
-        power: 12,
-        batch_size: 256,
+        power: 8,
+        batch_size: 128,
     })
     .into()
 });
