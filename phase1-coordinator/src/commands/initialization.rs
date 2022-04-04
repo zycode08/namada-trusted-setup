@@ -21,6 +21,9 @@ extern crate pairing;
 extern crate phase2;
 extern crate sapling_crypto;
 
+use masp_phase2::MPCParameters;
+use masp_proofs::*;
+
 impl Initialization {
     ///
     /// Runs chunk initialization for a given environment, round height, and chunk ID.
@@ -40,7 +43,7 @@ impl Initialization {
         // Determine the expected challenge size.
         // let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
         // TODO: implement calculate size macro for our curves
-        let expected_challenge_size = 100_000_000; //FIXME: improve this with contribution_file_size
+        let expected_challenge_size = 1_000_000_000; //FIXME: improve this with contribution_file_size
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
         // Initialize and fetch a writer for the contribution locator so the output is saved.
@@ -110,7 +113,7 @@ impl Initialization {
 
         trace!("Starting Phase 1 initialization operation");
         // Add here your MPC Parameters init function
-        let jubjub_params = sapling_crypto::jubjub::JubjubBls12::new();
+        // let jubjub_params = sapling_crypto::jubjub::JubjubBls12::new();
         // Sapling spend circuit
         // const size: usize = 1024 * 1024 *2;
         // let mut writer: Vec<u8> = Vec::with_capacity(size);
@@ -118,8 +121,23 @@ impl Initialization {
         // let mut writer = BufWriter::with_capacity(1024 * 1024, writer_tmp);
 
 
-        phase2::MPCParameters::new(sapling_crypto::circuit::sapling::Spend {
-            params: &jubjub_params,
+        // phase2::MPCParameters::new(sapling_crypto::circuit::sapling::Spend {
+        //     params: &jubjub_params,
+        //     value_commitment: None,
+        //     proof_generation_key: None,
+        //     payment_address: None,
+        //     commitment_randomness: None,
+        //     ar: None,
+        //     auth_path: vec![None; 32], // Tree depth is 32 for sapling
+        //     anchor: None,
+        // })
+        // .unwrap()
+        // .write(&mut writer)
+        // .unwrap();
+
+        // MASP spend circuit
+    let spend_params = MPCParameters::new(
+        masp_proofs::circuit::sapling::Spend {
             value_commitment: None,
             proof_generation_key: None,
             payment_address: None,
@@ -127,14 +145,65 @@ impl Initialization {
             ar: None,
             auth_path: vec![None; 32], // Tree depth is 32 for sapling
             anchor: None,
-        })
-        .unwrap()
+        },
+        //should_filter_points_at_infinity,
+        //radix_directory,
+    )
+    .unwrap();
+    println!(
+        "Writing initial MASP Spend parameters to .",
+    );
+
+    spend_params
         .write(&mut writer)
-        .unwrap();
+        .expect("unable to write MASP Spend params");
+
+    println!("Creating initial parameters for MASP Output...");
+
+    // MASP output circuit
+    let output_params = MPCParameters::new(
+        masp_proofs::circuit::sapling::Output {
+            value_commitment: None,
+            payment_address: None,
+            commitment_randomness: None,
+            esk: None,
+            asset_identifier: vec![None; 256],
+        },
+        //should_filter_points_at_infinity,
+        //radix_directory,
+    )
+    .unwrap();
+
+    println!(
+        "Writing initial MASP Output parameters to .",
+    );
+
+    output_params
+        .write(&mut writer)
+        .expect("unable to write MASP Output params");
+
+    // MASP Convert circuit
+    let convert_params = MPCParameters::new(
+        masp_proofs::circuit::convert::Convert {
+            value_commitment: None,
+            auth_path: vec![None; 32], // Tree depth is 32 for sapling
+            anchor: None,
+        },
+        //should_filter_points_at_infinity,
+        //radix_directory,
+    )
+    .unwrap();
+    println!(
+        "Writing initial MASP Convert parameters to .",
+    );
+
+    convert_params
+        .write(&mut writer)
+        .expect("unable to write MASP Convert params");
 
         //param.get_params().serialize(writer)?;
 
-        // writer.flush()?;
+        writer.flush()?;
 
         // Phase1::initialization(&mut writer, compressed, &parameters)?;
         // writer_buff.flush()?;
