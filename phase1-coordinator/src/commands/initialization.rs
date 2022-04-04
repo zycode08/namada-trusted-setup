@@ -150,7 +150,7 @@ impl Initialization {
         spend_params
             .write(&mut writer)
             .expect("unable to write MASP Spend params");
-/*
+
         println!("Creating initial parameters for MASP Output...");
         // MASP output circuit
         let output_params = MPCParameters::new(
@@ -191,11 +191,10 @@ impl Initialization {
             .write(&mut writer)
             .expect("unable to write MASP Convert params");
 
-            */
+        writer.flush()?;
 
         // param.get_params().serialize(writer)?;
         // Phase1::initialization(&mut writer, compressed, &parameters)?;
-        // writer.flush()?;
         trace!("Completed Phase 1 initialization operation");
 
         Ok(())
