@@ -100,6 +100,11 @@ impl Phase1WASM {
         let (tx, rx) = oneshot::channel();
         thread_pool.install(|| {
             let res = match curve_from_str(curve_kind).expect("invalid curve_kind") {
+                CurveKind::Bls12_381 => contribute_challenge(
+                    &challenge,
+                    &get_parameters_chunked::<Bls12_377>(proving_system, power, batch_size, chunk_index, chunk_size),
+                    rng,
+                ),
                 CurveKind::Bls12_377 => contribute_challenge(
                     &challenge,
                     &get_parameters_chunked::<Bls12_377>(proving_system, power, batch_size, chunk_index, chunk_size),

@@ -9,19 +9,13 @@ use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
 
 use snarkvm_curves::PairingEngine as Engine;
 
-use std::fs::File;
-use std::io::Cursor;
-use std::{io::BufWriter, io::Write, time::Instant};
+use std::{io::Write, time::Instant};
 use tracing::{debug, error, info, trace};
+
+use masp_phase2::MPCParameters;
 
 pub(crate) struct Initialization;
 
-extern crate pairing;
-extern crate phase2;
-extern crate sapling_crypto;
-
-use masp_phase2::MPCParameters;
-use masp_proofs::*;
 
 impl Initialization {
     ///
@@ -40,8 +34,10 @@ impl Initialization {
         let start = Instant::now();
 
         // Determine the expected challenge size.
+        // For Anoma Phase 2, the expected challenge size is hardcoded under phase1-coordinator/storage/storage.rs at the const ANOMA_FILE_SIZE
+        // TODO: refactor this parameter to the environment file and find a way to calculate the expected size
         let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
-        // TODO: implement calculate size macro for our curves
+        // TODO: implement calculate size macro for our curve
         // let expected_challenge_size = 200_000_000; //FIXME: improve this with contribution_file_size
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
@@ -53,7 +49,7 @@ impl Initialization {
         let settings = environment.parameters();
 
         if let Err(error) = match settings.curve() {
-            // TODO: change phase1_chunked_parameters, not used by phase2
+            // TODO: change phase1_chunked_parameters macro, not used by Anoma phase2 in Self::initialization
             CurveKind::Bls12_381 => Self::initialization(
                 storage.writer(&contribution_locator)?.as_mut(),
                 environment.compressed_inputs(),
@@ -98,39 +94,20 @@ impl Initialization {
         compressed: UseCompression,
         parameters: &Phase1Parameters<T>,
     ) -> Result<(), CoordinatorError> {
-        // trace!("Initializing Powers of Tau on 2^{}", parameters.total_size_in_log2);
-        // trace!("In total will generate up to {} powers", parameters.powers_g1_length);
-
+        info!("Initializing Phase 2 Initialization");
+        // The initialization contribution file contains [blank_hash, init.params]
+        // Our circuit parameters are appended to the blank_hash
         let hash = blank_hash();
         // (&mut writer[0..]).write_all(hash.as_slice())?;
         writer.write_all(&hash.as_slice())?;
         writer.flush()?;
         debug!("Empty challenge hash is {}", pretty_hash!(&hash));
         // debug!("Empty challenge is {}", pretty_hash!(&writer));
-        info!("Starting Phase 1 initialization operation");
+        info!("Starting Phase 2 initialization operation");
         // Add here your MPC Parameters init function
-        // let jubjub_params = sapling_crypto::jubjub::JubjubBls12::new();
-        // Sapling spend circuit
-        // const size: usize = 1024 * 1024 *2;
-        // let mut writer: Vec<u8> = Vec::with_capacity(size);
-        // let mut writer: Vec<u8> = vec![];
-        // let mut writer = BufWriter::with_capacity(1024 * 1024, writer_tmp);
-
-        // phase2::MPCParameters::new(sapling_crypto::circuit::sapling::Spend {
-        //     params: &jubjub_params,
-        //     value_commitment: None,
-        //     proof_generation_key: None,
-        //     payment_address: None,
-        //     commitment_randomness: None,
-        //     ar: None,
-        //     auth_path: vec![None; 32], // Tree depth is 32 for sapling
-        //     anchor: None,
-        // })
-        // .unwrap()
-        // .write(&mut writer)
-        // .unwrap();
 
         // MASP spend circuit
+        // trace!("Creating initial parameters for MASP Spend...");
         // let spend_params = MPCParameters::new(
         //     masp_proofs::circuit::sapling::Spend {
         //         value_commitment: None,
@@ -145,14 +122,14 @@ impl Initialization {
         //     //radix_directory,
         // )
         // .unwrap();
-        // info!("Writing initial MASP Spend parameters to .",);
+        // trace!("Writing initial MASP Spend parameters to file...",);
 
         // spend_params
         //     .write(&mut writer)
         //     .expect("unable to write MASP Spend params");
 
-        // println!("Creating initial parameters for MASP Output...");
         // // MASP output circuit
+        // trace!("Creating initial parameters for MASP Output...");
         // let output_params = MPCParameters::new(
         //     masp_proofs::circuit::sapling::Output {
         //         value_commitment: None,
@@ -166,14 +143,14 @@ impl Initialization {
         // )
         // .unwrap();
 
-        // println!("Writing initial MASP Output parameters to .",);
+        // trace!("Writing initial MASP Output parameters to file...",);
 
         // output_params
         //     .write(&mut writer)
         //     .expect("unable to write MASP Output params");
 
-        println!("Creating initial parameters for MASP Convert...");
         // MASP Convert circuit
+        trace!("Creating initial parameters for MASP Convert...");
         let convert_params = MPCParameters::new(
             masp_proofs::circuit::convert::Convert {
                 value_commitment: None,
@@ -185,7 +162,7 @@ impl Initialization {
         )
         .unwrap();
 
-        println!("Writing initial MASP Convert parameters to .",);
+        trace!("Writing initial MASP Convert parameters to file...",);
 
         convert_params
             .write(&mut writer)
@@ -193,9 +170,8 @@ impl Initialization {
 
         writer.flush()?;
 
-        // param.get_params().serialize(writer)?;
         // Phase1::initialization(&mut writer, compressed, &parameters)?;
-        trace!("Completed Phase 1 initialization operation");
+        trace!("Completed Phase 2 initialization operation");
 
         Ok(())
     }
