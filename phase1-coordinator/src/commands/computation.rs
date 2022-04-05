@@ -5,7 +5,11 @@ use crate::{
     storage::{Disk, Locator, StorageLocator, StorageObject},
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, Phase1, Phase1Parameters};
+use phase1::{
+    helpers::CurveKind,
+    Phase1Parameters,
+    // Phase1,
+};
 use setup_utils::{calculate_hash, derive_rng_from_seed, UseCompression};
 
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine as Engine};
@@ -16,15 +20,6 @@ use tracing::{debug, error, info, trace};
 
 pub const SEED_LENGTH: usize = 32;
 pub type Seed = [u8; SEED_LENGTH];
-
-extern crate blake2_rfc;
-extern crate pairing;
-extern crate phase2;
-extern crate rand_04;
-
-use blake2_rfc::blake2b::Blake2b;
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Cursor};
 
 use blake2::{Blake2b512, Digest};
 use itertools::Itertools;
@@ -366,7 +361,6 @@ mod tests {
             .unwrap();
 
             // Check that the current contribution was generated based on the previous contribution hash.
-            let reader = storage.reader(&challenge_locator).unwrap();
             let challenge_hash = calculate_hash(&storage.reader(&challenge_locator).unwrap());
             let saved_challenge_hash = storage
                 .reader(&response_locator)
