@@ -154,13 +154,15 @@ impl Computation {
         }
 
         trace!("Calculating previous contribution hash and writing it to the response");
-        let challenge_hash = calculate_hash(challenge_reader);
+        let challenge_hash = calculate_hash(&challenge_reader);
         debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
         // (&mut response_writer[0..]).write_all(challenge_hash.as_slice())?;
         response_writer.write_all(&challenge_hash.as_slice())?;
         response_writer.flush()?;
 
-        // FIXME: the previous_hash variable doesn't seem to make sense here, since the challenge_reader doesn't contain any hash yet
+        // The hash of the previous contribution is contained in the first 64 bytes of the current challenge file. 
+        // The response writer is initialised empty, then the hash of the previous challenge is appended to it.
+        // The new contribution calculation should be appended after this hash. 
         let previous_hash = &challenge_reader
             .get(0..64)
             .ok_or(CoordinatorError::StorageReaderFailed)?;
@@ -222,46 +224,46 @@ impl Computation {
             ChaChaRng::from_seed(h[0..32].try_into().unwrap())
         };
 
-        let mut spend_params = MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
+        // let mut spend_params = MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
 
-        println!("Contributing to MASP Spend...");
-        let mut progress_update_interval: u32 = 0;
+        // trace!("Contributing to MASP Spend...");
+        // let mut progress_update_interval: u32 = 0;
 
-        let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
-        let mut output_params =
-            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Output params");
+        // let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
+        // let mut output_params =
+        //     MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Output params");
 
-        println!("Contributing to MASP Output...");
-        let mut progress_update_interval: u32 = 0;
+        // trace!("Contributing to MASP Output...");
+        // let mut progress_update_interval: u32 = 0;
 
-        let output_hash = output_params.contribute(&mut rng, &progress_update_interval);
+        // let output_hash = output_params.contribute(&mut rng, &progress_update_interval);
 
         let mut convert_params =
             MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Convert params");
 
-        println!("Contributing to MASP Convert...");
+        trace!("Contributing to MASP Convert...");
         let mut progress_update_interval: u32 = 0;
         let convert_hash = convert_params.contribute(&mut rng, &progress_update_interval);
 
         let mut h = Blake2b512::new();
-        h.update(&spend_hash);
-        h.update(&output_hash);
+        // h.update(&spend_hash);
+        // h.update(&output_hash);
         h.update(&convert_hash);
         let h = h.finalize();
 
-        println!("Contribution hash: 0x{:02x}", h.iter().format(""));
+        debug!("Contribution hash: 0x{:02x}", h.iter().format(""));
 
-        println!("Writing MASP Spend parameters to.");
-        spend_params
-            .write(&mut response_writer)
-            .expect("failed to write updated MASP Spend parameters");
+        // trace!("Writing MASP Spend parameters to file...");
+        // spend_params
+        //     .write(&mut response_writer)
+        //     .expect("failed to write updated MASP Spend parameters");
 
-        println!("Writing MASP Output parameters to .");
-        output_params
-            .write(&mut response_writer)
-            .expect("failed to write updated MASP Output parameters");
+        // trace!("Writing MASP Output parameters to file...");
+        // output_params
+        //     .write(&mut response_writer)
+        //     .expect("failed to write updated MASP Output parameters");
 
-        println!("Writing MASP Convert parameters to .");
+        trace!("Writing MASP Convert parameters to file...");
         convert_params
             .write(&mut response_writer)
             .expect("failed to write updated MASP Convert parameters");
