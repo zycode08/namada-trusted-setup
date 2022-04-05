@@ -1,4 +1,5 @@
 CARGO := cargo
+CARGO_NIGHTLY := $(CARGO) +nightly
 
 build:
 	$(CARGO) build
@@ -10,10 +11,10 @@ test-coordinator:
 	$(CARGO) test --test test_coordinator --features testing -- --test-threads=1
 
 fmt:
-	$(CARGO) fmt
+	$(CARGO_NIGHTLY) fmt
 
 clippy:
-	$(CARGO) clippy --all-targets --all-features -- -D warnings
+	$(CARGO_NIGHTLY) clippy --all-targets --all-features -- -D warnings
 
 update:
 	$(CARGO) update

@@ -1597,7 +1597,7 @@ impl Coordinator {
         }
     }
 
-    /// Writes the bytes of a contribution to storage at the appropriate file 
+    /// Writes the bytes of a contribution to storage at the appropriate file
     /// locator.
     #[inline]
     pub(crate) fn write_contribution<T>(
@@ -1605,9 +1605,13 @@ impl Coordinator {
         contribution_locator: ContributionLocator,
         contribution: T,
     ) -> Result<(), CoordinatorError>
-    where T: Into<Vec<u8>>
+    where
+        T: Into<Vec<u8>>,
     {
-        self.storage.update(&Locator::ContributionFile(contribution_locator), Object::ContributionFile(contribution.into()))
+        self.storage.update(
+            &Locator::ContributionFile(contribution_locator),
+            Object::ContributionFile(contribution.into()),
+        )
     }
 
     /// Writes the bytes of a contribution file signature to storage at the appropriate  
@@ -1617,9 +1621,11 @@ impl Coordinator {
         &mut self,
         locator: ContributionSignatureLocator,
         contribution_file_signature: ContributionFileSignature,
-     ) -> Result<(), CoordinatorError>
-    {
-        self.storage.update(&Locator::ContributionFileSignature(locator), Object::ContributionFileSignature(contribution_file_signature))
+    ) -> Result<(), CoordinatorError> {
+        self.storage.update(
+            &Locator::ContributionFileSignature(locator),
+            Object::ContributionFileSignature(contribution_file_signature),
+        )
     }
 
     ///
