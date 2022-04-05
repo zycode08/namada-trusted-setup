@@ -11,7 +11,7 @@ test-coordinator:
 	$(CARGO) test --test test_coordinator --features testing -- --test-threads=1
 
 fmt:
-	$(CARGO_NIGHTLY) fmt
+	$(CARGO_NIGHTLY) fmt --all
 
 clippy:
 	$(CARGO_NIGHTLY) clippy --all-targets --all-features -- -D warnings

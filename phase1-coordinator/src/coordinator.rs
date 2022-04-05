@@ -2282,7 +2282,7 @@ impl Coordinator {
     ///
     #[cfg(any(test, testing))]
     #[inline]
-    pub fn storage(&self) -> &Disk {
+    pub(super) fn storage(&self) -> &Disk {
         &self.storage
     }
 
@@ -2292,7 +2292,7 @@ impl Coordinator {
     ///
     #[cfg(test)]
     #[inline]
-    pub(crate) fn storage_mut(&mut self) -> &mut Disk {
+    pub(super) fn storage_mut(&mut self) -> &mut Disk {
         &mut self.storage
     }
 
