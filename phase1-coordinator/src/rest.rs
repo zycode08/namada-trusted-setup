@@ -1,55 +1,32 @@
 //! REST API endpoints.
 
+use crate::ContributionFileSignature;
 use crate::objects::Task;
-use crate::storage::{ContributionLocator, Locator, Object, Disk};
-use rand::RngCore;
-use rand::distributions::Standard;
+use crate::storage::{ContributionLocator, ContributionSignatureLocator};
 use rocket::http::{ContentType, Status};
 use rocket::response::{Responder, Response};
-use rocket::serde::{json::Json, Deserialize};
-use rocket::{get, error, post, routes, State, Request};
+use rocket::serde::{json::Json, Deserialize, Serialize};
+use rocket::{get, error, post, State, Request};
 
 use crate::{
-	authentication::{Dummy, Signature},
-	environment::{Development, Environment, Parameters, Settings},
 	objects::LockedLocators,
 	CoordinatorError, Participant,
 };
 
-use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
-
 use std::collections::LinkedList;
 use std::io::Cursor;
 use std::net::SocketAddr;
-use std::{net::IpAddr, sync::Arc};
-use tracing_subscriber;
+use std::{sync::Arc};
 use thiserror::Error;
 
 use tokio::sync::RwLock;
 
-
-const SEED_LENGTH: usize = 32;
-
-type Seed = [u8; SEED_LENGTH];
-type SigningKey = String;
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
-
-#[derive(Deserialize)]
-pub struct ConfirmationKey {
-	address: String,
-	private_key: String,
-}
 
 #[derive(Error, Debug)]
 pub enum ResponseError {
-	#[error("Signature of request is invalid")]
-	SignatureError,
 	#[error("Coordinator failed: {0}")]
 	CoordinatorError(CoordinatorError),
-	#[error("Signature is not safe")]
-	UnsafeSignature,
-	#[error("Signature is invalid")]
-	InvalidSignature,
 	#[error("Could not find contributor with public key {0}")]
 	UnknownContributor(String),
 	#[error("Could not find the provided Task {0} in coordinator state")]
@@ -57,39 +34,32 @@ pub enum ResponseError {
 }
 
 impl<'r> Responder<'r, 'static> for ResponseError {
-    fn respond_to(self, request: &'r Request<'_>) -> rocket::response::Result<'static> {
+    fn respond_to(self, _request: &'r Request<'_>) -> rocket::response::Result<'static> {
 		let response = format!("{}", self);
 		Response::build().status(Status::InternalServerError).header(ContentType::JSON).sized_body(response.len(), Cursor::new(response)).ok()
-    }
+	}
 }
 
 type Result<T> = std::result::Result<T, ResponseError>;
 
-#[derive(Deserialize)]
-struct JoinQueueRequest<'a, S>
-where S: Signature {
-	// The signed pubkey
-	message: &'a str,
-	signature: S,
-	pubkey: &'a str
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ChunkRequest {
-	pubkey: String,
-    locked_locators: LockedLocators,
+	pub pubkey: String,
+    pub locked_locators: LockedLocators,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ContributeChunkRequest {
-	pubkey: String,
-	chunk_id: u64
+	pub pubkey: String,
+	pub chunk_id: u64
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct PostChunkRequest {
-	locator: ContributionLocator,
-	contribution: Vec<u8>
+	pub contribution_locator: ContributionLocator,
+	pub contribution: Vec<u8>,
+	pub contribution_file_signature_locator: ContributionSignatureLocator,
+	pub contribution_file_signature: ContributionFileSignature,
 }
 
 //
@@ -104,15 +74,6 @@ pub async fn join_queue(
 	contributor_ip: SocketAddr,
 ) -> Result<()> {
 	let pubkey = contributor_public_key.into_inner();
-
-	// TODO: Check signature
-	// if !request.signature.is_secure() {
-	// 	Err(ResponseError::UnsafeSignature)
-	// }
-
-	// if !request.signature.verify(request.pubkey, request.message, request.signature) {
-	// 	Err(ResponseError::InvalidSignature)
-	// }
 
 	// Add new contributor to queue
 	let contributor = Participant::new_contributor(pubkey.as_str());
@@ -162,14 +123,17 @@ pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json
 
 
 /// Upload a chunk contribution to the coordinator. Write the contribution bytes to 
-/// disk at the provided [`Locator`].
+/// disk at the provided [`Locator`]. Also writes the corresponding [`ContributionFileSignature`]
 #[post("/upload/chunk", format = "json", data = "<post_chunk_request>")]
 pub async fn post_contribution_chunk(coordinator: &State<Coordinator>, post_chunk_request: Json<PostChunkRequest>) -> Result<()> {
 	let request = post_chunk_request.into_inner();
 
-	//FIXME: use contribute()?
-	match coordinator.write().await.storage_mut().update(&Locator::ContributionFile(request.locator), Object::ContributionFile(request.contribution)) {
-		Ok(_) => Ok(()),
+	if let Err(e) = coordinator.write().await.write_contribution(request.contribution_locator, request.contribution) {
+		return Err(ResponseError::CoordinatorError(e));
+	}
+
+	match coordinator.write().await.write_contribution_file_signature(request.contribution_file_signature_locator, request.contribution_file_signature) {
+		Ok(()) => Ok(()),
 		Err(e) => Err(ResponseError::CoordinatorError(e))
 	}
 }
@@ -186,10 +150,11 @@ pub async fn contribute_chunk(coordinator: &State<Coordinator>, contribute_chunk
 	}
 }
 
+/// Update the coordinator state.
 #[get("/update")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
 	match coordinator.write().await.update() {
-		Ok(_) => Ok(()),
+		Ok(()) => Ok(()),
 		Err(e) => Err(ResponseError::CoordinatorError(e))
 	}
 }
@@ -200,14 +165,14 @@ pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_public_key:
 	let pubkey = contributor_public_key.into_inner();
 	let contributor = Participant::new_contributor(pubkey.as_str());
 	match coordinator.write().await.heartbeat(&contributor) {
-		Ok(_) => Ok(()),
+		Ok(()) => Ok(()),
 		Err(e) => Err(ResponseError::CoordinatorError(e))
 	}
 }
 
 /// Get the pending tasks of contributor.
 #[get("/contributor/get_tasks_left", format = "json", data = "<contributor_public_key>")]
-pub async fn get_tasks_left(coordinator: &State<Coordinator>, contributor_public_key: Json<String>) -> Result<Json<LinkedList<Task>>> { //FIXME: LinkedList is not Ser/Deser?
+pub async fn get_tasks_left(coordinator: &State<Coordinator>, contributor_public_key: Json<String>) -> Result<Json<LinkedList<Task>>> {
 	let pubkey = contributor_public_key.into_inner();
 	let contributor = Participant::new_contributor(pubkey.as_str());
 

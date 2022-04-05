@@ -30,7 +30,7 @@ mod macros;
 
 pub mod authentication;
 
-pub(crate) mod commands;
+pub mod commands;
 
 pub mod coordinator;
 pub use coordinator::*;
