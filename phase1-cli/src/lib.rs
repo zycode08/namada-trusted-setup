@@ -1,5 +1,7 @@
 // Documentation
 #![doc = include_str!("../README.md")]
+// FIXME: fix readme documentation
+// FIXME: fix binaries and dependencies in Cargo.toml
 
 mod combine;
 pub use combine::combine;
@@ -24,6 +26,17 @@ use phase1::{
 
 use gumdrop::Options;
 use std::default::Default;
+
+use structopt::StructOpt;
+
+// Contributor commands: FIXME: correct? Condense to a single contribute command?
+// - join_queue
+// - lock_chunk
+// - get_chunk
+// - contribute
+// - heartbeat
+// - get_tasks_left
+
 
 #[derive(Debug, Options, Clone)]
 pub struct Phase1Opts {
