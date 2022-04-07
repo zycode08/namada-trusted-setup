@@ -51,7 +51,7 @@ type Result<T> = std::result::Result<T, ResponseError>;
 
 /// Request to get a [Chunk](`crate::objects::Chunk`). 
 #[derive(Deserialize, Serialize)]
-pub struct ChunkRequest {
+pub struct GetChunkRequest {
     pub pubkey: String,
     pub locked_locators: LockedLocators,
 }
@@ -113,7 +113,7 @@ pub async fn lock_chunk(
 
 /// Download a chunk from the [Coordinator](`crate::Coordinator`), which should be contributed to upon receipt.
 #[get("/download/chunk", format = "json", data = "<get_chunk_request>")]
-pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json<ChunkRequest>) -> Result<Json<Task>> {
+pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json<GetChunkRequest>) -> Result<Json<Task>> {
     let request = get_chunk_request.into_inner();
     let contributor = Participant::new_contributor(request.pubkey.as_str());
 

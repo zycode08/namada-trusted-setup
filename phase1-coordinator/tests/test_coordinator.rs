@@ -10,7 +10,7 @@ use phase1_coordinator::{
     authentication::{Dummy, Signature},
     environment::{CurveKind, Development, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, ChunkRequest, ContributeChunkRequest, PostChunkRequest},
+    rest::{self, GetChunkRequest, ContributeChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Locator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -348,7 +348,7 @@ fn test_contribution() {
     let locked_locators: LockedLocators = response.into_json().unwrap();
 
     // Download chunk
-    let chunk_request = ChunkRequest {
+    let chunk_request = GetChunkRequest {
         pubkey: String::from(CONTRIBUTOR_1_PUBLIC_KEY),
         locked_locators,
     };
