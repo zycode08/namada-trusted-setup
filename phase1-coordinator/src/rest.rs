@@ -52,24 +52,86 @@ type Result<T> = std::result::Result<T, ResponseError>;
 /// Request to get a [Chunk](`crate::objects::Chunk`). 
 #[derive(Deserialize, Serialize)]
 pub struct GetChunkRequest {
-    pub pubkey: String,
-    pub locked_locators: LockedLocators,
+    pubkey: String,
+    locked_locators: LockedLocators,
+}
+
+impl GetChunkRequest {
+    pub fn new(pubkey: String, locked_locators: LockedLocators) -> Self {
+        GetChunkRequest { pubkey, locked_locators }
+    }
+
+    /// Get a reference to the get chunk request's pubkey.
+    #[must_use]
+    fn pubkey(&self) -> &str {
+        self.pubkey.as_ref()
+    }
+
+    /// Get a reference to the get chunk request's locked locators.
+    #[must_use]
+    fn locked_locators(&self) -> &LockedLocators {
+        &self.locked_locators
+    }
 }
 
 /// Contribution of a [Chunk](`crate::objects::Chunk`).
 #[derive(Deserialize, Serialize)]
-pub struct ContributeChunkRequest {
-    pub pubkey: String,
-    pub chunk_id: u64,
+pub struct  ContributeChunkRequest {
+    pubkey: String,
+    chunk_id: u64,
+}
+
+impl ContributeChunkRequest {
+    pub fn new(pubkey: String, chunk_id: u64) -> Self { Self { pubkey, chunk_id } }
+
+    /// Get a reference to the contribute chunk request's pubkey.
+    #[must_use]
+    fn pubkey(&self) -> &str {
+        self.pubkey.as_ref()
+    }
+
+    /// Get the contribute chunk request's chunk id.
+    #[must_use]
+    fn chunk_id(&self) -> u64 {
+        self.chunk_id
+    }
 }
 
 /// Request to post a [Chunk](`crate::objects::Chunk`).
 #[derive(Deserialize, Serialize)]
 pub struct PostChunkRequest {
-    pub contribution_locator: ContributionLocator,
-    pub contribution: Vec<u8>,
-    pub contribution_file_signature_locator: ContributionSignatureLocator,
-    pub contribution_file_signature: ContributionFileSignature,
+    contribution_locator: ContributionLocator,
+    contribution: Vec<u8>,
+    contribution_file_signature_locator: ContributionSignatureLocator,
+    contribution_file_signature: ContributionFileSignature,
+}
+
+impl PostChunkRequest {
+    pub fn new(contribution_locator: ContributionLocator, contribution: Vec<u8>, contribution_file_signature_locator: ContributionSignatureLocator, contribution_file_signature: ContributionFileSignature) -> Self { Self { contribution_locator, contribution, contribution_file_signature_locator, contribution_file_signature } }
+
+    /// Get the post chunk request's contribution locator.
+    #[must_use]
+    fn contribution_locator(&self) -> ContributionLocator {
+        self.contribution_locator
+    }
+
+    /// Get a reference to the post chunk request's contribution.
+    #[must_use]
+    fn contribution(&self) -> &[u8] {
+        self.contribution.as_ref()
+    }
+
+    /// Get the post chunk request's contribution file signature locator.
+    #[must_use]
+    fn contribution_file_signature_locator(&self) -> ContributionSignatureLocator {
+        self.contribution_file_signature_locator
+    }
+
+    /// Get a reference to the post chunk request's contribution file signature.
+    #[must_use]
+    fn contribution_file_signature(&self) -> &ContributionFileSignature {
+        &self.contribution_file_signature
+    }
 }
 
 //
@@ -115,9 +177,9 @@ pub async fn lock_chunk(
 #[get("/download/chunk", format = "json", data = "<get_chunk_request>")]
 pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json<GetChunkRequest>) -> Result<Json<Task>> {
     let request = get_chunk_request.into_inner();
-    let contributor = Participant::new_contributor(request.pubkey.as_str());
+    let contributor = Participant::new_contributor(request.pubkey());
 
-    let next_contribution = request.locked_locators.next_contribution();
+    let next_contribution = request.locked_locators().next_contribution();
 
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
@@ -129,7 +191,7 @@ pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json
             }
             Ok(Json(task))
         }
-        None => Err(ResponseError::UnknownContributor(request.pubkey)),
+        None => Err(ResponseError::UnknownContributor(request.pubkey().to_owned())),
     }
 }
 
@@ -145,14 +207,14 @@ pub async fn post_contribution_chunk(
     if let Err(e) = coordinator
         .write()
         .await
-        .write_contribution(request.contribution_locator, request.contribution)
+        .write_contribution(request.contribution_locator(), request.contribution())
     {
         return Err(ResponseError::CoordinatorError(e));
     }
 
     match coordinator.write().await.write_contribution_file_signature(
-        request.contribution_file_signature_locator,
-        request.contribution_file_signature,
+        request.contribution_file_signature_locator(),
+        request.contribution_file_signature().to_owned(),
     ) {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
@@ -170,9 +232,9 @@ pub async fn contribute_chunk(
     contribute_chunk_request: Json<ContributeChunkRequest>,
 ) -> Result<Json<ContributionLocator>> {
     let request = contribute_chunk_request.into_inner();
-    let contributor = Participant::new_contributor(request.pubkey.as_str());
+    let contributor = Participant::new_contributor(request.pubkey());
 
-    match coordinator.write().await.try_contribute(&contributor, request.chunk_id) {
+    match coordinator.write().await.try_contribute(&contributor, request.chunk_id()) {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
