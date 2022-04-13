@@ -5,6 +5,7 @@ use std::{
 
 use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
+    authentication::{Dummy, Signature},
     environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
     rest::{self, GetChunkRequest, ContributeChunkRequest, PostChunkRequest},
@@ -94,7 +95,7 @@ fn build_rocket() -> Rocket<Build> {
 fn test_heartbeat() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
-    // Wrong reuqest, non-json body
+    // Wrong request, non-json body
     let mut req = client.post("/contributor/heartbeat");
     req = req.header(ContentType::Text).body("Wrong parameter type");
     let response = req.dispatch();
@@ -147,7 +148,7 @@ fn test_get_tasks_left() {
 
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
-    // Wrong reuqest, non-json body
+    // Wrong request, non-json body
     let mut req = client.get("/contributor/get_tasks_left");
     req = req.header(ContentType::Text).body("Wrong parameter type");
     let response = req.dispatch();
@@ -175,7 +176,7 @@ fn test_get_tasks_left() {
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
     let list: LinkedList<Task> = response.into_json().unwrap();
-    assert_eq!(list.len(), 0);
+    assert!(list.is_empty());
 
     // Ok tasks left
     let mut req = client.get("/contributor/get_tasks_left");
@@ -311,10 +312,10 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let contribute_request = ContributeChunkRequest {
-        pubkey: String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY),
-        chunk_id: 0,
-    };
+    let contribute_request = ContributeChunkRequest::new(
+        String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY),
+        0,
+    );
     let mut req = client.post("/contributor/contribute_chunk");
     req = req.json(&contribute_request);
     let response = req.dispatch();
@@ -342,10 +343,10 @@ fn test_contribution() {
     let locked_locators: LockedLocators = response.into_json().unwrap();
 
     // Download chunk
-    let chunk_request = GetChunkRequest {
-        pubkey: String::from(CONTRIBUTOR_1_PUBLIC_KEY),
+    let chunk_request = GetChunkRequest::new(
+        String::from(CONTRIBUTOR_1_PUBLIC_KEY),
         locked_locators,
-    };
+    );
     let mut req = client.get("/download/chunk");
     req = req.json(&chunk_request);
     let response = req.dispatch();
@@ -386,12 +387,12 @@ fn test_contribution() {
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
 
-    let post_chunk = PostChunkRequest {
+    let post_chunk = PostChunkRequest::new(
         contribution_locator,
         contribution,
         contribution_file_signature_locator,
         contribution_file_signature,
-    };
+    );
 
     let mut req = client.post("/upload/chunk");
     req = req.json(&post_chunk);
@@ -400,10 +401,10 @@ fn test_contribution() {
     assert!(response.body().is_none());
 
     // Contribute
-    let contribute_request = ContributeChunkRequest {
-        pubkey: String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        chunk_id: task.chunk_id(),
-    };
+    let contribute_request = ContributeChunkRequest::new(
+        String::from(CONTRIBUTOR_1_PUBLIC_KEY),
+        task.chunk_id(),
+    );
 
     let mut req = client.post("/contributor/contribute_chunk");
     req = req.json(&contribute_request);

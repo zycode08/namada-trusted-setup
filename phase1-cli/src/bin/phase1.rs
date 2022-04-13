@@ -29,7 +29,6 @@ fn compute_contribution_mock() -> Vec<u8>  { //FIXME: remove and compute proper 
     contribution
 }
 
-// FIXME: manage errors
 async fn contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
 
@@ -84,7 +83,7 @@ async fn main() {
         if i == 3 { //FIXME: just for testing, remove for production
             break;
         }
-        if let Err(e) = requests::get_update(&client, &mut coordinator).await {
+        if let Err(e) = requests::get_update(&client, &mut coordinator).await { //FIXME:
             println!("ERROR: {}", e);
         }
         
@@ -95,4 +94,6 @@ async fn main() {
 
         i += 1;
     }
+
+    println!("Contribution completed!"); //FIXME:
 }
