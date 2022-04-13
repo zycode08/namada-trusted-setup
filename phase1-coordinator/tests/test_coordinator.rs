@@ -3,12 +3,9 @@ use std::{
     sync::Arc,
 };
 
-use futures::{executor::block_on, FutureExt};
-use once_cell::sync::Lazy;
 use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
-    authentication::{Dummy, Signature},
-    environment::{CurveKind, Development, Parameters, Settings, Testing},
+    environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
     rest::{self, GetChunkRequest, ContributeChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Locator, Object},
@@ -21,12 +18,11 @@ use phase1_coordinator::{
 use rocket::{
     http::{ContentType, Status},
     local::blocking::Client,
-    main,
     routes,
     Build,
     Rocket,
 };
-use time::macros::datetime;
+
 use tokio::sync::RwLock;
 
 // NOTE: these tests must be run with --test-threads=1 due to the disk storage
@@ -56,7 +52,6 @@ fn build_rocket() -> Rocket<Build> {
 
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
-    let number_of_chunks = environment.number_of_chunks() as usize;
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Dummy)).unwrap();
@@ -331,7 +326,6 @@ fn test_wrong_contribute_chunk() {
 /// (lock_chunk, get_chunk, post_contribution_chunk, contribute_chunk) sequentially.
 #[test]
 fn test_contribution() {
-    use futures::executor::block_on;
     use phase1_coordinator::authentication::Dummy;
     use setup_utils::calculate_hash;
 
@@ -371,6 +365,7 @@ fn test_contribution() {
         47, 76, 74, 27, 38, 64, 190, 181, 33, 94, 137, 255, 187, 144, 45, 114, 74, 232,
     ];
     contribution.extend_from_slice(&challenge_hash);
+
     // Fill the rest of contribution with random bytes
     let random: Vec<u8> = (64..CONTRIBUTION_SIZE).map(|_| rand::random::<u8>()).collect();
     contribution.extend_from_slice(&random);

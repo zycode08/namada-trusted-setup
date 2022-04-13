@@ -95,7 +95,7 @@ pub(crate) fn test_logger() {
 }
 
 /// Clears the transcript directory for testing purposes only.
-fn clear_test_storage(environment: &Environment) {
+pub fn clear_test_storage(environment: &Environment) {
     let path = environment.local_base_directory();
     if Path::new(path).exists() {
         warn!("Coordinator is clearing {:?}", &path);

@@ -1,6 +1,6 @@
 use phase1_coordinator::{
     authentication::Dummy,
-    environment::{ContributionMode, CurveKind, Development, Parameters, Production, ProvingSystem, Settings},
+    environment::{ContributionMode, CurveKind, Parameters, Production, ProvingSystem, Settings, Testing},
     rest,
     Coordinator,
 };
@@ -14,11 +14,9 @@ use tokio::sync::RwLock;
 #[rocket::main]
 pub async fn main() {
     // Set the environment
-
-    // These parameters are to be exposed publicly to the REST API
     let parameters = Parameters::Custom(Settings::new(
-        //TODO: update these
-        ContributionMode::Full,
+        //FIXME: update these
+        ContributionMode::Chunked,
         ProvingSystem::Groth16,
         CurveKind::Bls12_377,
         6,  /* power */
@@ -27,17 +25,21 @@ pub async fn main() {
     ));
 
     #[cfg(debug_assertions)]
-    let environment: Development = Development::from(parameters);
+    let environment: Testing = {
+        phase1_coordinator::testing::clear_test_storage(&Testing::from(parameters.clone()).into());
+        Testing::from(parameters)
+    };
 
     #[cfg(not(debug_assertions))]
     let environment: Production = Production::from(parameters);
 
-    // Instantiate the coordinator
-    let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
-        Coordinator::new(environment.into(), Arc::new(Dummy)).unwrap(), //TODO: proper signature
-    ));
+    // Instantiate and start the coordinator
+    let mut coordinator =  Coordinator::new(environment.into(), Arc::new(Dummy)).expect("Failed to instantiate coordinator"); //FIXME: proper signature
+    coordinator.initialize().expect("Initialization of coordinator failed!");
 
-    coordinator.write().await.initialize().unwrap();
+    let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
+        coordinator,
+    ));
 
     // Launch Rocket REST server
     let build_rocket = rocket::build()

@@ -139,13 +139,13 @@ impl PostChunkRequest {
 //
 
 /// Add the incoming contributor to the queue of contributors.
-#[post("/contributor/join_queue", format = "json", data = "<contributor_public_key>")]
+#[post("/contributor/join_queue", format = "json", data = "<contributor_pubkey>")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
-    contributor_public_key: Json<String>,
+    contributor_pubkey: Json<String>,
     contributor_ip: SocketAddr,
 ) -> Result<()> {
-    let pubkey = contributor_public_key.into_inner();
+    let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
 
     match coordinator
@@ -159,17 +159,17 @@ pub async fn join_queue(
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
-#[post("/contributor/lock_chunk", format = "json", data = "<contributor_public_key>")]
+#[post("/contributor/lock_chunk", format = "json", data = "<contributor_pubkey>")]
 pub async fn lock_chunk(
     coordinator: &State<Coordinator>,
-    contributor_public_key: Json<String>,
+    contributor_pubkey: Json<String>,
 ) -> Result<Json<LockedLocators>> {
-    let pubkey = contributor_public_key.into_inner();
+    let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
 
     match coordinator.write().await.try_lock(&contributor) {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
-        Err(e) => Err(ResponseError::CoordinatorError(e)),
+        Err(e) => Err(ResponseError::CoordinatorError(e))
     }
 }
 
@@ -250,9 +250,9 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> 
 }
 
 /// Lets the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
-#[post("/contributor/heartbeat", format = "json", data = "<contributor_public_key>")]
-pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_public_key: Json<String>) -> Result<()> {
-    let pubkey = contributor_public_key.into_inner();
+#[post("/contributor/heartbeat", format = "json", data = "<contributor_pubkey>")]
+pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_pubkey: Json<String>) -> Result<()> {
+    let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
     match coordinator.write().await.heartbeat(&contributor) {
         Ok(()) => Ok(()),
@@ -261,12 +261,12 @@ pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_public_key:
 }
 
 /// Get the pending tasks of contributor.
-#[get("/contributor/get_tasks_left", format = "json", data = "<contributor_public_key>")]
+#[get("/contributor/get_tasks_left", format = "json", data = "<contributor_pubkey>")]
 pub async fn get_tasks_left(
     coordinator: &State<Coordinator>,
-    contributor_public_key: Json<String>,
+    contributor_pubkey: Json<String>,
 ) -> Result<Json<LinkedList<Task>>> {
-    let pubkey = contributor_public_key.into_inner();
+    let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
 
     match coordinator.read().await.state().current_participant_info(&contributor) {
