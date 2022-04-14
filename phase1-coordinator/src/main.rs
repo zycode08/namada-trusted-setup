@@ -34,12 +34,11 @@ pub async fn main() {
     let environment: Production = Production::from(parameters);
 
     // Instantiate and start the coordinator
-    let mut coordinator =  Coordinator::new(environment.into(), Arc::new(Dummy)).expect("Failed to instantiate coordinator"); //FIXME: proper signature
+    let mut coordinator =
+        Coordinator::new(environment.into(), Arc::new(Dummy)).expect("Failed to instantiate coordinator"); //FIXME: proper signature
     coordinator.initialize().expect("Initialization of coordinator failed!");
 
-    let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
-        coordinator,
-    ));
+    let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     // Launch Rocket REST server
     let build_rocket = rocket::build()

@@ -8,7 +8,7 @@ use phase1_coordinator::{
     authentication::{Dummy, Signature},
     environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, GetChunkRequest, ContributeChunkRequest, PostChunkRequest},
+    rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Locator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -312,10 +312,7 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let contribute_request = ContributeChunkRequest::new(
-        String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY),
-        0,
-    );
+    let contribute_request = ContributeChunkRequest::new(String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY), 0);
     let mut req = client.post("/contributor/contribute_chunk");
     req = req.json(&contribute_request);
     let response = req.dispatch();
@@ -341,10 +338,7 @@ fn test_contribution() {
     let locked_locators: LockedLocators = response.into_json().unwrap();
 
     // Download chunk
-    let chunk_request = GetChunkRequest::new(
-        String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        locked_locators,
-    );
+    let chunk_request = GetChunkRequest::new(String::from(CONTRIBUTOR_1_PUBLIC_KEY), locked_locators);
     let mut req = client.get("/download/chunk");
     req = req.json(&chunk_request);
     let response = req.dispatch();
@@ -399,10 +393,7 @@ fn test_contribution() {
     assert!(response.body().is_none());
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(
-        String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        task.chunk_id(),
-    );
+    let contribute_request = ContributeChunkRequest::new(String::from(CONTRIBUTOR_1_PUBLIC_KEY), task.chunk_id());
 
     let mut req = client.post("/contributor/contribute_chunk");
     req = req.json(&contribute_request);

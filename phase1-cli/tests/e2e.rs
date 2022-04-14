@@ -1,14 +1,11 @@
-use std::{
-    net::IpAddr,
-    sync::Arc,
-};
+use std::{net::IpAddr, sync::Arc};
 
 use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
     authentication::{Dummy, Signature},
     environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, GetChunkRequest, ContributeChunkRequest, PostChunkRequest},
+    rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator},
     testing::coordinator,
     ContributionFileSignature,
@@ -16,15 +13,16 @@ use phase1_coordinator::{
     Coordinator,
     Participant,
 };
-use rocket::{
-    routes,
-    Error
-};
+use rocket::{routes, Error};
 
 use phase1_cli::requests;
 use reqwest::{Client, Url};
 
-use tokio::{sync::RwLock, task::JoinHandle, time::{self, Duration}};
+use tokio::{
+    sync::RwLock,
+    task::JoinHandle,
+    time::{self, Duration},
+};
 
 // NOTE: these tests must be run with --test-threads=1 due to the disk storage
 //	being stored at the same path for all the test instances causing a conflict.
@@ -41,7 +39,7 @@ const CONTRIBUTION_SIZE: usize = 4576;
 const ROUND_HEIGHT: u64 = 1;
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
-async fn spawn_rocket_server() -> JoinHandle<Result<(),Error>> {
+async fn spawn_rocket_server() -> JoinHandle<Result<(), Error>> {
     let parameters = Parameters::Custom(Settings::new(
         ContributionMode::Chunked,
         ProvingSystem::Groth16,
@@ -107,7 +105,9 @@ async fn test_heartbeat() {
     assert!(response.is_err());
 
     // Ok
-    requests::post_heartbeat(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY)).await.unwrap();
+    requests::post_heartbeat(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY))
+        .await
+        .unwrap();
 
     // Drop the server
     handle.abort();
@@ -141,11 +141,15 @@ async fn test_get_tasks_left() {
     assert!(response.is_err());
 
     // Ok no tasks left
-    let response = requests::get_tasks_left(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY)).await.unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY))
+        .await
+        .unwrap();
     assert!(response.is_empty());
 
     // Ok tasks left
-    let response = requests::get_tasks_left(&client, &mut url, &String::from(CONTRIBUTOR_2_PUBLIC_KEY)).await.unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, &String::from(CONTRIBUTOR_2_PUBLIC_KEY))
+        .await
+        .unwrap();
     assert_eq!(response.len(), 1);
 
     // Drop the server
@@ -161,7 +165,9 @@ async fn test_join_queue() {
 
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    requests::post_join_queue(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY)).await.unwrap();
+    requests::post_join_queue(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY))
+        .await
+        .unwrap();
 
     // Wrong request, already existing contributor
     let response = requests::post_join_queue(&client, &mut url, &String::from(CONTRIBUTOR_1_PUBLIC_KEY)).await;
@@ -181,10 +187,7 @@ async fn test_wrong_contribute_chunk() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let contribute_request = ContributeChunkRequest::new(
-        String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY),
-        0,
-    );
+    let contribute_request = ContributeChunkRequest::new(String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY), 0);
 
     let response = requests::post_contribute_chunk(&client, &mut url, &contribute_request).await;
     assert!(response.is_err());
@@ -211,10 +214,7 @@ async fn test_contribution() {
     let locked_locators: LockedLocators = response.unwrap();
 
     // Download chunk
-    let chunk_request = GetChunkRequest::new(
-        String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        locked_locators,
-    );
+    let chunk_request = GetChunkRequest::new(String::from(CONTRIBUTOR_1_PUBLIC_KEY), locked_locators);
 
     let response = requests::get_chunk(&client, &mut url, &chunk_request).await;
     let task: Task = response.unwrap();
@@ -262,12 +262,11 @@ async fn test_contribution() {
     requests::post_chunk(&client, &mut url, &post_chunk).await.unwrap();
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(
-        String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        task.chunk_id(),
-    );
+    let contribute_request = ContributeChunkRequest::new(String::from(CONTRIBUTOR_1_PUBLIC_KEY), task.chunk_id());
 
-    requests::post_contribute_chunk(&client, &mut url, &contribute_request).await.unwrap();
+    requests::post_contribute_chunk(&client, &mut url, &contribute_request)
+        .await
+        .unwrap();
 
     // Drop the server
     handle.abort();

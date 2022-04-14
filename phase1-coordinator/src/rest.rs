@@ -49,7 +49,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 
 type Result<T> = std::result::Result<T, ResponseError>;
 
-/// Request to get a [Chunk](`crate::objects::Chunk`). 
+/// Request to get a [Chunk](`crate::objects::Chunk`).
 #[derive(Deserialize, Serialize)]
 pub struct GetChunkRequest {
     pubkey: String,
@@ -58,7 +58,10 @@ pub struct GetChunkRequest {
 
 impl GetChunkRequest {
     pub fn new(pubkey: String, locked_locators: LockedLocators) -> Self {
-        GetChunkRequest { pubkey, locked_locators }
+        GetChunkRequest {
+            pubkey,
+            locked_locators,
+        }
     }
 
     /// Get a reference to the get chunk request's pubkey.
@@ -76,13 +79,15 @@ impl GetChunkRequest {
 
 /// Contribution of a [Chunk](`crate::objects::Chunk`).
 #[derive(Deserialize, Serialize)]
-pub struct  ContributeChunkRequest {
+pub struct ContributeChunkRequest {
     pubkey: String,
     chunk_id: u64,
 }
 
 impl ContributeChunkRequest {
-    pub fn new(pubkey: String, chunk_id: u64) -> Self { Self { pubkey, chunk_id } }
+    pub fn new(pubkey: String, chunk_id: u64) -> Self {
+        Self { pubkey, chunk_id }
+    }
 
     /// Get a reference to the contribute chunk request's pubkey.
     #[must_use]
@@ -107,7 +112,19 @@ pub struct PostChunkRequest {
 }
 
 impl PostChunkRequest {
-    pub fn new(contribution_locator: ContributionLocator, contribution: Vec<u8>, contribution_file_signature_locator: ContributionSignatureLocator, contribution_file_signature: ContributionFileSignature) -> Self { Self { contribution_locator, contribution, contribution_file_signature_locator, contribution_file_signature } }
+    pub fn new(
+        contribution_locator: ContributionLocator,
+        contribution: Vec<u8>,
+        contribution_file_signature_locator: ContributionSignatureLocator,
+        contribution_file_signature: ContributionFileSignature,
+    ) -> Self {
+        Self {
+            contribution_locator,
+            contribution,
+            contribution_file_signature_locator,
+            contribution_file_signature,
+        }
+    }
 
     /// Get the post chunk request's contribution locator.
     #[must_use]
@@ -169,13 +186,16 @@ pub async fn lock_chunk(
 
     match coordinator.write().await.try_lock(&contributor) {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
-        Err(e) => Err(ResponseError::CoordinatorError(e))
+        Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
 
 /// Download a chunk from the [Coordinator](`crate::Coordinator`), which should be contributed to upon receipt.
 #[get("/download/chunk", format = "json", data = "<get_chunk_request>")]
-pub async fn get_chunk(coordinator: &State<Coordinator>, get_chunk_request: Json<GetChunkRequest>) -> Result<Json<Task>> {
+pub async fn get_chunk(
+    coordinator: &State<Coordinator>,
+    get_chunk_request: Json<GetChunkRequest>,
+) -> Result<Json<Task>> {
     let request = get_chunk_request.into_inner();
     let contributor = Participant::new_contributor(request.pubkey());
 
@@ -234,7 +254,11 @@ pub async fn contribute_chunk(
     let request = contribute_chunk_request.into_inner();
     let contributor = Participant::new_contributor(request.pubkey());
 
-    match coordinator.write().await.try_contribute(&contributor, request.chunk_id()) {
+    match coordinator
+        .write()
+        .await
+        .try_contribute(&contributor, request.chunk_id())
+    {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }

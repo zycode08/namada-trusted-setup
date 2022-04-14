@@ -24,13 +24,18 @@ use phase1_coordinator::{
     storage::ContributionLocator,
 };
 
-use structopt::StructOpt;
 use reqwest::Url;
-
+use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "anoma-mpc", about = "Anoma CLI for trusted setup.")]
 pub struct ContributorOpt {
-    #[structopt(help = "The ip address and port of the coordinator", required = true, default_value = "http://127.0.0.1:8000", env = "ANOMA_COORDINATOR_ADDRESS", parse(try_from_str))]
+    #[structopt(
+        help = "The ip address and port of the coordinator",
+        required = true,
+        default_value = "http://127.0.0.1:8000",
+        env = "ANOMA_COORDINATOR_ADDRESS",
+        parse(try_from_str)
+    )]
     pub coordinator: Url,
 }
