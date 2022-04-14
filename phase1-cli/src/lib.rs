@@ -1,6 +1,5 @@
 // Documentation
 #![doc = include_str!("../README.md")]
-// FIXME: e2e tests?
 
 mod combine;
 pub use combine::combine;
