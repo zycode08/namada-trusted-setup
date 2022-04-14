@@ -16,6 +16,9 @@ run-coordinator:
 test-coordinator:
 	$(CARGO) test --test test_coordinator --features testing -- --test-threads=1
 
+test-e2e:
+	$(CARGO) test --test e2e -- --test-threads=1
+
 fmt:
 	$(CARGO_NIGHTLY) fmt --all
 
@@ -31,4 +34,4 @@ update:
 clean:
 	$(CARGO) clean
 
-.PHONY : build check clean clippy contribution fmt contributor run-coordinator test-coordinator update
+.PHONY : build check clean clippy contribution fmt contributor run-coordinator test-coordinator test-e2e update

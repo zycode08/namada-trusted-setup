@@ -71,7 +71,7 @@ fn build_rocket() -> Rocket<Build> {
     coordinator
         .add_to_queue(contributor2.clone(), Some(contributor2_ip), 9)
         .unwrap();
-    coordinator.update();
+    coordinator.update().unwrap();
 
     coordinator.try_lock(&contributor2).unwrap();
 
@@ -232,7 +232,7 @@ fn test_join_queue() {
     assert!(response.body().is_some());
 }
 
-/// Test wrong usge of lock_chunk.
+/// Test wrong usage of lock_chunk.
 #[test]
 fn test_wrong_lock_chunk() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
@@ -330,9 +330,7 @@ fn test_contribution() {
     use phase1_coordinator::authentication::Dummy;
     use setup_utils::calculate_hash;
 
-    let rocket = build_rocket();
-    let coordinator: Arc<RwLock<Coordinator>> = rocket.state::<Arc<RwLock<Coordinator>>>().unwrap().to_owned();
-    let client = Client::tracked(rocket).expect("Invalid rocket instance");
+    let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Lock chunk
     let mut req = client.post("/contributor/lock_chunk");
