@@ -23,6 +23,7 @@ pub struct ContributionLocator {
     contribution_id: u64,
     is_verified: bool,
 }
+static ANOMA_FILE_SIZE: u64 = 200_000_000;
 
 impl ContributionLocator {
     pub fn new(round_height: u64, chunk_id: u64, contribution_id: u64, is_verified: bool) -> Self {
@@ -154,6 +155,8 @@ impl Object {
         let settings = environment.parameters();
 
         match settings.curve() {
+            // TODO: change round_filesize
+            CurveKind::Bls12_381 => ANOMA_FILE_SIZE,
             CurveKind::Bls12_377 => round_filesize!(Bls12_377, settings, compressed),
             CurveKind::BW6 => round_filesize!(BW6_761, settings, compressed),
         }
@@ -172,6 +175,9 @@ impl Object {
         };
 
         match (curve, verified) {
+            // TODO: add correct verified_contribution_size
+            (CurveKind::Bls12_381, true) => ANOMA_FILE_SIZE,
+            (CurveKind::Bls12_381, false) => ANOMA_FILE_SIZE,
             (CurveKind::Bls12_377, true) => verified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::Bls12_377, false) => unverified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::BW6, true) => verified_contribution_size!(BW6_761, settings, chunk_id, compressed),

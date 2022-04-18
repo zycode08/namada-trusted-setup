@@ -12,7 +12,10 @@ use snarkvm_curves::PairingEngine as Engine;
 use std::{io::Write, time::Instant};
 use tracing::{debug, error, info, trace};
 
+use masp_phase2::MPCParameters;
+
 pub(crate) struct Initialization;
+
 
 impl Initialization {
     ///
@@ -31,7 +34,11 @@ impl Initialization {
         let start = Instant::now();
 
         // Determine the expected challenge size.
+        // For Anoma Phase 2, the expected challenge size is hardcoded under phase1-coordinator/storage/storage.rs at the const ANOMA_FILE_SIZE
+        // TODO: refactor this parameter to the environment file and find a way to calculate the expected size
         let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
+        // TODO: implement calculate size macro for our curve
+        // let expected_challenge_size = 200_000_000; //FIXME: improve this with contribution_file_size
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
         // Initialize and fetch a writer for the contribution locator so the output is saved.
@@ -42,6 +49,12 @@ impl Initialization {
         let settings = environment.parameters();
 
         if let Err(error) = match settings.curve() {
+            // TODO: change phase1_chunked_parameters macro, not used by Anoma phase2 in Self::initialization
+            CurveKind::Bls12_381 => Self::initialization(
+                storage.writer(&contribution_locator)?.as_mut(),
+                environment.compressed_inputs(),
+                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+            ),
             CurveKind::Bls12_377 => Self::initialization(
                 storage.writer(&contribution_locator)?.as_mut(),
                 environment.compressed_inputs(),
@@ -81,18 +94,84 @@ impl Initialization {
         compressed: UseCompression,
         parameters: &Phase1Parameters<T>,
     ) -> Result<(), CoordinatorError> {
-        trace!("Initializing Powers of Tau on 2^{}", parameters.total_size_in_log2);
-        trace!("In total will generate up to {} powers", parameters.powers_g1_length);
-
+        info!("Initializing Phase 2 Initialization");
+        // The initialization contribution file contains [blank_hash, init.params]
+        // Our circuit parameters are appended to the blank_hash
         let hash = blank_hash();
-        (&mut writer[0..]).write_all(hash.as_slice())?;
+        // (&mut writer[0..]).write_all(hash.as_slice())?;
+        writer.write_all(&hash.as_slice())?;
         writer.flush()?;
         debug!("Empty challenge hash is {}", pretty_hash!(&hash));
+        // debug!("Empty challenge is {}", pretty_hash!(&writer));
+        info!("Starting Phase 2 initialization operation");
+        // Add here your MPC Parameters init function
 
-        trace!("Starting Phase 1 initialization operation");
-        Phase1::initialization(&mut writer, compressed, &parameters)?;
+        // MASP spend circuit
+        trace!("Creating initial parameters for MASP Spend...");
+        let spend_params = MPCParameters::new(
+            masp_proofs::circuit::sapling::Spend {
+                value_commitment: None,
+                proof_generation_key: None,
+                payment_address: None,
+                commitment_randomness: None,
+                ar: None,
+                auth_path: vec![None; 32], // Tree depth is 32 for sapling
+                anchor: None,
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
+        trace!("Writing initial MASP Spend parameters to file...",);
+
+        spend_params
+            .write(&mut writer)
+            .expect("unable to write MASP Spend params");
+
+        // MASP output circuit
+        trace!("Creating initial parameters for MASP Output...");
+        let output_params = MPCParameters::new(
+            masp_proofs::circuit::sapling::Output {
+                value_commitment: None,
+                payment_address: None,
+                commitment_randomness: None,
+                esk: None,
+                asset_identifier: vec![None; 256],
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
+
+        trace!("Writing initial MASP Output parameters to file...",);
+
+        output_params
+            .write(&mut writer)
+            .expect("unable to write MASP Output params");
+
+        // MASP Convert circuit
+        trace!("Creating initial parameters for MASP Convert...");
+        let convert_params = MPCParameters::new(
+            masp_proofs::circuit::convert::Convert {
+                value_commitment: None,
+                auth_path: vec![None; 32], // Tree depth is 32 for sapling
+                anchor: None,
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
+
+        trace!("Writing initial MASP Convert parameters to file...",);
+
+        convert_params
+            .write(&mut writer)
+            .expect("unable to write MASP Convert params");
+
         writer.flush()?;
-        trace!("Completed Phase 1 initialization operation");
+
+        // Phase1::initialization(&mut writer, compressed, &parameters)?;
+        trace!("Completed Phase 2 initialization operation");
 
         Ok(())
     }
@@ -132,14 +211,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_initialization_run() {
-        initialize_test_environment(&TEST_ENVIRONMENT);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         // Define test parameters.
         let round_height = 0;
-        let number_of_chunks = TEST_ENVIRONMENT.number_of_chunks();
+        let number_of_chunks = TEST_ENVIRONMENT_ANOMA.number_of_chunks();
 
         // Define test storage.
-        let mut storage = test_storage(&TEST_ENVIRONMENT);
+        let mut storage = test_storage(&TEST_ENVIRONMENT_ANOMA);
 
         // Initialize the previous contribution hash with a no-op value.
         let mut previous_contribution_hash: GenericArray<u8, _> =
@@ -150,7 +229,8 @@ mod tests {
             debug!("Initializing test chunk {}", chunk_id);
 
             // Execute the ceremony initialization
-            let candidate_hash = Initialization::run(&TEST_ENVIRONMENT, &mut storage, round_height, chunk_id).unwrap();
+            let candidate_hash =
+                Initialization::run(&TEST_ENVIRONMENT_ANOMA, &mut storage, round_height, chunk_id).unwrap();
 
             // Open the contribution locator file.
             let locator = Locator::ContributionFile(ContributionLocator::new(round_height, chunk_id, 0, true));
@@ -158,8 +238,18 @@ mod tests {
 
             // Check that the contribution chunk was generated based on the blank hash.
             let hash = blank_hash();
+
+            debug!("blank hash is {}", pretty_hash!(&hash));
+            let challenge_hash = calculate_hash(&reader);
+            debug!("reader hash is {}", pretty_hash!(challenge_hash));
+            debug!("reader is {}", pretty_hash!(&reader[0..255]));
             for (i, (expected, candidate)) in hash.iter().zip(reader.as_ref().chunks(64).next().unwrap()).enumerate() {
-                trace!("Checking byte {} of expected hash", i);
+                trace!(
+                    "Checking byte {} of expected hash: {:02x} =? {:02x}",
+                    i,
+                    expected,
+                    candidate
+                );
                 assert_eq!(expected, candidate);
             }
 

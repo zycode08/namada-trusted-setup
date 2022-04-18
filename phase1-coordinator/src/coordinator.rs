@@ -2811,9 +2811,9 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_initialization() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
 
         {
             // Run initialization.
@@ -2869,12 +2869,12 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_contributor_try_lock_chunk() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID);
         let contributor_2 = Lazy::force(&TEST_CONTRIBUTOR_ID_2);
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
         initialize_coordinator(&mut coordinator)?;
 
         {
@@ -2933,12 +2933,12 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_contributor_add_contribution() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT_3);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID).clone();
         let contributor_signing_key: SigningKey = "secret_key".to_string();
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_3.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
         initialize_coordinator(&mut coordinator)?;
 
         {
@@ -2999,12 +2999,12 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_verifier_verify_contribution() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT_3);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID);
         let contributor_signing_key: SigningKey = "secret_key".to_string();
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_3.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
         initialize_coordinator(&mut coordinator)?;
 
         // Check current round height is now 1.

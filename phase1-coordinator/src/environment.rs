@@ -94,6 +94,11 @@ pub enum Parameters {
         power: usize,
         batch_size: usize,
     },
+    TestAnoma {
+        number_of_chunks: usize,
+        power: usize,
+        batch_size: usize,
+    },
 }
 
 impl Parameters {
@@ -112,6 +117,11 @@ impl Parameters {
                 power,
                 batch_size,
             } => Self::test_custom(number_of_chunks, power, batch_size),
+            Parameters::TestAnoma {
+                number_of_chunks,
+                power,
+                batch_size,
+            } => Self::test_anoma(number_of_chunks, power, batch_size),
         }
     }
 
@@ -187,9 +197,20 @@ impl Parameters {
     fn test_custom(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
         let proving_system = ProvingSystem::Groth16;
         Settings::new(
-            ContributionMode::Chunked,
+            ContributionMode::Full,
             proving_system,
-            CurveKind::Bls12_377,
+            CurveKind::Bls12_381,
+            *power,
+            *batch_size,
+            chunk_size!(number_of_chunks, proving_system, power),
+        )
+    }
+    fn test_anoma(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
+        let proving_system = ProvingSystem::Groth16;
+        Settings::new(
+            ContributionMode::Full,
+            proving_system,
+            CurveKind::Bls12_381,
             *power,
             *batch_size,
             chunk_size!(number_of_chunks, proving_system, power),
