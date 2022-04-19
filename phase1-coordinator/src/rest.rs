@@ -302,14 +302,14 @@ pub async fn get_tasks_left(
     }
 }
 
-
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
 #[post("/stop")]
-pub async fn post_stop_coordinator(
-    coordinator: &State<Coordinator>,
-    shutdown: Shutdown
-) -> Result<()> {
-    let result = coordinator.write().await.shutdown().map_err(|e| {ResponseError::ShutdownError(format!("{}", e))});
+pub async fn post_stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
+    let result = coordinator
+        .write()
+        .await
+        .shutdown()
+        .map_err(|e| ResponseError::ShutdownError(format!("{}", e)));
 
     // Shut Rocket server down
     shutdown.notify();

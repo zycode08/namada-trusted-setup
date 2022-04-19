@@ -113,7 +113,7 @@ async fn test_stop_coordinator() {
         Err(e) => match e {
             requests::RequestError::Client(_) => (),
             requests::RequestError::Server(_) => panic!("Expected client-side error"),
-        }
+        },
     }
 
     // Drop the server

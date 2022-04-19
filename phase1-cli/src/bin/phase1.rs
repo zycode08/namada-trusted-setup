@@ -71,37 +71,35 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
-     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
-     let pubkey = String::from("random public key");
-     requests::post_join_queue(&client, coordinator, &pubkey)
-         .await
-         .unwrap();
- 
-     let mut i = 0;
-     loop {
-         if i == 3 {
-             //FIXME: just for testing, remove for production
-             break;
-         }
-         // Update the coordinator
-         if let Err(e) = requests::get_update(&client, coordinator).await {
-             //FIXME: ignore this error and continue
-             eprintln!("{}", e);
-         }
- 
-         if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
-             eprintln!("{}", e);
-             panic!();
-         }
- 
-         i += 1;
-     }
+    // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
+    let pubkey = String::from("random public key");
+    requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
+
+    let mut i = 0;
+    loop {
+        if i == 3 {
+            //FIXME: just for testing, remove for production
+            break;
+        }
+        // Update the coordinator
+        if let Err(e) = requests::get_update(&client, coordinator).await {
+            //FIXME: ignore this error and continue
+            eprintln!("{}", e);
+        }
+
+        if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
+            eprintln!("{}", e);
+            panic!();
+        }
+
+        i += 1;
+    }
 }
 
 async fn close_ceremony(client: &Client, coordinator: &mut Url) {
     match requests::post_stop_coordinator(client, coordinator).await {
         Ok(()) => println!("Ceremony completed!"),
-        Err(e) => eprintln!("{}", e)
+        Err(e) => eprintln!("{}", e),
     }
 }
 
@@ -114,10 +112,10 @@ async fn main() {
         ContributorOpt::Contribute(url) => {
             let mut coordinator = url.coordinator;
             contribute(&client, &mut coordinator).await;
-        },
+        }
         ContributorOpt::CloseCeremony(url) => {
             let mut coordinator = url.coordinator;
             close_ceremony(&client, &mut coordinator).await;
-        },
+        }
     }
 }

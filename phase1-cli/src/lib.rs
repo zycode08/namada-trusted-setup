@@ -45,5 +45,5 @@ pub enum ContributorOpt {
     #[structopt(about = "Contribute to the trusted setup")]
     Contribute(CoordinatorUrl),
     #[structopt(about = "Stop the coordinator and close the ceremony")]
-    CloseCeremony(CoordinatorUrl)
+    CloseCeremony(CoordinatorUrl),
 }
