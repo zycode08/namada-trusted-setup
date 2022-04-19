@@ -84,12 +84,40 @@ async fn spawn_rocket_server() -> JoinHandle<Result<(), Error>> {
             rest::contribute_chunk,
             rest::update_coordinator,
             rest::heartbeat,
-            rest::get_tasks_left
+            rest::get_tasks_left,
+            rest::post_stop_coordinator
         ])
         .manage(coordinator);
 
     let ignite = build.ignite().await.unwrap();
     tokio::spawn(ignite.launch())
+}
+
+#[tokio::test]
+async fn test_stop_coordinator() {
+    let client = Client::new();
+    // Spawn the server and wait for its startup
+    let handle = spawn_rocket_server().await;
+    time::sleep(Duration::from_millis(1000)).await;
+
+    // Shut the server down
+    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let response = requests::post_stop_coordinator(&client, &mut url).await;
+    assert!(response.is_ok());
+
+    // Try sending another request (server should be unreachable)
+    let response = requests::post_stop_coordinator(&client, &mut url).await;
+
+    match response {
+        Ok(_) => panic!("Expected error"),
+        Err(e) => match e {
+            requests::RequestError::Client(_) => (),
+            requests::RequestError::Server(_) => panic!("Expected client-side error"),
+        }
+    }
+
+    // Drop the server
+    handle.abort();
 }
 
 #[tokio::test]

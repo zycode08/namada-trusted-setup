@@ -9,7 +9,7 @@ use phase1_coordinator::{
     environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ContributionLocator, ContributionSignatureLocator, Locator, Object},
+    storage::{ContributionLocator, ContributionSignatureLocator},
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
@@ -86,9 +86,21 @@ fn build_rocket() -> Rocket<Build> {
             rest::contribute_chunk,
             rest::update_coordinator,
             rest::heartbeat,
-            rest::get_tasks_left
+            rest::get_tasks_left,
+            rest::post_stop_coordinator
         ])
         .manage(coordinator)
+}
+
+#[test]
+fn test_stop_coordinator() {
+    let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
+
+    // Shut the server down
+    let req = client.post("/stop");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
 }
 
 #[test]
@@ -136,7 +148,7 @@ fn test_update_coordinator() {
     assert!(response.body().is_none());
 
     // Ok
-    let mut req = client.get("/update");
+    let req = client.get("/update");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());

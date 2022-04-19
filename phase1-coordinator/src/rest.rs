@@ -303,7 +303,7 @@ pub async fn get_tasks_left(
 }
 
 
-/// Stop the [Coordinator](`crate::Coordinator`). This endpoint should be accessible only by the coordinator itself.
+/// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
 #[post("/stop")]
 pub async fn post_stop_coordinator(
     coordinator: &State<Coordinator>,
@@ -315,5 +315,4 @@ pub async fn post_stop_coordinator(
     shutdown.notify();
 
     result
-    // FIXME: add tests for this endpoint
 }
