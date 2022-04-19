@@ -166,3 +166,10 @@ pub async fn get_update(client: &Client, coordinator_address: &mut Url) -> Resul
 
     Ok(())
 }
+
+/// Stop the [Coordinator](`phase1-coordinator::Coordinator`).
+pub async fn post_stop_coordinator(client: &Client, coordinator_address: &mut Url) -> Result<()> {
+    submit_request::<()>(client, coordinator_address, "/stop", None, &Method::POST).await?;
+
+    Ok(())
+}

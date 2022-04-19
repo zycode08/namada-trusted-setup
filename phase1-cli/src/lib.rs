@@ -28,8 +28,7 @@ use reqwest::Url;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "anoma-mpc", about = "Anoma CLI for trusted setup.")]
-pub struct ContributorOpt {
+pub struct CoordinatorUrl {
     #[structopt(
         help = "The ip address and port of the coordinator",
         required = true,
@@ -38,4 +37,13 @@ pub struct ContributorOpt {
         parse(try_from_str)
     )]
     pub coordinator: Url,
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "anoma-mpc", about = "Anoma CLI for trusted setup.")]
+pub enum ContributorOpt {
+    #[structopt(about = "Contribute to the trusted setup")]
+    Contribute(CoordinatorUrl),
+    #[structopt(about = "Stop the coordinator and close the ceremony")]
+    CloseCeremony(CoordinatorUrl)
 }

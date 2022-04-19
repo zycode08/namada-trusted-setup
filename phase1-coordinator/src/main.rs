@@ -50,7 +50,8 @@ pub async fn main() {
             rest::contribute_chunk,
             rest::update_coordinator,
             rest::heartbeat,
-            rest::get_tasks_left
+            rest::get_tasks_left,
+            rest::post_stop_coordinator
         ])
         .manage(coordinator);
 
@@ -64,6 +65,5 @@ pub async fn main() {
 
     if let Err(e) = ignite_rocket.launch().await {
         eprintln!("Coordinator server didn't launch: {}", e);
-        return;
     };
 }

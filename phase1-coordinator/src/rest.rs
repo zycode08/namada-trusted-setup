@@ -1,4 +1,4 @@
-//! REST API endpoints.
+//! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
 use crate::{
     objects::Task,
@@ -13,6 +13,7 @@ use rocket::{
     response::{Responder, Response},
     serde::{json::Json, Deserialize, Serialize},
     Request,
+    Shutdown,
     State,
 };
 
@@ -30,6 +31,8 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
+    #[error("Error while terminating the ceremony: {0}")]
+    ShutdownError(String),
     #[error("Could not find contributor with public key {0}")]
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
@@ -297,4 +300,20 @@ pub async fn get_tasks_left(
         Some(info) => Ok(Json(info.pending_tasks().to_owned())),
         None => Err(ResponseError::UnknownContributor(pubkey)),
     }
+}
+
+
+/// Stop the [Coordinator](`crate::Coordinator`). This endpoint should be accessible only by the coordinator itself.
+#[post("/stop")]
+pub async fn post_stop_coordinator(
+    coordinator: &State<Coordinator>,
+    shutdown: Shutdown
+) -> Result<()> {
+    let result = coordinator.write().await.shutdown().map_err(|e| {ResponseError::ShutdownError(format!("{}", e))});
+
+    // Shut Rocket server down
+    shutdown.notify();
+
+    result
+    // FIXME: add tests for this endpoint
 }

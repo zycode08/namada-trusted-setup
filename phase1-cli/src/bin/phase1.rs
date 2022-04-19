@@ -31,7 +31,7 @@ fn compute_contribution_mock() -> Vec<u8> {
     contribution
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
+async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
 
     let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
@@ -70,37 +70,54 @@ async fn contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> R
     Ok(())
 }
 
+async fn contribute(client: &Client, coordinator: &mut Url) {
+     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
+     let pubkey = String::from("random public key");
+     requests::post_join_queue(&client, coordinator, &pubkey)
+         .await
+         .unwrap();
+ 
+     let mut i = 0;
+     loop {
+         if i == 3 {
+             //FIXME: just for testing, remove for production
+             break;
+         }
+         // Update the coordinator
+         if let Err(e) = requests::get_update(&client, coordinator).await {
+             //FIXME: ignore this error and continue
+             eprintln!("{}", e);
+         }
+ 
+         if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
+             eprintln!("{}", e);
+             panic!();
+         }
+ 
+         i += 1;
+     }
+}
+
+async fn close_ceremony(client: &Client, coordinator: &mut Url) {
+    match requests::post_stop_coordinator(client, coordinator).await {
+        Ok(()) => println!("Ceremony completed!"),
+        Err(e) => eprintln!("{}", e)
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let opt = ContributorOpt::from_args();
-
     let client = Client::new();
-    let mut coordinator = opt.coordinator;
 
-    // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
-    let pubkey = String::from("random public key");
-    requests::post_join_queue(&client, &mut coordinator, &pubkey)
-        .await
-        .unwrap();
-
-    let mut i = 0;
-    loop {
-        if i == 3 {
-            //FIXME: just for testing, remove for production
-            break;
-        }
-        if let Err(e) = requests::get_update(&client, &mut coordinator).await {
-            //FIXME: ignore this error and continue
-            eprintln!("{}", e);
-        }
-
-        if let Err(e) = contribute(&client, &mut coordinator, pubkey.clone()).await {
-            eprintln!("{}", e);
-            panic!();
-        }
-
-        i += 1;
+    match opt {
+        ContributorOpt::Contribute(url) => {
+            let mut coordinator = url.coordinator;
+            contribute(&client, &mut coordinator).await;
+        },
+        ContributorOpt::CloseCeremony(url) => {
+            let mut coordinator = url.coordinator;
+            close_ceremony(&client, &mut coordinator).await;
+        },
     }
-
-    println!("Contribution completed!"); //FIXME:
 }

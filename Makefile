@@ -8,7 +8,10 @@ check:
 	$(CARGO) check
 
 contribution: # Run contributor against a local coordinator (127.0.0.1:8000)
-	$(CARGO) run --bin phase1 --features=cli
+	$(CARGO) run --bin phase1 --features=cli contribute
+
+close-ceremony: # Stop local coordinator (127.0.0.1:8000)
+	$(CARGO) run --bin phase1 --features=cli close-ceremony
 
 run-coordinator:
 	$(CARGO) run --bin phase1-coordinator
@@ -34,4 +37,4 @@ update:
 clean:
 	$(CARGO) clean
 
-.PHONY : build check clean clippy contribution fmt contributor run-coordinator test-coordinator test-e2e update
+.PHONY : build check clean clippy close-ceremony contribution fmt contributor run-coordinator test-coordinator test-e2e update
