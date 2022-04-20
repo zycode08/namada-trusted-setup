@@ -66,18 +66,6 @@ impl GetChunkRequest {
             locked_locators,
         }
     }
-
-    /// Get a reference to the get chunk request's pubkey.
-    #[must_use]
-    fn pubkey(&self) -> &str {
-        self.pubkey.as_ref()
-    }
-
-    /// Get a reference to the get chunk request's locked locators.
-    #[must_use]
-    fn locked_locators(&self) -> &LockedLocators {
-        &self.locked_locators
-    }
 }
 
 /// Contribution of a [Chunk](`crate::objects::Chunk`).
@@ -90,18 +78,6 @@ pub struct ContributeChunkRequest {
 impl ContributeChunkRequest {
     pub fn new(pubkey: String, chunk_id: u64) -> Self {
         Self { pubkey, chunk_id }
-    }
-
-    /// Get a reference to the contribute chunk request's pubkey.
-    #[must_use]
-    fn pubkey(&self) -> &str {
-        self.pubkey.as_ref()
-    }
-
-    /// Get the contribute chunk request's chunk id.
-    #[must_use]
-    fn chunk_id(&self) -> u64 {
-        self.chunk_id
     }
 }
 
@@ -127,30 +103,6 @@ impl PostChunkRequest {
             contribution_file_signature_locator,
             contribution_file_signature,
         }
-    }
-
-    /// Get the post chunk request's contribution locator.
-    #[must_use]
-    fn contribution_locator(&self) -> ContributionLocator {
-        self.contribution_locator
-    }
-
-    /// Get a reference to the post chunk request's contribution.
-    #[must_use]
-    fn contribution(&self) -> &[u8] {
-        self.contribution.as_ref()
-    }
-
-    /// Get the post chunk request's contribution file signature locator.
-    #[must_use]
-    fn contribution_file_signature_locator(&self) -> ContributionSignatureLocator {
-        self.contribution_file_signature_locator
-    }
-
-    /// Get a reference to the post chunk request's contribution file signature.
-    #[must_use]
-    fn contribution_file_signature(&self) -> &ContributionFileSignature {
-        &self.contribution_file_signature
     }
 }
 
@@ -200,9 +152,9 @@ pub async fn get_chunk(
     get_chunk_request: Json<GetChunkRequest>,
 ) -> Result<Json<Task>> {
     let request = get_chunk_request.into_inner();
-    let contributor = Participant::new_contributor(request.pubkey());
+    let contributor = Participant::new_contributor(request.pubkey.as_ref());
 
-    let next_contribution = request.locked_locators().next_contribution();
+    let next_contribution = request.locked_locators.next_contribution();
 
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
@@ -214,7 +166,7 @@ pub async fn get_chunk(
             }
             Ok(Json(task))
         }
-        None => Err(ResponseError::UnknownContributor(request.pubkey().to_owned())),
+        None => Err(ResponseError::UnknownContributor(request.pubkey)),
     }
 }
 
@@ -230,14 +182,14 @@ pub async fn post_contribution_chunk(
     if let Err(e) = coordinator
         .write()
         .await
-        .write_contribution(request.contribution_locator(), request.contribution())
+        .write_contribution(request.contribution_locator, request.contribution)
     {
         return Err(ResponseError::CoordinatorError(e));
     }
 
     match coordinator.write().await.write_contribution_file_signature(
-        request.contribution_file_signature_locator(),
-        request.contribution_file_signature().to_owned(),
+        request.contribution_file_signature_locator,
+        request.contribution_file_signature,
     ) {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
@@ -255,12 +207,12 @@ pub async fn contribute_chunk(
     contribute_chunk_request: Json<ContributeChunkRequest>,
 ) -> Result<Json<ContributionLocator>> {
     let request = contribute_chunk_request.into_inner();
-    let contributor = Participant::new_contributor(request.pubkey());
+    let contributor = Participant::new_contributor(request.pubkey.as_ref());
 
     match coordinator
         .write()
         .await
-        .try_contribute(&contributor, request.chunk_id())
+        .try_contribute(&contributor, request.chunk_id)
     {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
@@ -303,8 +255,8 @@ pub async fn get_tasks_left(
 }
 
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
-#[post("/stop")]
-pub async fn post_stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
+#[get("/stop")]
+pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
     let result = coordinator
         .write()
         .await
@@ -315,4 +267,21 @@ pub async fn post_stop_coordinator(coordinator: &State<Coordinator>, shutdown: S
     shutdown.notify();
 
     result
+}
+
+/// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
+#[get("/verify")]
+pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
+    // Get all the pending verifications, loop on each one of them and perform verification
+    let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
+
+    let mut write_lock = coordinator.write().await;
+    for (task, verifier) in &pending_verifications {
+        if let Err(e) = write_lock.try_verify(verifier, task) {
+            return Err(ResponseError::CoordinatorError(e));
+        }
+    }
+
+    Ok(())
+    // FIXME: tests
 }

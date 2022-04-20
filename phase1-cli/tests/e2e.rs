@@ -85,7 +85,8 @@ async fn spawn_rocket_server() -> JoinHandle<Result<(), Error>> {
             rest::update_coordinator,
             rest::heartbeat,
             rest::get_tasks_left,
-            rest::post_stop_coordinator
+            rest::stop_coordinator,
+            rest::verify_chunk
         ])
         .manage(coordinator);
 
@@ -102,11 +103,11 @@ async fn test_stop_coordinator() {
 
     // Shut the server down
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let response = requests::post_stop_coordinator(&client, &mut url).await;
+    let response = requests::get_stop_coordinator(&client, &mut url).await;
     assert!(response.is_ok());
 
     // Try sending another request (server should be unreachable)
-    let response = requests::post_stop_coordinator(&client, &mut url).await;
+    let response = requests::get_stop_coordinator(&client, &mut url).await;
 
     match response {
         Ok(_) => panic!("Expected error"),

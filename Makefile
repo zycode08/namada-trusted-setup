@@ -13,6 +13,9 @@ contribution: # Run contributor against a local coordinator (127.0.0.1:8000)
 close-ceremony: # Stop local coordinator (127.0.0.1:8000)
 	$(CARGO) run --bin phase1 --features=cli close-ceremony
 
+verify: # Verify pending contributions on local coordinator (127.0.0.1:8000)
+	$(CARGO) run --bin phase1 --features=cli verify-contributions
+
 run-coordinator:
 	$(CARGO) run --bin phase1-coordinator
 

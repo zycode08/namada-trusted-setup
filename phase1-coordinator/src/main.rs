@@ -51,7 +51,8 @@ pub async fn main() {
             rest::update_coordinator,
             rest::heartbeat,
             rest::get_tasks_left,
-            rest::post_stop_coordinator
+            rest::stop_coordinator,
+            rest::verify_chunks
         ])
         .manage(coordinator);
 

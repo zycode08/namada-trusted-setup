@@ -28,7 +28,7 @@ use reqwest::Url;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-pub struct CoordinatorUrl {
+pub struct CoordinatorUrl { //FIXME: tuple struct?
     #[structopt(
         help = "The ip address and port of the coordinator",
         required = true,
@@ -46,4 +46,6 @@ pub enum ContributorOpt {
     Contribute(CoordinatorUrl),
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),
+    #[structopt(about = "Verify the pending contributions")]
+    VerifyContributions(CoordinatorUrl)
 }

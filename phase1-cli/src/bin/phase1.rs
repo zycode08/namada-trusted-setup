@@ -97,9 +97,16 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
 }
 
 async fn close_ceremony(client: &Client, coordinator: &mut Url) {
-    match requests::post_stop_coordinator(client, coordinator).await {
+    match requests::get_stop_coordinator(client, coordinator).await {
         Ok(()) => println!("Ceremony completed!"),
         Err(e) => eprintln!("{}", e),
+    }
+}
+
+async fn verify_contributions(client: &Client, coordinator: &mut Url) {
+    match requests::get_verify_chunks(client, coordinator).await {
+        Ok(()) => println!("Verification of contributions completed!"),
+        Err(e) => eprintln!("{}", e), // FIXME: what to do in this case? Stop coordinator?
     }
 }
 
@@ -109,13 +116,14 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        ContributorOpt::Contribute(url) => {
-            let mut coordinator = url.coordinator;
-            contribute(&client, &mut coordinator).await;
+        ContributorOpt::Contribute(mut url) => { //FIXME: share code
+            contribute(&client, &mut url.coordinator).await;
         }
-        ContributorOpt::CloseCeremony(url) => {
-            let mut coordinator = url.coordinator;
-            close_ceremony(&client, &mut coordinator).await;
+        ContributorOpt::CloseCeremony(mut url) => {
+            close_ceremony(&client, &mut url.coordinator).await;
+        }
+        ContributorOpt::VerifyContributions(mut url) => {
+            verify_contributions(&client, &mut url.coordinator).await;
         }
     }
 }

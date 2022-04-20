@@ -168,8 +168,15 @@ pub async fn get_update(client: &Client, coordinator_address: &mut Url) -> Resul
 }
 
 /// Stop the [Coordinator](`phase1-coordinator::Coordinator`).
-pub async fn post_stop_coordinator(client: &Client, coordinator_address: &mut Url) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/stop", None, &Method::POST).await?;
+pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url) -> Result<()> {
+    submit_request::<()>(client, coordinator_address, "/stop", None, &Method::GET).await?;
+
+    Ok(())
+}
+
+/// Verify the pending contributions.
+pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url) -> Result<()> {
+    submit_request::<()>(client, coordinator_address, "/verify", None, &Method::GET).await?;
 
     Ok(())
 }
