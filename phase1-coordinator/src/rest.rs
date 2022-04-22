@@ -37,6 +37,8 @@ pub enum ResponseError {
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
     UnknownTask(Task),
+    #[error("Error while verifying a contribution: {0}")]
+    VerificationError(String)
 }
 
 impl<'r> Responder<'r, 'static> for ResponseError {
@@ -276,12 +278,16 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
 
     let mut write_lock = coordinator.write().await;
+
     for (task, verifier) in &pending_verifications {
-        if let Err(e) = write_lock.try_verify(verifier, task) {
-            return Err(ResponseError::CoordinatorError(e));
+        // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
+        //  no external verifiers
+        if let Err(e) = write_lock.verify(verifier, &String::from("secret_key"), task) {
+            // FIXME: need a random constant private key for the verifier. Save it somewhere in the Coordinator struct
+            
+            return Err(ResponseError::VerificationError(format!("{}", e))); // FIXME: continue with verification of other chunks before returning err?
         }
     }
 
     Ok(())
-    // FIXME: tests
 }

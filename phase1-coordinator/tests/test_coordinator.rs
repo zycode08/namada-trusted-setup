@@ -356,6 +356,7 @@ fn test_wrong_contribute_chunk() {
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
+/// 
 #[test]
 fn test_contribution() {
     use phase1_coordinator::authentication::Dummy;
@@ -433,9 +434,11 @@ fn test_contribution() {
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
 
-    // Verify chunk FIXME: wrong StorageLocatorMissing
-    req = client.get("/verify");
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+     // Verify chunk
+     req = client.get("/verify");
+     let response = req.dispatch();
+     assert_eq!(response.status(), Status::Ok);
+     assert!(response.body().is_none());
+
+    panic!(); //FIXME: remove
 }
