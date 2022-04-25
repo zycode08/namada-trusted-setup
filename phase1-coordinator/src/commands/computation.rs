@@ -170,17 +170,11 @@ impl Computation {
 
         // Perform the transformation
         trace!("Computing and writing your contribution, this could take a while");
-        // let mut challenge_reader_buff = Cursor::new(challenge_reader);
-        // let mut sapling_spend =
-        //     phase2::MPCParameters::read(&mut challenge_reader_buff, false).expect("couldn't deserialize Sapling Spend params");
 
-        // let rng_sapling = &mut rand_04::OsRng::new().expect("couldn't create RNG");
 
-        // sapling_spend.contribute(rng_sapling);
-
-        // sapling_spend
-        //     .write(&mut response_writer)
-        //     .expect("couldn't write new Sapling Spend params");
+        // START: MASP MPC
+        Self::contribute_masp(&challenge_reader, &mut response_writer);
+        // END: MASP MPC
 
         // Phase1::computation(
         //     challenge_reader,
@@ -193,7 +187,16 @@ impl Computation {
         // )?;
         // response_writer.flush()?;
 
-        // START: MASP MPC
+        trace!("Finishing writing your contribution to response file");
+
+        // Write the public key.
+        // public_key.write(response_writer, compressed_outputs, &parameters)?;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn contribute_masp(challenge_reader: &[u8], mut response_writer: &mut [u8]) {
         let entropy = "entropy";
         // Create an RNG based on a mixture of system randomness and user provided randomness
         let mut rng = {
@@ -219,7 +222,8 @@ impl Computation {
             ChaChaRng::from_seed(h[0..32].try_into().unwrap())
         };
 
-        let mut spend_params = MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
+        let mut spend_params =
+            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
 
         trace!("Contributing to MASP Spend...");
         let mut progress_update_interval: u32 = 0;
@@ -263,16 +267,7 @@ impl Computation {
             .write(&mut response_writer)
             .expect("failed to write updated MASP Convert parameters");
 
-        // END: MASP MPC
-
-        response_writer.flush()?;
-
-        trace!("Finishing writing your contribution to response file");
-
-        // Write the public key.
-        // public_key.write(response_writer, compressed_outputs, &parameters)?;
-
-        Ok(())
+        response_writer.flush().unwrap();
     }
 }
 

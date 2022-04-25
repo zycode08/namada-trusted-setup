@@ -16,7 +16,6 @@ use masp_phase2::MPCParameters;
 
 pub(crate) struct Initialization;
 
-
 impl Initialization {
     ///
     /// Runs chunk initialization for a given environment, round height, and chunk ID.
@@ -105,7 +104,35 @@ impl Initialization {
         // debug!("Empty challenge is {}", pretty_hash!(&writer));
         info!("Starting Phase 2 initialization operation");
         // Add here your MPC Parameters init function
+        Self::initialize_masp(&mut writer);
+        // Phase1::initialization(&mut writer, compressed, &parameters)?;
+        trace!("Completed Phase 2 initialization operation");
 
+        Ok(())
+    }
+
+    /// Compute both contribution hashes and check for equivalence.
+    #[inline]
+    fn check_hash(
+        storage: &Disk,
+        contribution_locator: &Locator,
+        next_contribution_locator: &Locator,
+    ) -> anyhow::Result<Vec<u8>> {
+        let current = storage.reader(contribution_locator)?;
+        let next = storage.reader(next_contribution_locator)?;
+
+        // Compare the contribution hashes of both files to ensure the copy succeeded.
+        let contribution_hash_0 = calculate_hash(current.as_ref());
+        let contribution_hash_1 = calculate_hash(next.as_ref());
+        if contribution_hash_0 != contribution_hash_1 {
+            return Err(CoordinatorError::InitializationTranscriptsDiffer.into());
+        }
+
+        Ok(contribution_hash_1.to_vec())
+    }
+
+    #[inline]
+    fn initialize_masp(mut writer: &mut [u8]) {
         // MASP spend circuit
         trace!("Creating initial parameters for MASP Spend...");
         let spend_params = MPCParameters::new(
@@ -168,32 +195,7 @@ impl Initialization {
             .write(&mut writer)
             .expect("unable to write MASP Convert params");
 
-        writer.flush()?;
-
-        // Phase1::initialization(&mut writer, compressed, &parameters)?;
-        trace!("Completed Phase 2 initialization operation");
-
-        Ok(())
-    }
-
-    /// Compute both contribution hashes and check for equivalence.
-    #[inline]
-    fn check_hash(
-        storage: &Disk,
-        contribution_locator: &Locator,
-        next_contribution_locator: &Locator,
-    ) -> anyhow::Result<Vec<u8>> {
-        let current = storage.reader(contribution_locator)?;
-        let next = storage.reader(next_contribution_locator)?;
-
-        // Compare the contribution hashes of both files to ensure the copy succeeded.
-        let contribution_hash_0 = calculate_hash(current.as_ref());
-        let contribution_hash_1 = calculate_hash(next.as_ref());
-        if contribution_hash_0 != contribution_hash_1 {
-            return Err(CoordinatorError::InitializationTranscriptsDiffer.into());
-        }
-
-        Ok(contribution_hash_1.to_vec())
+        writer.flush().unwrap();
     }
 }
 
