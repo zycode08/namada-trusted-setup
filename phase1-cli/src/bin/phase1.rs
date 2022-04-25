@@ -31,7 +31,7 @@ fn compute_contribution_mock() -> Vec<u8> {
     contribution
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
+async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
 
     let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
@@ -70,18 +70,10 @@ async fn contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> R
     Ok(())
 }
 
-#[tokio::main]
-async fn main() {
-    let opt = ContributorOpt::from_args();
-
-    let client = Client::new();
-    let mut coordinator = opt.coordinator;
-
+async fn contribute(client: &Client, coordinator: &mut Url) {
     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
     let pubkey = String::from("random public key");
-    requests::post_join_queue(&client, &mut coordinator, &pubkey)
-        .await
-        .unwrap();
+    requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
 
     let mut i = 0;
     loop {
@@ -89,18 +81,49 @@ async fn main() {
             //FIXME: just for testing, remove for production
             break;
         }
-        if let Err(e) = requests::get_update(&client, &mut coordinator).await {
+        // Update the coordinator
+        if let Err(e) = requests::get_update(&client, coordinator).await {
             //FIXME: ignore this error and continue
             eprintln!("{}", e);
         }
 
-        if let Err(e) = contribute(&client, &mut coordinator, pubkey.clone()).await {
+        if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
             eprintln!("{}", e);
             panic!();
         }
 
         i += 1;
     }
+}
 
-    println!("Contribution completed!"); //FIXME:
+async fn close_ceremony(client: &Client, coordinator: &mut Url) {
+    match requests::get_stop_coordinator(client, coordinator).await {
+        Ok(()) => println!("Ceremony completed!"),
+        Err(e) => eprintln!("{}", e),
+    }
+}
+
+async fn verify_contributions(client: &Client, coordinator: &mut Url) {
+    match requests::get_verify_chunks(client, coordinator).await {
+        Ok(()) => println!("Verification of contributions completed!"),
+        Err(e) => eprintln!("{}", e), // FIXME: what to do in this case? Stop coordinator?
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let opt = ContributorOpt::from_args();
+    let client = Client::new();
+
+    match opt {
+        ContributorOpt::Contribute(mut url) => { //FIXME: share code
+            contribute(&client, &mut url.coordinator).await;
+        }
+        ContributorOpt::CloseCeremony(mut url) => {
+            close_ceremony(&client, &mut url.coordinator).await;
+        }
+        ContributorOpt::VerifyContributions(mut url) => {
+            verify_contributions(&client, &mut url.coordinator).await;
+        }
+    }
 }

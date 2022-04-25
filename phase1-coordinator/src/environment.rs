@@ -832,7 +832,7 @@ impl std::default::Default for Production {
                 queue_wait_time: 120,
 
                 coordinator_contributors: vec![Participant::new_contributor("coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier("coordinator-verifier")],
+                coordinator_verifiers: vec![Participant::new_verifier("coordinator-verifier")], //FIXME: generate a random address here and save the corresponding private key somewhere
 
                 software_version: 1,
                 deployment: Deployment::Production,

@@ -84,12 +84,41 @@ async fn spawn_rocket_server() -> JoinHandle<Result<(), Error>> {
             rest::contribute_chunk,
             rest::update_coordinator,
             rest::heartbeat,
-            rest::get_tasks_left
+            rest::get_tasks_left,
+            rest::stop_coordinator,
+            rest::verify_chunks
         ])
         .manage(coordinator);
 
     let ignite = build.ignite().await.unwrap();
     tokio::spawn(ignite.launch())
+}
+
+#[tokio::test]
+async fn test_stop_coordinator() {
+    let client = Client::new();
+    // Spawn the server and wait for its startup
+    let handle = spawn_rocket_server().await;
+    time::sleep(Duration::from_millis(1000)).await;
+
+    // Shut the server down
+    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let response = requests::get_stop_coordinator(&client, &mut url).await;
+    assert!(response.is_ok());
+
+    // Try sending another request (server should be unreachable)
+    let response = requests::get_stop_coordinator(&client, &mut url).await;
+
+    match response {
+        Ok(_) => panic!("Expected error"),
+        Err(e) => match e {
+            requests::RequestError::Client(_) => (),
+            requests::RequestError::Server(_) => panic!("Expected client-side error"),
+        },
+    }
+
+    // Drop the server
+    handle.abort()
 }
 
 #[tokio::test]
@@ -125,7 +154,7 @@ async fn test_update_coordinator() {
     requests::get_update(&client, &mut url).await.unwrap();
 
     // Drop the server
-    handle.abort();
+    handle.abort()
 }
 
 #[tokio::test]
@@ -153,7 +182,7 @@ async fn test_get_tasks_left() {
     assert_eq!(response.len(), 1);
 
     // Drop the server
-    handle.abort();
+    handle.abort()
 }
 
 #[tokio::test]
@@ -174,7 +203,7 @@ async fn test_join_queue() {
     assert!(response.is_err());
 
     // Drop the server
-    handle.abort();
+    handle.abort()
 }
 
 /// Test wrong usage of contribute_chunk.
@@ -193,11 +222,16 @@ async fn test_wrong_contribute_chunk() {
     assert!(response.is_err());
 
     // Drop the server
-    handle.abort();
+    handle.abort()
 }
 
-/// To test a full contribution we need to test the 4 involved endpoints
-/// (lock_chunk, get_chunk, post_contribution_chunk, contribute_chunk) sequentially.
+/// To test a full contribution we need to test the 5 involved endpoints sequentially:
+/// 
+/// - lock_chunk
+/// - get_chunk
+/// - post_contribution_chunk
+/// - contribute_chunk
+/// - verify_chunk
 #[tokio::test]
 async fn test_contribution() {
     use phase1_coordinator::authentication::Dummy;
@@ -268,6 +302,9 @@ async fn test_contribution() {
         .await
         .unwrap();
 
+    // Verify chunk
+    requests::get_verify_chunks(&client, &mut url).await.unwrap(); //FIXME:
+
     // Drop the server
-    handle.abort();
+    handle.abort()
 }
