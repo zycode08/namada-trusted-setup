@@ -58,6 +58,7 @@ itertools = "0.10.3"
 rand = {version = "0.8.5", default-features = false, features = ["getrandom"]}
 rand_chacha = "0.3.1"
 sha2 = "0.10.2"
+bls12_381 = "0.6"
 
 [dependencies.rocket]
 features = ["json"]
@@ -82,12 +83,13 @@ serial_test = {version = "0.5"}
 
 [features]
 default = []
+fast-deserialize = ["masp-phase2/fast-deserialize"]
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []
-fast-deserialize = ["masp-phase2/fast-deserialize"]
 
-# [profile.release]
-# codegen-units = 1
-# lto = true
-# opt-level = 3
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+opt-level = 3
