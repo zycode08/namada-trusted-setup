@@ -328,7 +328,8 @@ impl Verification {
         //     &parameters,
         // )?;
 
-        Self::verify_masp(&challenge_reader, &response_reader);
+        // Self::verify_masp(&challenge_reader, &response_reader);
+        Self::verify_test_masp(&challenge_reader, &response_reader);
 
         trace!("Completed verification");
 
@@ -375,6 +376,28 @@ impl Verification {
         h.update(&spend_hash);
         h.update(&output_hash);
         h.update(&convert_hash);
+        let h = h.finalize();
+
+        debug!("Verification hash: 0x{:02x}", h.iter().format(""));
+    }
+
+    #[inline]
+    fn verify_test_masp(challenge_reader: &[u8], response_reader: &[u8]) {
+        static ANOMA_FILE_SIZE: usize = 200_000_000;
+
+        let masp_test = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
+            .expect("couldn't deserialize MASP Test params");
+
+        let new_masp_test = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
+            .expect("couldn't deserialize MASP Spend new_params");
+
+        let test_hash = match verify_contribution(&masp_test, &new_masp_test) {
+            Ok(hash) => hash,
+            Err(_) => panic!("invalid MASP Spend transformation!"),
+        };
+
+        let mut h = Blake2b512::new();
+        h.update(&test_hash);
         let h = h.finalize();
 
         debug!("Verification hash: 0x{:02x}", h.iter().format(""));

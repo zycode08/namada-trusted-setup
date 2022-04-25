@@ -2495,6 +2495,7 @@ dependencies = [
  "anyhow",
  "bellman",
  "blake2 0.10.4",
+ "bls12_381 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder",
  "exitcode",
  "fs-err",

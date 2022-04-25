@@ -14,25 +14,25 @@ path = "src/main.rs"
 required-features = ["parallel"]
 
 [dependencies]
-phase1 = { path = "../phase1" }
-setup-utils = { path = "../setup-utils" }
-snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+phase1 = {path = "../phase1"}
+setup-utils = {path = "../setup-utils"}
+snarkvm-curves = {git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c"}
 
-anyhow = { version = "1.0.37" }
-fs-err = { version = "2.6.0" }
-futures = { version = "0.3" }
-memmap = { version = "0.7.0" }
-once_cell = { version = "1.5.2" }
-rayon = { version = "1.4.1" }
-serde = { version = "1.0", features = ["derive"] }
-serde-aux = { version = "3.0" }
-serde-diff = { version = "0.4" }
-serde_json = { version = "1.0" }
-serde_with = { version = "1.8", features = ["macros"] }
-thiserror = { version = "1.0" }
-time = { version = "0.3", features = ["serde-human-readable", "macros"] }
-tokio = { version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"] }
-tracing = { version = "0.1" }
+anyhow = {version = "1.0.37"}
+fs-err = {version = "2.6.0"}
+futures = {version = "0.3"}
+memmap = {version = "0.7.0"}
+once_cell = {version = "1.5.2"}
+rayon = {version = "1.4.1"}
+serde = {version = "1.0", features = ["derive"]}
+serde-aux = {version = "3.0"}
+serde-diff = {version = "0.4"}
+serde_json = {version = "1.0"}
+serde_with = {version = "1.8", features = ["macros"]}
+thiserror = {version = "1.0"}
+time = {version = "0.3", features = ["serde-human-readable", "macros"]}
+tokio = {version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"]}
+tracing = {version = "0.1"}
 tracing-subscriber = {version = "0.3"}
 
 # Dependencies from MASP MPC 
@@ -46,6 +46,7 @@ itertools = "0.10.3"
 rand = {version = "0.8.5", default-features = false, features = ["getrandom"]}
 rand_chacha = "0.3.1"
 sha2 = "0.10.2"
+bls12_381 = "0.6"
 
 [dependencies.rocket]
 features = ["json"]
@@ -70,12 +71,13 @@ serial_test = {version = "0.5"}
 
 [features]
 default = []
+fast-deserialize = ["masp-phase2/fast-deserialize"]
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []
-fast-deserialize = ["masp-phase2/fast-deserialize"]
 
-# [profile.release]
-# codegen-units = 1
-# lto = true
-# opt-level = 3
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+opt-level = 3

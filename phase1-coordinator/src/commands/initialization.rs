@@ -14,6 +14,23 @@ use tracing::{debug, error, info, trace};
 
 use masp_phase2::MPCParameters;
 
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bls12_381::Scalar;
+
+struct TestCircuit {
+    x: Option<Scalar>,
+}
+impl Circuit<Scalar> for TestCircuit {
+    fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let mut x_value = self.x;
+        let mut x = cs.alloc(|| "x", || x_value.ok_or(SynthesisError::AssignmentMissing))?;
+
+        cs.enforce(|| "x = x^2", |lc| lc + x, |lc| lc + x, |lc| lc + x);
+
+        Ok(())
+    }
+}
+
 pub(crate) struct Initialization;
 
 impl Initialization {
@@ -104,7 +121,8 @@ impl Initialization {
         // debug!("Empty challenge is {}", pretty_hash!(&writer));
         info!("Starting Phase 2 initialization operation");
         // Add here your MPC Parameters init function
-        Self::initialize_masp(&mut writer);
+        // Self::initialize_masp(&mut writer);
+        Self::initialize_test_masp(&mut writer);
         // Phase1::initialization(&mut writer, compressed, &parameters)?;
         trace!("Completed Phase 2 initialization operation");
 
@@ -194,6 +212,21 @@ impl Initialization {
         convert_params
             .write(&mut writer)
             .expect("unable to write MASP Convert params");
+
+        writer.flush().unwrap();
+    }
+
+    #[inline]
+    fn initialize_test_masp(mut writer: &mut [u8]) {
+        // MASP spend circuit
+        trace!("Creating initial parameters for MASP Test Circuit...");
+        let instance = TestCircuit { x: Some(Scalar::one()) };
+        let test_params = MPCParameters::new(instance).unwrap();
+        trace!("Writing initial MASP Test Circuit parameters to file...",);
+
+        test_params
+            .write(&mut writer)
+            .expect("unable to write MASP Test Circuit params");
 
         writer.flush().unwrap();
     }
