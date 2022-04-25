@@ -60,13 +60,15 @@ rand_chacha = "0.3.1"
 sha2 = "0.10.2"
 bls12_381 = "0.6"
 
+masp-phase2 = {path = "../../masp-phase2"}
+
 [dependencies.rocket]
 features = ["json"]
 version = "0.5.0-rc.1"
 
-[dependencies.masp-phase2]
-branch = "main"
-git = "https://github.com/heliaxdev/masp-phase2"
+# [dependencies.masp-phase2]
+# branch = "main"
+# git = "https://github.com/heliaxdev/masp-phase2"
 
 [dependencies.masp_proofs]
 git = "https://github.com/heliaxdev/masp"

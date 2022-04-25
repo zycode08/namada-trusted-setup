@@ -2,9 +2,9 @@ pub(crate) mod aggregation;
 pub(crate) use aggregation::*;
 
 #[cfg(any(test, feature = "operator"))]
-pub(crate) mod computation;
+pub mod computation;
 #[cfg(any(test, feature = "operator"))]
-pub(crate) use computation::*;
+pub use computation::*;
 
 pub(crate) mod initialization;
 pub(crate) use initialization::*;

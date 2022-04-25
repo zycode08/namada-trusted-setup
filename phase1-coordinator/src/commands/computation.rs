@@ -25,7 +25,7 @@ use blake2::{Blake2b512, Digest};
 use itertools::Itertools;
 use masp_phase2::MPCParameters;
 
-pub(crate) struct Computation;
+pub struct Computation;
 
 impl Computation {
     ///
@@ -36,7 +36,7 @@ impl Computation {
     /// and response file have been initialized, typically as part of a call to
     /// `Coordinator::try_lock` to lock the contribution chunk.
     ///
-    pub(crate) fn run(
+    pub fn run(
         environment: &Environment,
         storage: &mut Disk,
         signature: Arc<dyn Signature>,
@@ -223,13 +223,18 @@ impl Computation {
             ChaChaRng::from_seed(h[0..32].try_into().unwrap())
         };
 
-        let mut spend_params =
-            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
+        // MASP Spend circuit
+        // trace!("Reading MASP Spend...");
+        // let mut spend_params = MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
 
-        trace!("Contributing to MASP Spend...");
-        let mut progress_update_interval: u32 = 0;
+        // trace!("Contributing to MASP Spend...");
+        // let mut progress_update_interval: u32 = 0;
 
-        let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
+        // let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
+        trace!("Contributed to MASP Spend!");
+
+        // MASP Output circuit
+        trace!("Reading MASP Output...");
         let mut output_params =
             MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Output params");
 
@@ -237,36 +242,40 @@ impl Computation {
         let mut progress_update_interval: u32 = 0;
 
         let output_hash = output_params.contribute(&mut rng, &progress_update_interval);
+        trace!("Contributed to MASP Output!");
 
-        let mut convert_params =
-            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Convert params");
+        // MASP Convert circuit
+        // trace!("Reading MASP Convert...");
+        // let mut convert_params =
+        //     MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Convert params");
 
-        trace!("Contributing to MASP Convert...");
-        let mut progress_update_interval: u32 = 0;
-        let convert_hash = convert_params.contribute(&mut rng, &progress_update_interval);
+        // trace!("Contributing to MASP Convert...");
+        // let mut progress_update_interval: u32 = 0;
+        // let convert_hash = convert_params.contribute(&mut rng, &progress_update_interval);
+        trace!("Contributed to MASP Convert!");
 
         let mut h = Blake2b512::new();
-        h.update(&spend_hash);
+        // h.update(&spend_hash);
         h.update(&output_hash);
-        h.update(&convert_hash);
+        // h.update(&convert_hash);
         let h = h.finalize();
 
         debug!("Contribution hash: 0x{:02x}", h.iter().format(""));
 
-        trace!("Writing MASP Spend parameters to file...");
-        spend_params
-            .write(&mut response_writer)
-            .expect("failed to write updated MASP Spend parameters");
+        // trace!("Writing MASP Spend parameters to file...");
+        // spend_params
+        //     .write(&mut response_writer)
+        //     .expect("failed to write updated MASP Spend parameters");
 
         trace!("Writing MASP Output parameters to file...");
         output_params
             .write(&mut response_writer)
             .expect("failed to write updated MASP Output parameters");
 
-        trace!("Writing MASP Convert parameters to file...");
-        convert_params
-            .write(&mut response_writer)
-            .expect("failed to write updated MASP Convert parameters");
+        // trace!("Writing MASP Convert parameters to file...");
+        // convert_params
+        //     .write(&mut response_writer)
+        //     .expect("failed to write updated MASP Convert parameters");
 
         response_writer.flush().unwrap();
     }

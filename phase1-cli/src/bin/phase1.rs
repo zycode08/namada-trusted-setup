@@ -1,5 +1,6 @@
 use phase1_coordinator::{
     authentication::{Dummy, Signature},
+    commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::ContributionLocator,
@@ -10,6 +11,9 @@ use crate::requests::RequestError;
 use phase1_cli::{requests, ContributorOpt};
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
+
+use tracing::debug;
+use std::fs::File;
 
 const challenge_hash: [u8; 64] = [
     //FIXME: remove
@@ -33,6 +37,10 @@ fn compute_contribution_mock() -> Vec<u8> {
 
 async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
+    let response_locator = locked_locators.next_contribution();
+    let round_height = response_locator.round_height();
+    let chunk_id = response_locator.chunk_id();
+    let contribution_id = response_locator.contribution_id();
 
     let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
@@ -116,7 +124,8 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        ContributorOpt::Contribute(mut url) => { //FIXME: share code
+        ContributorOpt::Contribute(mut url) => {
+            //FIXME: share code
             contribute(&client, &mut url.coordinator).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {

@@ -152,26 +152,26 @@ impl Initialization {
     #[inline]
     fn initialize_masp(mut writer: &mut [u8]) {
         // MASP spend circuit
-        trace!("Creating initial parameters for MASP Spend...");
-        let spend_params = MPCParameters::new(
-            masp_proofs::circuit::sapling::Spend {
-                value_commitment: None,
-                proof_generation_key: None,
-                payment_address: None,
-                commitment_randomness: None,
-                ar: None,
-                auth_path: vec![None; 32], // Tree depth is 32 for sapling
-                anchor: None,
-            },
-            //should_filter_points_at_infinity,
-            //radix_directory,
-        )
-        .unwrap();
-        trace!("Writing initial MASP Spend parameters to file...",);
+        // trace!("Creating initial parameters for MASP Spend...");
+        // let spend_params = MPCParameters::new(
+        //     masp_proofs::circuit::sapling::Spend {
+        //         value_commitment: None,
+        //         proof_generation_key: None,
+        //         payment_address: None,
+        //         commitment_randomness: None,
+        //         ar: None,
+        //         auth_path: vec![None; 32], // Tree depth is 32 for sapling
+        //         anchor: None,
+        //     },
+        //     //should_filter_points_at_infinity,
+        //     //radix_directory,
+        // )
+        // .unwrap();
+        // trace!("Writing initial MASP Spend parameters to file...",);
 
-        spend_params
-            .write(&mut writer)
-            .expect("unable to write MASP Spend params");
+        // spend_params
+        //     .write(&mut writer)
+        //     .expect("unable to write MASP Spend params");
 
         // MASP output circuit
         trace!("Creating initial parameters for MASP Output...");
@@ -194,24 +194,24 @@ impl Initialization {
             .write(&mut writer)
             .expect("unable to write MASP Output params");
 
-        // MASP Convert circuit
-        trace!("Creating initial parameters for MASP Convert...");
-        let convert_params = MPCParameters::new(
-            masp_proofs::circuit::convert::Convert {
-                value_commitment: None,
-                auth_path: vec![None; 32], // Tree depth is 32 for sapling
-                anchor: None,
-            },
-            //should_filter_points_at_infinity,
-            //radix_directory,
-        )
-        .unwrap();
+        // // MASP Convert circuit
+        // trace!("Creating initial parameters for MASP Convert...");
+        // let convert_params = MPCParameters::new(
+        //     masp_proofs::circuit::convert::Convert {
+        //         value_commitment: None,
+        //         auth_path: vec![None; 32], // Tree depth is 32 for sapling
+        //         anchor: None,
+        //     },
+        //     //should_filter_points_at_infinity,
+        //     //radix_directory,
+        // )
+        // .unwrap();
 
-        trace!("Writing initial MASP Convert parameters to file...",);
+        // trace!("Writing initial MASP Convert parameters to file...",);
 
-        convert_params
-            .write(&mut writer)
-            .expect("unable to write MASP Convert params");
+        // convert_params
+        //     .write(&mut writer)
+        //     .expect("unable to write MASP Convert params");
 
         writer.flush().unwrap();
     }

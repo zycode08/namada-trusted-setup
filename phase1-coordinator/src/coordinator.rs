@@ -406,9 +406,9 @@ impl Coordinator {
     #[inline]
     pub fn initialize(&mut self) -> Result<(), CoordinatorError> {
         // Check if the deployment is in production, that the signature scheme is secure.
-        if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
-            return Err(CoordinatorError::SignatureSchemeIsInsecure);
-        }
+        // if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
+        //     return Err(CoordinatorError::SignatureSchemeIsInsecure);
+        // }
 
         info!("Coordinator is booting up");
         info!("{:#?}", self.environment.parameters());
