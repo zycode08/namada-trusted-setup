@@ -15,8 +15,8 @@ use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
 
 use blake2::{Blake2b512, Digest};
-use masp_phase2::{verify_contribution, MPCParameters};
 use itertools::Itertools;
+use masp_phase2::{verify_contribution, MPCParameters};
 
 pub(crate) struct Verification;
 
@@ -328,22 +328,32 @@ impl Verification {
         //     &parameters,
         // )?;
 
-        let masp_spend = MPCParameters::read(&challenge_reader[64..200_000_000], false)
+        Self::verify_masp(&challenge_reader, &response_reader);
+
+        trace!("Completed verification");
+
+        Ok(response_hash)
+    }
+    #[inline]
+    fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
+        static ANOMA_FILE_SIZE: usize = 200_000_000;
+
+        let masp_spend = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Spend params");
 
-        let masp_output = MPCParameters::read(&challenge_reader[64..200_000_000], false)
+        let masp_output = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Output params");
 
-        let masp_convert = MPCParameters::read(&challenge_reader[64..200_000_000], false)
+        let masp_convert = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Convert params");
 
-        let new_masp_spend = MPCParameters::read(&response_reader[64..200_000_000], true)
+        let new_masp_spend = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
             .expect("couldn't deserialize MASP Spend new_params");
 
-        let new_masp_output = MPCParameters::read(&response_reader[64..200_000_000], true)
+        let new_masp_output = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
             .expect("couldn't deserialize MASP Output new_params");
 
-        let new_masp_convert = MPCParameters::read(&response_reader[64..200_000_000], true)
+        let new_masp_convert = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
             .expect("couldn't deserialize MASP Convert new_params");
 
         let spend_hash = match verify_contribution(&masp_spend, &new_masp_spend) {
@@ -368,9 +378,6 @@ impl Verification {
         let h = h.finalize();
 
         debug!("Verification hash: 0x{:02x}", h.iter().format(""));
-        trace!("Completed verification");
-
-        Ok(response_hash)
     }
 
     #[inline]
