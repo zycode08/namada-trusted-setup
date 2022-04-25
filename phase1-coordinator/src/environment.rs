@@ -461,10 +461,11 @@ impl Environment {
     /// to run given a proof system, power and chunk size.
     ///
     pub fn number_of_chunks(&self) -> u64 {
-        let proving_system = &self.parameters.proving_system;
-        let power = self.parameters.power;
-        let chunk_size = self.parameters.chunk_size;
-        (total_size_in_g1!(proving_system, power) + chunk_size as u64 - 1) / chunk_size as u64
+        // let proving_system = &self.parameters.proving_system;
+        // let power = self.parameters.power;
+        // let chunk_size = self.parameters.chunk_size;
+        // (total_size_in_g1!(proving_system, power) + chunk_size as u64 - 1) / chunk_size as u64
+        1
     }
 
     /// Returns the storage system of the coordinator.
