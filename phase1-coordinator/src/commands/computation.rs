@@ -225,7 +225,7 @@ impl Computation {
 
         // MASP Spend circuit
         // trace!("Reading MASP Spend...");
-        // let mut spend_params = MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Spend params");
+        // let mut spend_params = MPCParameters::read(&challenge_reader[64..40_000], false).expect("unable to read MASP Spend params");
 
         // trace!("Contributing to MASP Spend...");
         // let mut progress_update_interval: u32 = 0;
@@ -236,7 +236,7 @@ impl Computation {
         // MASP Output circuit
         trace!("Reading MASP Output...");
         let mut output_params =
-            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Output params");
+            MPCParameters::read(&challenge_reader[64..40_000], false).expect("unable to read MASP Output params");
 
         trace!("Contributing to MASP Output...");
         let mut progress_update_interval: u32 = 0;
@@ -247,7 +247,7 @@ impl Computation {
         // MASP Convert circuit
         // trace!("Reading MASP Convert...");
         // let mut convert_params =
-        //     MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Convert params");
+        //     MPCParameters::read(&challenge_reader[64..40_000], false).expect("unable to read MASP Convert params");
 
         // trace!("Contributing to MASP Convert...");
         // let mut progress_update_interval: u32 = 0;
@@ -280,8 +280,7 @@ impl Computation {
         response_writer.flush().unwrap();
     }
 
-    #[inline]
-    fn contribute_test_masp(challenge_reader: &[u8], mut response_writer: &mut [u8]) {
+    pub fn contribute_test_masp(challenge_reader: &[u8], mut response_writer: &mut [u8]) {
         let entropy = "entropy";
         // Create an RNG based on a mixture of system randomness and user provided randomness
         let mut rng = {
@@ -308,7 +307,7 @@ impl Computation {
         };
 
         let mut test_params =
-            MPCParameters::read(&challenge_reader[64..200_000_000], false).expect("unable to read MASP Test params");
+            MPCParameters::read(&challenge_reader[64..40_000], false).expect("unable to read MASP Test params");
 
         trace!("Contributing to Masp Test...");
         let progress_update_interval: u32 = 0;
@@ -322,9 +321,59 @@ impl Computation {
         debug!("Contribution hash: 0x{:02x}", h.iter().format(""));
 
         trace!("Writing MASP Test parameters to file...");
+
         test_params
             .write(&mut response_writer)
-            .expect("failed to write updated MASP Spend parameters");
+            .expect("failed to write updated MASP Test parameters");
+
+        response_writer.flush().unwrap();
+    }
+
+    pub fn contribute_test_masp_cli<W: Write>(challenge_reader: &[u8], mut response_writer: W) {
+        let entropy = "entropy";
+        // Create an RNG based on a mixture of system randomness and user provided randomness
+        let mut rng = {
+            use rand::{Rng, SeedableRng};
+            use rand_chacha::ChaChaRng;
+            use std::convert::TryInto;
+
+            let h = {
+                let mut system_rng = rand::rngs::OsRng;
+                let mut h = Blake2b512::new();
+
+                // Gather 1024 bytes of entropy from the system
+                for _ in 0..1024 {
+                    let r: u8 = system_rng.gen();
+                    h.update(&[r]);
+                }
+
+                // Hash it all up to make a seed
+                h.update(&entropy.as_bytes());
+                h.finalize()
+            };
+
+            ChaChaRng::from_seed(h[0..32].try_into().unwrap())
+        };
+
+        let mut test_params =
+            MPCParameters::read(&challenge_reader[64..40_000], false).expect("unable to read MASP Test params");
+
+        trace!("Contributing to Masp Test...");
+        let progress_update_interval: u32 = 0;
+
+        let test_hash = test_params.contribute(&mut rng, &progress_update_interval);
+
+        let mut h = Blake2b512::new();
+        h.update(&test_hash);
+        let h = h.finalize();
+
+        debug!("Contribution hash: 0x{:02x}", h.iter().format(""));
+
+        trace!("Writing MASP Test parameters to file...");
+        
+        test_params
+            .write(&mut response_writer)
+            .expect("failed to write updated MASP Test parameters");
 
         response_writer.flush().unwrap();
     }
@@ -387,12 +436,12 @@ mod tests {
 
             if !storage.exists(response_locator) {
                 let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
-                // let expected_filesize = 200_000_000;
+                // let expected_filesize = 40_000;
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {
                 let expected_filesize = Object::contribution_file_signature_size(false);
-                // let expected_filesize = 200_000_000;
+                // let expected_filesize = 40_000;
                 storage
                     .initialize(contribution_file_signature_locator.clone(), expected_filesize)
                     .unwrap();
@@ -475,12 +524,12 @@ mod tests {
 
             if !storage.exists(response_locator) {
                 let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
-                // let expected_filesize = 200_000_000;
+                // let expected_filesize = 40_000;
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {
                 let expected_filesize = Object::contribution_file_signature_size(false);
-                // let expected_filesize = 200_000_000;
+                // let expected_filesize = 40_000;
                 storage
                     .initialize(contribution_file_signature_locator.clone(), expected_filesize)
                     .unwrap();
@@ -539,12 +588,12 @@ mod tests {
 
             if !storage.exists(response_locator) {
                 let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
-                // let expected_filesize = 200_000_000;
+                // let expected_filesize = 40_000;
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {
                 let expected_filesize = Object::contribution_file_signature_size(false);
-                // let expected_filesize = 200_000_000;
+                // let expected_filesize = 40_000;
                 storage
                     .initialize(contribution_file_signature_locator.clone(), expected_filesize)
                     .unwrap();

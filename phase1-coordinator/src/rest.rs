@@ -6,15 +6,12 @@ use crate::{
     ContributionFileSignature,
 };
 use rocket::{
-    error,
-    get,
+    error, get,
     http::{ContentType, Status},
     post,
     response::{Responder, Response},
     serde::{json::Json, Deserialize, Serialize},
-    Request,
-    Shutdown,
-    State,
+    Request, Shutdown, State,
 };
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
@@ -38,7 +35,7 @@ pub enum ResponseError {
     #[error("Could not find the provided Task {0} in coordinator state")]
     UnknownTask(Task),
     #[error("Error while verifying a contribution: {0}")]
-    VerificationError(String)
+    VerificationError(String),
 }
 
 impl<'r> Responder<'r, 'static> for ResponseError {
@@ -172,6 +169,30 @@ pub async fn get_chunk(
     }
 }
 
+#[get("/contributor/challenge", format = "json", data = "<locked_locators>")]
+pub async fn get_challenge(
+    coordinator: &State<Coordinator>,
+    locked_locators: Json<LockedLocators>,
+) -> Result<Json<Vec<u8>>> {
+    let request = locked_locators.into_inner();
+
+    let challenge_locator = request.previous_contribution();
+    let round_height = challenge_locator.round_height();
+    let chunk_id = challenge_locator.chunk_id();
+    let contribution_id = challenge_locator.contribution_id();
+
+    let is_verified = if round_height == 0 { true } else { false };
+
+    match coordinator
+        .write()
+        .await
+        .get_challenge_hash(round_height, chunk_id, contribution_id, is_verified)
+    {
+        Ok(challenge_hash) => Ok(Json(challenge_hash)),
+        Err(e) => Err(ResponseError::CoordinatorError(e)),
+    }
+}
+
 /// Upload a [Chunk](`crate::objects::Chunk`) contribution to the [Coordinator](`crate::Coordinator`). Write the contribution bytes to
 /// disk at the provided [Locator](`crate::storage::Locator`). Also writes the corresponding [`ContributionFileSignature`]
 #[post("/upload/chunk", format = "json", data = "<post_chunk_request>")]
@@ -211,11 +232,7 @@ pub async fn contribute_chunk(
     let request = contribute_chunk_request.into_inner();
     let contributor = Participant::new_contributor(request.pubkey.as_ref());
 
-    match coordinator
-        .write()
-        .await
-        .try_contribute(&contributor, request.chunk_id)
-    {
+    match coordinator.write().await.try_contribute(&contributor, request.chunk_id) {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -284,7 +301,6 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
         //  no external verifiers
         if let Err(e) = write_lock.verify(verifier, &String::from("secret_key"), task) {
             // FIXME: need a random constant private key for the verifier. Save it somewhere in the Coordinator struct
-            
             return Err(ResponseError::VerificationError(format!("{}", e))); // FIXME: continue with verification of other chunks before returning err?
         }
     }

@@ -96,6 +96,19 @@ pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_b
     Ok(response.json::<Task>().await?)
 }
 
+pub async fn get_challenge(client: &Client, coordinator_address: &mut Url, request_body: &LockedLocators) -> Result<Vec<u8>> {
+    let response = submit_request(
+        client,
+        coordinator_address,
+        "contributor/challenge",
+        Some(request_body),
+        &Method::GET,
+    )
+    .await?;
+
+    Ok(response.json::<Vec<u8>>().await?)
+}
+
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to upload a contribution.
 pub async fn post_chunk(client: &Client, coordinator_address: &mut Url, request_body: &PostChunkRequest) -> Result<()> {
     submit_request(

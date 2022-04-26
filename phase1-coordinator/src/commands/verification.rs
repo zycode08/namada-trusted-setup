@@ -337,7 +337,7 @@ impl Verification {
     }
     #[inline]
     fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        static ANOMA_FILE_SIZE: usize = 200_000_000;
+        static ANOMA_FILE_SIZE: usize = 40_000;
 
         let masp_spend = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Spend params");
@@ -383,7 +383,7 @@ impl Verification {
 
     #[inline]
     fn verify_test_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        static ANOMA_FILE_SIZE: usize = 200_000_000;
+        static ANOMA_FILE_SIZE: usize = 40_000;
 
         let masp_test = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Test params");
