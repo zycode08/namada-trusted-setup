@@ -6,26 +6,14 @@ use crate::{
     authentication::Signature,
     commands::{Aggregation, Initialization},
     coordinator_state::{
-        CeremonyStorageAction,
-        CoordinatorState,
-        DropParticipant,
-        ParticipantInfo,
-        ResetCurrentRoundStorageAction,
+        CeremonyStorageAction, CoordinatorState, DropParticipant, ParticipantInfo, ResetCurrentRoundStorageAction,
         RoundMetrics,
     },
     environment::{Deployment, Environment},
     objects::{participant::*, task::TaskInitializationError, ContributionFileSignature, LockedLocators, Round, Task},
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        LocatorPath,
-        Object,
-        StorageAction,
-        StorageLocator,
-        StorageObject,
-        UpdateAction,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, LocatorPath, Object, StorageAction,
+        StorageLocator, StorageObject, UpdateAction,
     },
 };
 use setup_utils::calculate_hash;
@@ -1597,6 +1585,29 @@ impl Coordinator {
         }
     }
 
+    #[inline]
+    pub(crate) fn get_challenge_hash(
+        &mut self,
+        round_height: u64,
+        chunk_id: u64,
+        contribution_id: u64,
+        is_verified: bool,
+    ) -> Result<Vec<u8>, CoordinatorError> {
+        // Fetch the challenge, response, and contribution file signature locators.
+        let challenge_file_locator = Locator::ContributionFile(ContributionLocator::new(
+            round_height,
+            chunk_id,
+            contribution_id,
+            is_verified,
+        ));
+
+        // Compute the challenge hash using the challenge file.
+        let challenge_reader = self.storage.reader(&challenge_file_locator)?;
+        // let challenge_hash = calculate_hash(challenge_reader.as_ref());
+
+        Ok(challenge_reader.to_vec())
+    }
+
     /// Writes the bytes of a contribution to storage at the appropriate file
     /// locator.
     #[inline]
@@ -1956,6 +1967,7 @@ impl Coordinator {
         // Execute round aggregation and aggregate verification for the current round.
         {
             debug!("Coordinator is starting aggregation and aggregate verification");
+            // FIXME: removed aggregation and CoordinatorError::RoundFileMissing. We don't need the aggregation function. Hopefully, it doesn't break anything.
             Aggregation::run(&self.environment, &mut self.storage, &round)?;
             debug!("Coordinator completed aggregation and aggregate verification");
         }
@@ -2009,7 +2021,7 @@ impl Coordinator {
                 warn!("Coordinator may be missing a call to `try_aggregate` for the current round");
                 return Err(CoordinatorError::RoundFileMissing);
             }
-            // self.aggregate_contributions(&mut self.storage)?;
+            self.aggregate_contributions()?;
         }
 
         // Create the new round height.
@@ -2604,6 +2616,7 @@ impl Coordinator {
 
         // Fetch whether this is the final contribution of the specified chunk.
         let is_final_contribution = chunk.only_contributions_complete(round.expected_number_of_contributions());
+        info!("EXPECTED NUMBER OF CONTRIBUTIONS: {}", round.expected_number_of_contributions());
 
         // Fetch the verified response locator and the contribution file signature locator.
         let verified_locator = match is_final_contribution {
@@ -2965,18 +2978,16 @@ mod tests {
             // Run the computation
             let mut seed: Seed = [0; SEED_LENGTH];
             rand::thread_rng().fill_bytes(&mut seed[..]);
-            assert!(
-                coordinator
-                    .run_computation(
-                        round_height,
-                        chunk_id,
-                        contribution_id,
-                        &contributor,
-                        &contributor_signing_key,
-                        &seed
-                    )
-                    .is_ok()
-            );
+            assert!(coordinator
+                .run_computation(
+                    round_height,
+                    chunk_id,
+                    contribution_id,
+                    &contributor,
+                    &contributor_signing_key,
+                    &seed
+                )
+                .is_ok());
         }
 
         // Add contribution for round 1 chunk 0 contribution 1.
@@ -3021,18 +3032,16 @@ mod tests {
             // Run computation on round 1 chunk 0 contribution 1.
             let mut seed: Seed = [0; SEED_LENGTH];
             rand::thread_rng().fill_bytes(&mut seed[..]);
-            assert!(
-                coordinator
-                    .run_computation(
-                        round_height,
-                        chunk_id,
-                        contribution_id,
-                        contributor,
-                        &contributor_signing_key,
-                        &seed
-                    )
-                    .is_ok()
-            );
+            assert!(coordinator
+                .run_computation(
+                    round_height,
+                    chunk_id,
+                    contribution_id,
+                    contributor,
+                    &contributor_signing_key,
+                    &seed
+                )
+                .is_ok());
 
             // Add round 1 chunk 0 contribution 1.
             assert!(coordinator.add_contribution(chunk_id, &contributor).is_ok());
@@ -3330,13 +3339,11 @@ mod tests {
         let mut seeds = HashMap::new();
         for chunk_id in 0..TEST_ENVIRONMENT_3.number_of_chunks() {
             // Ensure contribution ID 0 is already verified by the coordinator.
-            assert!(
-                coordinator
-                    .current_round()?
-                    .chunk(chunk_id)?
-                    .get_contribution(0)?
-                    .is_verified()
-            );
+            assert!(coordinator
+                .current_round()?
+                .chunk(chunk_id)?
+                .get_contribution(0)?
+                .is_verified());
 
             // As contribution ID 0 is initialized by the coordinator, iterate from
             // contribution ID 1 up to the expected number of contributions.

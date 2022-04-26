@@ -43,6 +43,7 @@ impl Aggregation {
         let contribution_readers: Vec<_> = readers.iter().map(|r| (r.as_ref(), compressed_output)).collect();
 
         // Run aggregation on the given round.
+        /*
         let chunk_id = 0usize;
         let settings = environment.parameters();
         let curve = settings.curve();
@@ -70,36 +71,40 @@ impl Aggregation {
             return Err(CoordinatorError::RoundAggregationFailed.into());
         }
 
+        */
+
         // Run aggregate verification on the given round.
-        let settings = environment.parameters();
-        let curve = settings.curve();
-        match curve {
-            // TODO: if needed port your aggregate_verification function
-            CurveKind::Bls12_381 => Phase1::aggregate_verification(
-                (
-                    &storage.reader(&round_locator)?.as_ref(),
-                    setup_utils::UseCompression::No,
-                    setup_utils::CheckForCorrectness::Full,
-                ),
-                &phase1_full_parameters!(Bls12_377, settings),
-            )?,
-            CurveKind::Bls12_377 => Phase1::aggregate_verification(
-                (
-                    &storage.reader(&round_locator)?.as_ref(),
-                    setup_utils::UseCompression::No,
-                    setup_utils::CheckForCorrectness::Full,
-                ),
-                &phase1_full_parameters!(Bls12_377, settings),
-            )?,
-            CurveKind::BW6 => Phase1::aggregate_verification(
-                (
-                    &storage.reader(&round_locator)?.as_ref(),
-                    setup_utils::UseCompression::No,
-                    setup_utils::CheckForCorrectness::Full,
-                ),
-                &phase1_full_parameters!(BW6_761, settings),
-            )?,
-        };
+        /*
+            let settings = environment.parameters();
+            let curve = settings.curve();
+            match curve {
+                // TODO: if needed port your aggregate_verification function
+                CurveKind::Bls12_381 => Phase1::aggregate_verification(
+                    (
+                        &storage.reader(&round_locator)?.as_ref(),
+                        setup_utils::UseCompression::No,
+                        setup_utils::CheckForCorrectness::Full,
+                    ),
+                    &phase1_full_parameters!(Bls12_377, settings),
+                )?,
+                CurveKind::Bls12_377 => Phase1::aggregate_verification(
+                    (
+                        &storage.reader(&round_locator)?.as_ref(),
+                        setup_utils::UseCompression::No,
+                        setup_utils::CheckForCorrectness::Full,
+                    ),
+                    &phase1_full_parameters!(Bls12_377, settings),
+                )?,
+                CurveKind::BW6 => Phase1::aggregate_verification(
+                    (
+                        &storage.reader(&round_locator)?.as_ref(),
+                        setup_utils::UseCompression::No,
+                        setup_utils::CheckForCorrectness::Full,
+                    ),
+                    &phase1_full_parameters!(BW6_761, settings),
+                )?,
+            };
+        */
 
         let elapsed = Instant::now().duration_since(start);
         debug!("Completed aggregation on round {} in {:?}", round_height, elapsed);
