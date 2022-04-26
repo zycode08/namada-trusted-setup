@@ -54,7 +54,7 @@ impl Initialization {
         // TODO: refactor this parameter to the environment file and find a way to calculate the expected size
         let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
         // TODO: implement calculate size macro for our curve
-        // let expected_challenge_size = 40_000; //FIXME: improve this with contribution_file_size
+        // let expected_challenge_size = 4_000; //FIXME: improve this with contribution_file_size
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
         // Initialize and fetch a writer for the contribution locator so the output is saved.

@@ -16,6 +16,23 @@ use std::fs::File;
 use std::io::{Read, Write};
 use tracing::debug;
 
+macro_rules! pretty_hash {
+    ($hash:expr) => {{
+        let mut output = format!("\n\n");
+        for line in $hash.chunks(16) {
+            output += "\t";
+            for section in line.chunks(4) {
+                for b in section {
+                    output += &format!("{:02x}", b);
+                }
+                output += " ";
+            }
+            output += "\n";
+        }
+        output
+    }};
+}
+
 /*
 fn compute_contribution_mock() -> Vec<u8> {
     //FIXME: remove and compute proper contribution
@@ -34,15 +51,15 @@ fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
     let mut f = File::open(&filename).expect("no file found");
     let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
     // let mut buffer = vec![0; metadata.len() as usize];
-    let mut buffer = vec![0; 40_000];
+    let mut buffer = vec![0; 4_000];
     debug!("metadata file length {}", metadata.len());
     f.read(&mut buffer).expect("buffer overflow");
 
     buffer
 }
 
-fn compute_contribution(challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
-    let filename: String = String::from("response_challenge.params");
+fn compute_contribution(round_height: u64, challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
+    let filename: String = String::from(format!("response_challenge_{}.params", round_height));
     let mut response_writer = File::create(&filename).unwrap();
 
     response_writer.write_all(challenge_hash.as_slice());
@@ -64,11 +81,13 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
     let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
-    debug!("challenge {:?}", challenge);
+    // debug!("challenge {:?}", challenge);
+    debug!("Challenge is {}", pretty_hash!(&challenge));
     let challenge_hash = calculate_hash(challenge.as_ref());
-    debug!("challenge hash{:?}", challenge_hash);
+    // debug!("challenge hash{:?}", challenge_hash);
+    debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
 
-    let contribution = compute_contribution(&challenge, challenge_hash.to_vec().as_ref());
+    let contribution = compute_contribution(round_height, &challenge, challenge_hash.to_vec().as_ref());
 
     debug!("contribution length: {}", contribution.len());
 
@@ -105,7 +124,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
-    let pubkey = String::from("random public key 2");
+    let pubkey = String::from("random public key 3");
     requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
 
     let mut i = 0;

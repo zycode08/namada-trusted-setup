@@ -337,7 +337,7 @@ impl Verification {
     }
     #[inline]
     fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        static ANOMA_FILE_SIZE: usize = 40_000;
+        static ANOMA_FILE_SIZE: usize = 4_000;
 
         let masp_spend = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Spend params");
@@ -383,7 +383,7 @@ impl Verification {
 
     #[inline]
     fn verify_test_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        static ANOMA_FILE_SIZE: usize = 40_000;
+        static ANOMA_FILE_SIZE: usize = 4_000;
 
         let masp_test = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
             .expect("couldn't deserialize MASP Test params");
@@ -410,22 +410,22 @@ impl Verification {
         response_hash: &[u8],
         parameters: &Phase1Parameters<T>,
     ) -> Result<(), CoordinatorError> {
-        {
-            (&mut next_challenge_writer[0..]).write_all(response_hash)?;
-            next_challenge_writer.flush()?;
-        }
+        (&mut next_challenge_writer[0..]).write_all(response_hash)?;
+        (&mut next_challenge_writer[64..]).write_all(&response_reader[64..])?;
+        Ok(next_challenge_writer.flush()?)
+        
 
-        trace!("Decompressing the response file for the next challenge");
-        // Phase1::decompress(
-        //     response_reader,
-        //     next_challenge_writer,
-        //     CheckForCorrectness::No,
-        //     &parameters,
-        // )?;
-        next_challenge_writer.flush()?;
-        trace!("Decompressed the response file for the next challenge");
+        // trace!("Decompressing the response file for the next challenge");
+        // // Phase1::decompress(
+        // //     response_reader,
+        // //     next_challenge_writer,
+        // //     CheckForCorrectness::No,
+        // //     &parameters,
+        // // )?;
+        // // next_challenge_writer.flush()?;
+        // trace!("Decompressed the response file for the next challenge");
 
-        Ok(())
+        // Ok(())
     }
 }
 

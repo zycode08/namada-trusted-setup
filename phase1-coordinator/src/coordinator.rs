@@ -1489,6 +1489,8 @@ impl Coordinator {
                 "Challenge is located in {}",
                 self.storage.to_path(&challenge_file_locator)?
             );
+
+            debug!("Challenge is {}", pretty_hash!(&challenge_reader));
             debug!("Challenge hash is {}", pretty_hash!(&challenge_hash.as_slice()));
 
             // Compute the response hash.
@@ -1499,6 +1501,7 @@ impl Coordinator {
                 self.storage
                     .to_path(&Locator::ContributionFile(response_file_locator))?
             );
+            debug!("Response is {}", pretty_hash!(&response_reader));
             debug!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
 
             // Fetch the challenge hash from the response file.
@@ -1586,7 +1589,7 @@ impl Coordinator {
     }
 
     #[inline]
-    pub(crate) fn get_challenge_hash(
+    pub(crate) fn get_challenge(
         &mut self,
         round_height: u64,
         chunk_id: u64,
@@ -1600,8 +1603,7 @@ impl Coordinator {
             contribution_id,
             is_verified,
         ));
-
-        // Compute the challenge hash using the challenge file.
+        // Get the challenge from the challenge file locator
         let challenge_reader = self.storage.reader(&challenge_file_locator)?;
         // let challenge_hash = calculate_hash(challenge_reader.as_ref());
 
