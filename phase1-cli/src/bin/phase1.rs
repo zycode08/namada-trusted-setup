@@ -35,20 +35,6 @@ macro_rules! pretty_hash {
     }};
 }
 
-/*
-fn compute_contribution_mock() -> Vec<u8> {
-    //FIXME: remove and compute proper contribution
-    let mut contribution: Vec<u8> = Vec::with_capacity(4576);
-
-    // Set bytes 0..64 of contribution to be the hash of the challenge (hardcoded for now)
-    contribution.extend_from_slice(&challenge_hash);
-    // Fill the rest of contribution with random bytes
-    let random: Vec<u8> = (64..4576).map(|_| rand::random::<u8>()).collect();
-    contribution.extend_from_slice(&random);
-
-    contribution
-}
-*/
 fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
     let mut f = File::open(&filename).expect("no file found");
     let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
@@ -60,12 +46,12 @@ fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
     buffer
 }
 
-fn compute_contribution(round_height: u64, challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
-    let filename: String = String::from(format!("response_challenge_{}.params", round_height));
+fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
+    let filename: String = String::from(format!("pubkey_{}_contribution_round_{}.params", pubkey, round_height));
     let mut response_writer = File::create(&filename).unwrap();
-
     response_writer.write_all(challenge_hash.as_slice());
 
+    // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
     Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
     debug!("response writer {:?}", response_writer);
 
@@ -76,22 +62,23 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
-    let chunk_id = response_locator.chunk_id();
-    let contribution_id = response_locator.contribution_id();
 
     let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
     let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
-    // debug!("challenge {:?}", challenge);
     debug!("Challenge is {}", pretty_hash!(&challenge));
+
+    // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
+    let mut challenge_writer = File::create(String::from(format!("challenge_round_{}.params", round_height))).unwrap();
+    challenge_writer.write_all(challenge.as_slice());
+
     let challenge_hash = calculate_hash(challenge.as_ref());
-    // debug!("challenge hash{:?}", challenge_hash);
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
 
-    let contribution = compute_contribution(round_height, &challenge, challenge_hash.to_vec().as_ref());
+    let contribution = compute_contribution(pubkey.clone(), round_height, &challenge, challenge_hash.to_vec().as_ref());
 
-    debug!("contribution length: {}", contribution.len());
+    debug!("Contribution length: {}", contribution.len());
 
     let contribution_state = ContributionState::new(
         challenge_hash.to_vec(),
