@@ -1,77 +1,68 @@
 use phase1_coordinator::{
-    authentication::{Dummy, Signature},
-    environment::{Development, Environment, Parameters},
+    authentication::Dummy,
+    environment::{ContributionMode, CurveKind, Development, Parameters, Production, ProvingSystem, Settings},
+    rest,
     Coordinator,
 };
-use tracing_subscriber;
 
-use std::{sync::Arc, time::Duration};
-use tokio::{sync::RwLock, task, time::sleep};
-use tracing::*;
+use rocket::{self, routes};
 
-fn coordinator(environment: &Environment, signature: Arc<dyn Signature>) -> anyhow::Result<Coordinator> {
-    Ok(Coordinator::new(environment.clone(), signature)?)
-}
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-#[tokio::main]
-pub async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+/// Rocket main function using the [`tokio`] runtime
+#[rocket::main]
+pub async fn main() {
+    // Set the environment
 
-    // Set the environment.
-    let environment: Environment = Development::from(Parameters::TestCustom {
-        number_of_chunks: 8,
-        power: 12,
-        batch_size: 256,
-    })
-    .into();
-    // use phase1_coordinator::environment::Production;
-    // let environment: Environment = Production::from(Parameters::AleoInner).into();
+    // These parameters are to be exposed publicly to the REST API
+    let parameters = Parameters::Custom(Settings::new(
+        //TODO: update these
+        ContributionMode::Full,
+        ProvingSystem::Groth16,
+        CurveKind::Bls12_377,
+        6,  /* power */
+        16, /* batch_size */
+        16, /* chunk_size */
+    ));
 
-    // Instantiate the coordinator.
-    let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator(&environment, Arc::new(Dummy))?));
+    #[cfg(debug_assertions)]
+    let environment: Development = Development::from(parameters);
 
-    let ceremony_coordinator = coordinator.clone();
-    // Initialize the coordinator.
-    let ceremony = task::spawn(async move {
-        // Initialize the coordinator.
-        ceremony_coordinator.write().await.initialize().unwrap();
+    #[cfg(not(debug_assertions))]
+    let environment: Production = Production::from(parameters);
 
-        // Initialize the coordinator loop.
-        loop {
-            // Run the update operation.
-            if let Err(error) = ceremony_coordinator.write().await.update() {
-                error!("{}", error);
-            }
+    // Instantiate the coordinator
+    let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(
+        Coordinator::new(environment.into(), Arc::new(Dummy)).unwrap(), //TODO: proper signature
+    ));
 
-            // Sleep for 10 seconds in between iterations.
-            sleep(Duration::from_secs(10)).await;
-            break;
-        }
-    });
+    coordinator.write().await.initialize().unwrap();
 
-    // Initialize the shutdown procedure.
-    let shutdown_handler = {
-        let shutdown_coordinator = coordinator.clone();
-        task::spawn(async move {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("Error while waiting for shutdown signal");
-            shutdown_coordinator
-                .write()
-                .await
-                .shutdown()
-                .expect("Error while shutting down");
-        })
-    };
+    // Launch Rocket REST server
+    let build_rocket = rocket::build()
+        .mount("/", routes![
+            rest::join_queue,
+            rest::lock_chunk,
+            rest::get_chunk,
+            rest::post_contribution_chunk,
+            rest::contribute_chunk,
+            rest::update_coordinator,
+            rest::heartbeat,
+            rest::get_tasks_left
+        ])
+        .manage(coordinator);
 
-    tokio::select! {
-        _ = shutdown_handler => {
-            println!("Shutdown completed first")
-        }
-        _ = ceremony => {
-            println!("Ceremony completed first")
+    let ignite_rocket = match build_rocket.ignite().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Coordinator server didn't ignite: {}", e);
+            return;
         }
     };
 
-    Ok(())
+    if let Err(e) = ignite_rocket.launch().await {
+        eprintln!("Coordinator server didn't launch: {}", e);
+        return;
+    };
 }

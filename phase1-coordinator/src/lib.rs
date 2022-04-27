@@ -30,7 +30,7 @@ mod macros;
 
 pub mod authentication;
 
-pub(crate) mod commands;
+pub mod commands;
 
 pub mod coordinator;
 pub use coordinator::*;
@@ -51,6 +51,8 @@ pub mod objects;
 pub use objects::{ContributionFileSignature, ContributionState, Participant, Round};
 
 pub mod storage;
+
+pub mod rest;
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;

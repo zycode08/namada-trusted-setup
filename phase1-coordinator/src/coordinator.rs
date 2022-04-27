@@ -1597,6 +1597,37 @@ impl Coordinator {
         }
     }
 
+    /// Writes the bytes of a contribution to storage at the appropriate file
+    /// locator.
+    #[inline]
+    pub(crate) fn write_contribution<T>(
+        &mut self,
+        contribution_locator: ContributionLocator,
+        contribution: T,
+    ) -> Result<(), CoordinatorError>
+    where
+        T: Into<Vec<u8>>,
+    {
+        self.storage.update(
+            &Locator::ContributionFile(contribution_locator),
+            Object::ContributionFile(contribution.into()),
+        )
+    }
+
+    /// Writes the bytes of a contribution file signature to storage at the appropriate  
+    /// locator.
+    #[inline]
+    pub(crate) fn write_contribution_file_signature(
+        &mut self,
+        locator: ContributionSignatureLocator,
+        contribution_file_signature: ContributionFileSignature,
+    ) -> Result<(), CoordinatorError> {
+        self.storage.update(
+            &Locator::ContributionFileSignature(locator),
+            Object::ContributionFileSignature(contribution_file_signature),
+        )
+    }
+
     ///
     /// Attempts to run verification in the current round for a given
     /// chunk ID and participant.
@@ -2249,7 +2280,7 @@ impl Coordinator {
     /// Returns a reference to the instantiation of `Storage` that this
     /// coordinator is using.
     ///
-    #[cfg(test)]
+    #[cfg(any(test, testing))]
     #[inline]
     pub(super) fn storage(&self) -> &Disk {
         &self.storage
