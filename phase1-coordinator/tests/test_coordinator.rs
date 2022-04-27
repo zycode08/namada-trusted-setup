@@ -3,15 +3,13 @@ use std::{
     sync::Arc,
 };
 
-use futures::{executor::block_on, FutureExt};
-use once_cell::sync::Lazy;
 use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
     authentication::{Dummy, Signature},
-    environment::{CurveKind, Development, Parameters, Settings, Testing},
+    environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, ChunkRequest, ContributeChunkRequest, PostChunkRequest},
-    storage::{ContributionLocator, ContributionSignatureLocator, Locator, Object},
+    rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
+    storage::{ContributionLocator, ContributionSignatureLocator},
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
@@ -21,12 +19,11 @@ use phase1_coordinator::{
 use rocket::{
     http::{ContentType, Status},
     local::blocking::Client,
-    main,
     routes,
     Build,
     Rocket,
 };
-use time::macros::datetime;
+
 use tokio::sync::RwLock;
 
 // NOTE: these tests must be run with --test-threads=1 due to the disk storage
@@ -56,7 +53,6 @@ fn build_rocket() -> Rocket<Build> {
 
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
-    let number_of_chunks = environment.number_of_chunks() as usize;
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Dummy)).unwrap();
@@ -75,7 +71,7 @@ fn build_rocket() -> Rocket<Build> {
     coordinator
         .add_to_queue(contributor2.clone(), Some(contributor2_ip), 9)
         .unwrap();
-    coordinator.update();
+    coordinator.update().unwrap();
 
     coordinator.try_lock(&contributor2).unwrap();
 
@@ -90,39 +86,55 @@ fn build_rocket() -> Rocket<Build> {
             rest::contribute_chunk,
             rest::update_coordinator,
             rest::heartbeat,
-            rest::get_tasks_left
+            rest::get_tasks_left,
+            rest::stop_coordinator,
+            rest::verify_chunks
         ])
         .manage(coordinator)
+}
+
+#[test]
+fn test_stop_coordinator() {
+    let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
+
+    // Shut the server down
+    let req = client.get("/stop");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
 }
 
 #[test]
 fn test_heartbeat() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
-    // Wrong reuqest, non-json body
-    let mut req = client.post("/contributor/heartbeat");
-    req = req.header(ContentType::Text).body("Wrong parameter type");
+    // Wrong request, non-json body
+    let mut req = client
+        .post("/contributor/heartbeat")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::NotFound);
     assert!(response.body().is_some());
 
     // Wrong request body format
-    let mut req = client.post("/contributor/heartbeat");
-    req = req.json(&1);
+    req = client.post("/contributor/heartbeat").json(&1);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let mut req = client.post("/contributor/heartbeat");
-    req = req.json(&String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY));
+    req = client
+        .post("/contributor/heartbeat")
+        .json(&String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok
-    let mut req = client.post("/contributor/heartbeat");
-    req = req.json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY));
+    req = client
+        .post("/contributor/heartbeat")
+        .json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -133,14 +145,13 @@ fn test_update_coordinator() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Non-empty body, Ok ignore the body
-    let mut req = client.get("/update");
-    req = req.json(&String::from("unexpected body"));
+    let mut req = client.get("/update").json(&String::from("unexpected body"));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Ok
-    let mut req = client.get("/update");
+    req = client.get("/update");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -152,39 +163,43 @@ fn test_get_tasks_left() {
 
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
-    // Wrong reuqest, non-json body
-    let mut req = client.get("/contributor/get_tasks_left");
-    req = req.header(ContentType::Text).body("Wrong parameter type");
+    // Wrong request, non-json body
+    let mut req = client
+        .get("/contributor/get_tasks_left")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::BadRequest);
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    let mut req = client.get("/contributor/get_tasks_left");
-    req = req.json(&true);
+    req = client.get("/contributor/get_tasks_left").json(&true);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let mut req = client.get("/contributor/get_tasks_left");
-    req = req.json(&String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY));
+    req = client
+        .get("/contributor/get_tasks_left")
+        .json(&String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok no tasks left
-    let mut req = client.get("/contributor/get_tasks_left");
-    req = req.json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY));
+    req = client
+        .get("/contributor/get_tasks_left")
+        .json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
     let list: LinkedList<Task> = response.into_json().unwrap();
-    assert_eq!(list.len(), 0);
+    assert!(list.is_empty());
 
     // Ok tasks left
-    let mut req = client.get("/contributor/get_tasks_left");
-    req = req.json(&String::from(CONTRIBUTOR_2_PUBLIC_KEY));
+    req = client
+        .get("/contributor/get_tasks_left")
+        .json(&String::from(CONTRIBUTOR_2_PUBLIC_KEY));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -208,49 +223,55 @@ fn test_join_queue() {
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    let mut req = client.post("/contributor/join_queue");
-    req = req.json(&1u8).remote(socket_address);
+    req = client.post("/contributor/join_queue").json(&1u8).remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
     // Ok request
-    let mut req = client.post("/contributor/join_queue");
-    req = req.json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY)).remote(socket_address);
+    req = client
+        .post("/contributor/join_queue")
+        .json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY))
+        .remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Ok request, different contributor, same ip
-    let mut req = client.post("/contributor/join_queue");
-    req = req.json(&String::from(UNKNOWN_CONTRIBUTOR_IP)).remote(socket_address);
+    req = client
+        .post("/contributor/join_queue")
+        .json(&String::from(UNKNOWN_CONTRIBUTOR_IP))
+        .remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Wrong request, already existing contributor
-    let mut req = client.post("/contributor/join_queue");
-    req = req.json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY)).remote(socket_address);
+    req = client
+        .post("/contributor/join_queue")
+        .json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY))
+        .remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 }
 
-/// Test wrong usge of lock_chunk.
+/// Test wrong usage of lock_chunk.
 #[test]
 fn test_wrong_lock_chunk() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Wrong request, non-json body
-    let mut req = client.post("/contributor/lock_chunk");
-    req = req.header(ContentType::Text).body("Wrong parameter type");
+    let mut req = client
+        .post("/contributor/lock_chunk")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::NotFound);
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    let mut req = client.post("/contributor/lock_chunk");
-    req = req.json(&1);
+    req = client.post("/contributor/lock_chunk").json(&1);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -262,15 +283,16 @@ fn test_wrong_get_chunk() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Wrong request, non-json body
-    let mut req = client.get("/download/chunk");
-    req = req.header(ContentType::Text).body("Wrong parameter type");
+    let mut req = client
+        .get("/download/chunk")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::BadRequest);
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    let mut req = client.get("/download/chunk");
-    req = req.json(&String::from("Unexpected string"));
+    req = client.get("/download/chunk").json(&String::from("Unexpected string"));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -282,15 +304,16 @@ fn test_wrong_post_contribution_chunk() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Wrong request, non-json body
-    let mut req = client.post("/upload/chunk");
-    req = req.header(ContentType::Text).body("Wrong parameter type");
+    let mut req = client
+        .post("/upload/chunk")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::NotFound);
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    let mut req = client.post("/upload/chunk");
-    req = req.json(&String::from("Unexpected string"));
+    req = client.post("/upload/chunk").json(&String::from("Unexpected string"));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -302,58 +325,57 @@ fn test_wrong_contribute_chunk() {
     let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Wrong request, non-json body
-    let mut req = client.post("/contributor/contribute_chunk");
-    req = req.header(ContentType::Text).body("Wrong parameter type");
+    let mut req = client
+        .post("/contributor/contribute_chunk")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::NotFound);
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    let mut req = client.post("/contributor/contribute_chunk");
-    req = req.json(&String::from("Unexpected string"));
+    req = client
+        .post("/contributor/contribute_chunk")
+        .json(&String::from("Unexpected string"));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let contribute_request = ContributeChunkRequest {
-        pubkey: String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY),
-        chunk_id: 0,
-    };
-    let mut req = client.post("/contributor/contribute_chunk");
-    req = req.json(&contribute_request);
+    let contribute_request = ContributeChunkRequest::new(String::from(UNKNOWN_CONTRIBUTOR_PUBLIC_KEY), 0);
+    req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 }
 
-/// To test a full contribution we need to test the 4 involved endpoints
-/// (lock_chunk, get_chunk, post_contribution_chunk, contribute_chunk) sequentially.
+/// To test a full contribution we need to test the 5 involved endpoints sequentially:
+/// 
+/// - lock_chunk
+/// - get_chunk
+/// - post_contribution_chunk
+/// - contribute_chunk
+/// - verify_chunk
+/// 
 #[test]
 fn test_contribution() {
-    use futures::executor::block_on;
     use phase1_coordinator::authentication::Dummy;
     use setup_utils::calculate_hash;
 
-    let rocket = build_rocket();
-    let coordinator: Arc<RwLock<Coordinator>> = rocket.state::<Arc<RwLock<Coordinator>>>().unwrap().to_owned();
-    let client = Client::tracked(rocket).expect("Invalid rocket instance");
+    let client = Client::tracked(build_rocket()).expect("Invalid rocket instance");
 
     // Lock chunk
-    let mut req = client.post("/contributor/lock_chunk");
-    req = req.json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY));
+    let mut req = client
+        .post("/contributor/lock_chunk")
+        .json(&String::from(CONTRIBUTOR_1_PUBLIC_KEY));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
     let locked_locators: LockedLocators = response.into_json().unwrap();
 
     // Download chunk
-    let chunk_request = ChunkRequest {
-        pubkey: String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        locked_locators,
-    };
-    let mut req = client.get("/download/chunk");
-    req = req.json(&chunk_request);
+    let chunk_request = GetChunkRequest::new(String::from(CONTRIBUTOR_1_PUBLIC_KEY), locked_locators);
+    req = client.get("/download/chunk").json(&chunk_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -371,6 +393,7 @@ fn test_contribution() {
         47, 76, 74, 27, 38, 64, 190, 181, 33, 94, 137, 255, 187, 144, 45, 114, 74, 232,
     ];
     contribution.extend_from_slice(&challenge_hash);
+
     // Fill the rest of contribution with random bytes
     let random: Vec<u8> = (64..CONTRIBUTION_SIZE).map(|_| rand::random::<u8>()).collect();
     contribution.extend_from_slice(&random);
@@ -391,28 +414,31 @@ fn test_contribution() {
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
 
-    let post_chunk = PostChunkRequest {
+    let post_chunk = PostChunkRequest::new(
         contribution_locator,
         contribution,
         contribution_file_signature_locator,
         contribution_file_signature,
-    };
+    );
 
-    let mut req = client.post("/upload/chunk");
-    req = req.json(&post_chunk);
+    req = client.post("/upload/chunk").json(&post_chunk);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Contribute
-    let contribute_request = ContributeChunkRequest {
-        pubkey: String::from(CONTRIBUTOR_1_PUBLIC_KEY),
-        chunk_id: task.chunk_id(),
-    };
+    let contribute_request = ContributeChunkRequest::new(String::from(CONTRIBUTOR_1_PUBLIC_KEY), task.chunk_id());
 
-    let mut req = client.post("/contributor/contribute_chunk");
-    req = req.json(&contribute_request);
+    req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
+
+     // Verify chunk
+     req = client.get("/verify");
+     let response = req.dispatch();
+     assert_eq!(response.status(), Status::Ok);
+     assert!(response.body().is_none());
+
+    panic!(); //FIXME: remove
 }

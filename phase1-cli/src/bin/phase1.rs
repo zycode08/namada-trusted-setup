@@ -1,117 +1,129 @@
-use phase1::{helpers::CurveKind, CurveParameters, Phase1Parameters};
-use phase1_cli::{
-    combine,
-    contribute,
-    new_challenge,
-    transform_pok_and_correctness,
-    transform_ratios,
-    Command,
-    Phase1Opts,
+use phase1_coordinator::{
+    authentication::{Dummy, Signature},
+    objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
+    rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
+    storage::ContributionLocator,
 };
-use setup_utils::{beacon_randomness, derive_rng_from_seed, from_slice, CheckForCorrectness, UseCompression};
+use reqwest::{Client, Url};
 
-use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine as Engine};
+use crate::requests::RequestError;
+use phase1_cli::{requests, ContributorOpt};
+use setup_utils::calculate_hash;
+use structopt::StructOpt;
 
-use gumdrop::Options;
-use std::{fs::read_to_string, process, time::Instant};
-use tracing_subscriber::{
-    filter::EnvFilter,
-    fmt::{time, Subscriber},
-};
+const challenge_hash: [u8; 64] = [
+    //FIXME: remove
+    158, 167, 167, 94, 234, 132, 233, 197, 1, 148, 182, 205, 36, 136, 75, 54, 202, 188, 135, 189, 177, 222, 187, 165,
+    159, 128, 163, 15, 86, 185, 122, 72, 126, 37, 93, 199, 216, 101, 191, 240, 140, 245, 71, 217, 225, 170, 47, 76, 74,
+    27, 38, 64, 190, 181, 33, 94, 137, 255, 187, 144, 45, 114, 74, 232,
+];
 
-const CHALLENGE_IS_COMPRESSED: UseCompression = UseCompression::No;
-const CONTRIBUTION_IS_COMPRESSED: UseCompression = UseCompression::Yes;
-const CHECK_CONTRIBUTION_INPUT_FOR_CORRECTNESS: CheckForCorrectness = CheckForCorrectness::No;
+fn compute_contribution_mock() -> Vec<u8> {
+    //FIXME: remove and compute proper contribution
+    let mut contribution: Vec<u8> = Vec::with_capacity(4576);
 
-fn execute_cmd<E: Engine>(opts: Phase1Opts) {
-    let curve = CurveParameters::<E>::new();
-    let parameters = Phase1Parameters::<E>::new(
-        opts.contribution_mode,
-        opts.chunk_index,
-        opts.chunk_size,
-        curve,
-        opts.proving_system,
-        opts.power,
-        opts.batch_size,
-    );
+    // Set bytes 0..64 of contribution to be the hash of the challenge (hardcoded for now)
+    contribution.extend_from_slice(&challenge_hash);
+    // Fill the rest of contribution with random bytes
+    let random: Vec<u8> = (64..4576).map(|_| rand::random::<u8>()).collect();
+    contribution.extend_from_slice(&random);
 
-    let command = opts.clone().command.unwrap_or_else(|| {
-        eprintln!("No command was provided.");
-        eprintln!("{}", Phase1Opts::usage());
-        process::exit(2)
-    });
-
-    let now = Instant::now();
-    match command {
-        Command::New(opt) => {
-            new_challenge(CHALLENGE_IS_COMPRESSED, &opt.challenge_fname, &parameters);
-        }
-        Command::Contribute(opt) => {
-            // contribute to the randomness
-            let seed = hex::decode(&read_to_string(&opts.seed).expect("should have read seed").trim())
-                .expect("seed should be a hex string");
-            let rng = derive_rng_from_seed(&seed);
-            contribute(
-                CHALLENGE_IS_COMPRESSED,
-                &opt.challenge_fname,
-                CONTRIBUTION_IS_COMPRESSED,
-                &opt.response_fname,
-                CHECK_CONTRIBUTION_INPUT_FOR_CORRECTNESS,
-                &parameters,
-                rng,
-            );
-        }
-        Command::Beacon(opt) => {
-            // use the beacon's randomness
-            // Place block hash here (block number #564321)
-            let beacon_hash = hex::decode(&opt.beacon_hash).expect("could not hex decode beacon hash");
-            let rng = derive_rng_from_seed(&beacon_randomness(from_slice(&beacon_hash)));
-            contribute(
-                CHALLENGE_IS_COMPRESSED,
-                &opt.challenge_fname,
-                CONTRIBUTION_IS_COMPRESSED,
-                &opt.response_fname,
-                CHECK_CONTRIBUTION_INPUT_FOR_CORRECTNESS,
-                &parameters,
-                rng,
-            );
-        }
-        Command::VerifyAndTransformPokAndCorrectness(opt) => {
-            // we receive a previous participation, verify it, and generate a new challenge from it
-            transform_pok_and_correctness(
-                CHALLENGE_IS_COMPRESSED,
-                &opt.challenge_fname,
-                CONTRIBUTION_IS_COMPRESSED,
-                &opt.response_fname,
-                CHALLENGE_IS_COMPRESSED,
-                &opt.new_challenge_fname,
-                &parameters,
-            );
-        }
-        Command::VerifyAndTransformRatios(opt) => {
-            // we receive a previous participation, verify it, and generate a new challenge from it
-            transform_ratios(&opt.response_fname, &parameters);
-        }
-        Command::Combine(opt) => {
-            combine(&opt.response_list_fname, &opt.combined_fname, &parameters);
-        }
-    };
-
-    let new_now = Instant::now();
-    println!("Executing {:?} took: {:?}", opts, new_now.duration_since(now));
+    contribution
 }
 
-fn main() {
-    Subscriber::builder()
-        .with_target(false)
-        .with_timer(time::UtcTime::rfc_3339())
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
+    let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
 
-    let opts: Phase1Opts = Phase1Opts::parse_args_default_or_exit();
+    let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
+    let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
-    match opts.curve_kind {
-        CurveKind::Bls12_377 => execute_cmd::<Bls12_377>(opts),
-        CurveKind::BW6 => execute_cmd::<BW6_761>(opts),
-    };
+    let contribution = compute_contribution_mock();
+
+    let contribution_state = ContributionState::new(
+        challenge_hash.to_vec(),
+        calculate_hash(contribution.as_ref()).to_vec(),
+        None,
+    )
+    .unwrap();
+    let signature = Dummy //FIXME: proper signature
+        .sign(
+            String::from("private_key").as_str(),
+            &contribution_state.signature_message().unwrap(),
+        )
+        .unwrap();
+
+    let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
+
+    let post_chunk_req = PostChunkRequest::new(
+        locked_locators.next_contribution(),
+        contribution,
+        locked_locators.next_contribution_file_signature(),
+        contribution_file_signature,
+    );
+    requests::post_chunk(client, coordinator, &post_chunk_req).await?;
+
+    let contribute_chunk_req = ContributeChunkRequest::new(pubkey.clone(), task.chunk_id());
+    let contribution_locator = requests::post_contribute_chunk(client, coordinator, &contribute_chunk_req).await?;
+
+    requests::post_heartbeat(client, coordinator, &pubkey).await?;
+
+    Ok(())
+}
+
+async fn contribute(client: &Client, coordinator: &mut Url) {
+    // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
+    let pubkey = String::from("random public key");
+    requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
+
+    let mut i = 0;
+    loop {
+        if i == 3 {
+            //FIXME: just for testing, remove for production
+            break;
+        }
+        // Update the coordinator
+        if let Err(e) = requests::get_update(&client, coordinator).await {
+            //FIXME: ignore this error and continue
+            eprintln!("{}", e);
+        }
+
+        if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
+            eprintln!("{}", e);
+            panic!();
+        }
+
+        i += 1;
+    }
+}
+
+async fn close_ceremony(client: &Client, coordinator: &mut Url) {
+    match requests::get_stop_coordinator(client, coordinator).await {
+        Ok(()) => println!("Ceremony completed!"),
+        Err(e) => eprintln!("{}", e),
+    }
+}
+
+async fn verify_contributions(client: &Client, coordinator: &mut Url) {
+    match requests::get_verify_chunks(client, coordinator).await {
+        Ok(()) => println!("Verification of contributions completed!"),
+        Err(e) => eprintln!("{}", e), // FIXME: what to do in this case? Stop coordinator?
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let opt = ContributorOpt::from_args();
+    let client = Client::new();
+
+    match opt {
+        ContributorOpt::Contribute(mut url) => { //FIXME: share code
+            contribute(&client, &mut url.coordinator).await;
+        }
+        ContributorOpt::CloseCeremony(mut url) => {
+            close_ceremony(&client, &mut url.coordinator).await;
+        }
+        ContributorOpt::VerifyContributions(mut url) => {
+            verify_contributions(&client, &mut url.coordinator).await;
+        }
+    }
 }
