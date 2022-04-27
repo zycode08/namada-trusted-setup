@@ -5,16 +5,10 @@ use crate::{
     storage::{Disk, Locator, StorageLocator, StorageObject},
     CoordinatorError,
 };
-use phase1::{
-    helpers::CurveKind,
-    Phase1Parameters,
-    // Phase1,
-};
-use setup_utils::{calculate_hash, derive_rng_from_seed, UseCompression};
+use phase1::helpers::CurveKind;
 
-use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine as Engine};
+use setup_utils::calculate_hash;
 
-// use rand::{rngs::StdRng, CryptoRng, Rng, SeedableRng};
 use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
 
@@ -68,25 +62,16 @@ impl Computation {
         let curve = settings.curve();
         if let Err(error) = match curve {
             CurveKind::Bls12_381 => Self::contribute(
-                environment,
                 storage.reader(challenge_locator)?.as_ref(),
                 storage.writer(response_locator)?.as_mut(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-                // derive_rng_from_seed(&seed[..]),
             ),
             CurveKind::Bls12_377 => Self::contribute(
-                environment,
                 storage.reader(challenge_locator)?.as_ref(),
                 storage.writer(response_locator)?.as_mut(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-                // derive_rng_from_seed(&seed[..]),
             ),
             CurveKind::BW6 => Self::contribute(
-                environment,
                 storage.reader(challenge_locator)?.as_ref(),
                 storage.writer(response_locator)?.as_mut(),
-                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
-                // derive_rng_from_seed(&seed[..]),
             ),
         } {
             error!("Computation failed with {}", error);
@@ -130,24 +115,7 @@ impl Computation {
         Ok(())
     }
 
-    fn contribute<T: Engine + Sync>(
-        environment: &Environment,
-        challenge_reader: &[u8],
-        mut response_writer: &mut [u8],
-        parameters: &Phase1Parameters<T>,
-        // mut rng: impl Rng + CryptoRng,
-    ) -> Result<(), CoordinatorError> {
-        // Fetch the environment settings.
-        let compressed_inputs = environment.compressed_inputs();
-        let compressed_outputs = environment.compressed_outputs();
-        let check_input_for_correctness = environment.check_input_for_correctness();
-
-        // Check that the challenge hash is not compressed.
-        if UseCompression::Yes == compressed_inputs {
-            error!("Compressed contribution hashing is currently not supported");
-            return Err(CoordinatorError::CompressedContributionHashingUnsupported);
-        }
-
+    fn contribute(challenge_reader: &[u8], mut response_writer: &mut [u8]) -> Result<(), CoordinatorError> {
         trace!("Calculating previous contribution hash and writing it to the response");
         let challenge_hash = calculate_hash(&challenge_reader);
         debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
@@ -171,22 +139,12 @@ impl Computation {
         // Perform the transformation
         trace!("Computing and writing your contribution, this could take a while");
 
+        //
+        // NOTE: Add your MPC Parameters contribute function below
+        //
 
-        // START: MASP MPC
         // Self::contribute_masp(&challenge_reader, &mut response_writer);
         Self::contribute_test_masp(&challenge_reader, &mut response_writer);
-        // END: MASP MPC
-
-        // Phase1::computation(
-        //     challenge_reader,
-        //     response_writer,
-        //     compressed_inputs,
-        //     compressed_outputs,
-        //     check_input_for_correctness,
-        //     &private_key,
-        //     &parameters,
-        // )?;
-        // response_writer.flush()?;
 
         trace!("Finishing writing your contribution to response file");
 
@@ -370,7 +328,6 @@ impl Computation {
         debug!("Contribution hash: 0x{:02x}", h.iter().format(""));
 
         trace!("Writing MASP Test parameters to file...");
-        
         test_params
             .write(&mut response_writer)
             .expect("failed to write updated MASP Test parameters");

@@ -7,9 +7,8 @@ use crate::{
     },
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, Phase1, Phase1Parameters, PublicKey};
-use setup_utils::{calculate_hash, CheckForCorrectness, GenericArray, U64};
-use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine as Engine};
+use phase1::{helpers::CurveKind, PublicKey};
+use setup_utils::{calculate_hash, GenericArray, U64};
 
 use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
@@ -168,24 +167,17 @@ impl Verification {
         // Execute ceremony verification on chunk.
         let settings = environment.parameters();
         let result = match settings.curve() {
-            // TODO: change phase1_chunked_parameters
             CurveKind::Bls12_381 => Self::transform_pok_and_correctness(
-                environment,
                 storage.reader(&challenge_locator)?.as_ref(),
                 storage.reader(&response_locator)?.as_ref(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
             ),
             CurveKind::Bls12_377 => Self::transform_pok_and_correctness(
-                environment,
                 storage.reader(&challenge_locator)?.as_ref(),
                 storage.reader(&response_locator)?.as_ref(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
             ),
             CurveKind::BW6 => Self::transform_pok_and_correctness(
-                environment,
                 storage.reader(&challenge_locator)?.as_ref(),
                 storage.reader(&response_locator)?.as_ref(),
-                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
             ),
         };
         let response_hash = match result {
@@ -226,19 +218,16 @@ impl Verification {
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),
                     response_hash.as_ref(),
-                    &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
                 )?,
                 CurveKind::Bls12_377 => Self::decompress(
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),
                     response_hash.as_ref(),
-                    &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
                 )?,
                 CurveKind::BW6 => Self::decompress(
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),
                     response_hash.as_ref(),
-                    &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
                 )?,
             };
 
@@ -270,13 +259,10 @@ impl Verification {
     }
 
     #[inline]
-    fn transform_pok_and_correctness<T: Engine + Sync>(
-        environment: &Environment,
+    fn transform_pok_and_correctness(
         challenge_reader: &[u8],
         response_reader: &[u8],
-        parameters: &Phase1Parameters<T>,
     ) -> Result<GenericArray<u8, U64>, CoordinatorError> {
-        // debug!("Verifying 2^{} powers of tau", parameters.total_size_in_log2);
         debug!("Verifying challenges");
 
         // Check that the challenge hashes match.
@@ -307,26 +293,11 @@ impl Verification {
         debug!("Challenge Reader is {}", pretty_hash!(&challenge_reader[0..256]));
         debug!("Response Reader is {}", pretty_hash!(&response_reader[0..256]));
 
-        // Fetch the compression settings.
-        let compressed_challenge = environment.compressed_inputs();
-        let compressed_response = environment.compressed_outputs();
-
         // Fetch the public key of the contributor.
         // let public_key = PublicKey::read(response_reader, compressed_response, &parameters)?;
         // trace!("Public key of the contributor is {:#?}", public_key);
 
         trace!("Starting verification");
-        // Phase1::verification(
-        //     challenge_reader,
-        //     response_reader,
-        //     &public_key,
-        //     &challenge_hash,
-        //     compressed_challenge,
-        //     compressed_response,
-        //     CheckForCorrectness::No,
-        //     CheckForCorrectness::Full,
-        //     &parameters,
-        // )?;
 
         // Self::verify_masp(&challenge_reader, &response_reader);
         Self::verify_test_masp(&challenge_reader, &response_reader);
@@ -337,23 +308,23 @@ impl Verification {
     }
     #[inline]
     fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        let masp_spend = MPCParameters::read(&challenge_reader[64..], false)
-            .expect("couldn't deserialize MASP Spend params");
+        let masp_spend =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Spend params");
 
-        let masp_output = MPCParameters::read(&challenge_reader[64..], false)
-            .expect("couldn't deserialize MASP Output params");
+        let masp_output =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Output params");
 
-        let masp_convert = MPCParameters::read(&challenge_reader[64..], false)
-            .expect("couldn't deserialize MASP Convert params");
+        let masp_convert =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Convert params");
 
-        let new_masp_spend = MPCParameters::read(&response_reader[64..], true)
-            .expect("couldn't deserialize MASP Spend new_params");
+        let new_masp_spend =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Spend new_params");
 
-        let new_masp_output = MPCParameters::read(&response_reader[64..], true)
-            .expect("couldn't deserialize MASP Output new_params");
+        let new_masp_output =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Output new_params");
 
-        let new_masp_convert = MPCParameters::read(&response_reader[64..], true)
-            .expect("couldn't deserialize MASP Convert new_params");
+        let new_masp_convert =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Convert new_params");
 
         let spend_hash = match verify_contribution(&masp_spend, &new_masp_spend) {
             Ok(hash) => hash,
@@ -381,11 +352,11 @@ impl Verification {
 
     #[inline]
     fn verify_test_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        let masp_test = MPCParameters::read(&challenge_reader[64..], false)
-            .expect("couldn't deserialize MASP Test params");
+        let masp_test =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Test params");
 
-        let new_masp_test = MPCParameters::read(&response_reader[64..], true)
-            .expect("couldn't deserialize MASP Spend new_params");
+        let new_masp_test =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Spend new_params");
 
         let test_hash = match verify_contribution(&masp_test, &new_masp_test) {
             Ok(hash) => hash,
@@ -400,28 +371,16 @@ impl Verification {
     }
 
     #[inline]
-    fn decompress<'a, T: Engine + Sync>(
+    fn decompress(
         response_reader: &[u8],
         mut next_challenge_writer: &mut [u8],
         response_hash: &[u8],
-        parameters: &Phase1Parameters<T>,
     ) -> Result<(), CoordinatorError> {
+        // Copies hash of previous response to the new challenge locator, then adds the parameters
         (&mut next_challenge_writer[0..]).write_all(response_hash)?;
         (&mut next_challenge_writer[64..]).write_all(&response_reader[64..])?;
+
         Ok(next_challenge_writer.flush()?)
-        
-
-        // trace!("Decompressing the response file for the next challenge");
-        // // Phase1::decompress(
-        // //     response_reader,
-        // //     next_challenge_writer,
-        // //     CheckForCorrectness::No,
-        // //     &parameters,
-        // // )?;
-        // // next_challenge_writer.flush()?;
-        // trace!("Decompressed the response file for the next challenge");
-
-        // Ok(())
     }
 }
 

@@ -3,11 +3,9 @@ use crate::{
     storage::{ContributionLocator, Disk, Locator, Object, StorageObject},
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, Phase1, Phase1Parameters};
-use setup_utils::{blank_hash, calculate_hash, UseCompression};
-use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
 
-use snarkvm_curves::PairingEngine as Engine;
+use phase1::helpers::CurveKind;
+use setup_utils::{blank_hash, calculate_hash};
 
 use std::{io::Write, time::Instant};
 use tracing::{debug, error, info, trace};
@@ -64,22 +62,9 @@ impl Initialization {
         let settings = environment.parameters();
 
         if let Err(error) = match settings.curve() {
-            // TODO: change phase1_chunked_parameters macro, not used by Anoma phase2 in Self::initialization
-            CurveKind::Bls12_381 => Self::initialization(
-                storage.writer(&contribution_locator)?.as_mut(),
-                environment.compressed_inputs(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-            ),
-            CurveKind::Bls12_377 => Self::initialization(
-                storage.writer(&contribution_locator)?.as_mut(),
-                environment.compressed_inputs(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-            ),
-            CurveKind::BW6 => Self::initialization(
-                storage.writer(&contribution_locator)?.as_mut(),
-                environment.compressed_inputs(),
-                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
-            ),
+            CurveKind::Bls12_381 => Self::initialization(storage.writer(&contribution_locator)?.as_mut()),
+            CurveKind::Bls12_377 => Self::initialization(storage.writer(&contribution_locator)?.as_mut()),
+            CurveKind::BW6 => Self::initialization(storage.writer(&contribution_locator)?.as_mut()),
         } {
             error!("Initialization failed with {}", error);
             return Err(CoordinatorError::InitializationFailed.into());
@@ -102,27 +87,28 @@ impl Initialization {
         Ok(hash)
     }
 
-    /// Runs Phase 1 initialization on the given parameters.
+    /// Runs Phase 2 initialization on the given parameters.
     #[inline]
-    fn initialization<T: Engine + Sync>(
-        mut writer: &mut [u8],
-        compressed: UseCompression,
-        parameters: &Phase1Parameters<T>,
-    ) -> Result<(), CoordinatorError> {
+    fn initialization(mut writer: &mut [u8]) -> Result<(), CoordinatorError> {
         info!("Initializing Phase 2 Initialization");
         // The initialization contribution file contains [blank_hash, init.params]
-        // Our circuit parameters are appended to the blank_hash
+        // The circuit parameters are appended to the blank_hash
         let hash = blank_hash();
         // (&mut writer[0..]).write_all(hash.as_slice())?;
         writer.write_all(&hash.as_slice())?;
         writer.flush()?;
+
         debug!("Empty challenge hash is {}", pretty_hash!(&hash));
-        // debug!("Empty challenge is {}", pretty_hash!(&writer));
+
         info!("Starting Phase 2 initialization operation");
-        // Add here your MPC Parameters init function
+
+        //
+        // NOTE: Add your MPC Parameters initialization function below
+        //
+
         // Self::initialize_masp(&mut writer);
         Self::initialize_test_masp(&mut writer);
-        // Phase1::initialization(&mut writer, compressed, &parameters)?;
+
         trace!("Completed Phase 2 initialization operation");
 
         Ok(())
@@ -150,29 +136,32 @@ impl Initialization {
 
     #[inline]
     fn initialize_masp(mut writer: &mut [u8]) {
+        //
         // MASP spend circuit
-        // trace!("Creating initial parameters for MASP Spend...");
-        // let spend_params = MPCParameters::new(
-        //     masp_proofs::circuit::sapling::Spend {
-        //         value_commitment: None,
-        //         proof_generation_key: None,
-        //         payment_address: None,
-        //         commitment_randomness: None,
-        //         ar: None,
-        //         auth_path: vec![None; 32], // Tree depth is 32 for sapling
-        //         anchor: None,
-        //     },
-        //     //should_filter_points_at_infinity,
-        //     //radix_directory,
-        // )
-        // .unwrap();
-        // trace!("Writing initial MASP Spend parameters to file...",);
+        //
+        trace!("Creating initial parameters for MASP Spend...");
+        let spend_params = MPCParameters::new(
+            masp_proofs::circuit::sapling::Spend {
+                value_commitment: None,
+                proof_generation_key: None,
+                payment_address: None,
+                commitment_randomness: None,
+                ar: None,
+                auth_path: vec![None; 32], // Tree depth is 32 for sapling
+                anchor: None,
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
+        trace!("Writing initial MASP Spend parameters to file...",);
 
-        // spend_params
-        //     .write(&mut writer)
-        //     .expect("unable to write MASP Spend params");
-
+        spend_params
+            .write(&mut writer)
+            .expect("unable to write MASP Spend params");
+        //
         // MASP output circuit
+        //
         trace!("Creating initial parameters for MASP Output...");
         let output_params = MPCParameters::new(
             masp_proofs::circuit::sapling::Output {
@@ -193,31 +182,33 @@ impl Initialization {
             .write(&mut writer)
             .expect("unable to write MASP Output params");
 
-        // // MASP Convert circuit
-        // trace!("Creating initial parameters for MASP Convert...");
-        // let convert_params = MPCParameters::new(
-        //     masp_proofs::circuit::convert::Convert {
-        //         value_commitment: None,
-        //         auth_path: vec![None; 32], // Tree depth is 32 for sapling
-        //         anchor: None,
-        //     },
-        //     //should_filter_points_at_infinity,
-        //     //radix_directory,
-        // )
-        // .unwrap();
+        //
+        // MASP Convert circuit
+        //
+        trace!("Creating initial parameters for MASP Convert...");
+        let convert_params = MPCParameters::new(
+            masp_proofs::circuit::convert::Convert {
+                value_commitment: None,
+                auth_path: vec![None; 32], // Tree depth is 32 for sapling
+                anchor: None,
+            },
+            //should_filter_points_at_infinity,
+            //radix_directory,
+        )
+        .unwrap();
 
-        // trace!("Writing initial MASP Convert parameters to file...",);
+        trace!("Writing initial MASP Convert parameters to file...",);
 
-        // convert_params
-        //     .write(&mut writer)
-        //     .expect("unable to write MASP Convert params");
+        convert_params
+            .write(&mut writer)
+            .expect("unable to write MASP Convert params");
 
         writer.flush().unwrap();
     }
 
     #[inline]
     fn initialize_test_masp(mut writer: &mut [u8]) {
-        // MASP spend circuit
+        // MASP Test circuit
         trace!("Creating initial parameters for MASP Test Circuit...");
         let instance = TestCircuit { x: Some(Scalar::one()) };
         let test_params = MPCParameters::new(instance).unwrap();
