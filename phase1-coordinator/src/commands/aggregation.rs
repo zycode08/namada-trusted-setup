@@ -14,6 +14,7 @@ pub(crate) struct Aggregation;
 
 impl Aggregation {
     /// Runs aggregation for a given environment, storage, and round.
+    /// NOTE: The Anoma Trusted Setup runs only phase 2 and doesn't chunk the contributions. The aggregation has been left as a placeholder to avoid breaking the whole library logic. In practice, there is no aggregation.
     #[inline]
     pub(crate) fn run(environment: &Environment, storage: &mut Disk, round: &Round) -> anyhow::Result<()> {
         let start = Instant::now();
@@ -41,70 +42,6 @@ impl Aggregation {
         // Load the contribution files.
         let readers = Self::readers(environment, storage, round)?;
         let contribution_readers: Vec<_> = readers.iter().map(|r| (r.as_ref(), compressed_output)).collect();
-
-        // Run aggregation on the given round.
-        /*
-        let chunk_id = 0usize;
-        let settings = environment.parameters();
-        let curve = settings.curve();
-        let result = match curve {
-            // NOTE: we don't use the chunked mode for phase 2, the aggregation function is here set a placeholder to remove error warnings
-            // TODO: if needed port your aggregation function
-            CurveKind::Bls12_381 => Phase1::aggregation(
-                &contribution_readers,
-                (storage.writer(&round_locator)?.as_mut(), compressed_input),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-            ),
-            CurveKind::Bls12_377 => Phase1::aggregation(
-                &contribution_readers,
-                (storage.writer(&round_locator)?.as_mut(), compressed_input),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
-            ),
-            CurveKind::BW6 => Phase1::aggregation(
-                &contribution_readers,
-                (storage.writer(&round_locator)?.as_mut(), compressed_input),
-                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
-            ),
-        };
-        if let Err(error) = result {
-            error!("Aggregation failed with {}", error);
-            return Err(CoordinatorError::RoundAggregationFailed.into());
-        }
-
-        */
-
-        // Run aggregate verification on the given round.
-        /*
-            let settings = environment.parameters();
-            let curve = settings.curve();
-            match curve {
-                // TODO: if needed port your aggregate_verification function
-                CurveKind::Bls12_381 => Phase1::aggregate_verification(
-                    (
-                        &storage.reader(&round_locator)?.as_ref(),
-                        setup_utils::UseCompression::No,
-                        setup_utils::CheckForCorrectness::Full,
-                    ),
-                    &phase1_full_parameters!(Bls12_377, settings),
-                )?,
-                CurveKind::Bls12_377 => Phase1::aggregate_verification(
-                    (
-                        &storage.reader(&round_locator)?.as_ref(),
-                        setup_utils::UseCompression::No,
-                        setup_utils::CheckForCorrectness::Full,
-                    ),
-                    &phase1_full_parameters!(Bls12_377, settings),
-                )?,
-                CurveKind::BW6 => Phase1::aggregate_verification(
-                    (
-                        &storage.reader(&round_locator)?.as_ref(),
-                        setup_utils::UseCompression::No,
-                        setup_utils::CheckForCorrectness::Full,
-                    ),
-                    &phase1_full_parameters!(BW6_761, settings),
-                )?,
-            };
-        */
 
         let elapsed = Instant::now().duration_since(start);
         debug!("Completed aggregation on round {} in {:?}", round_height, elapsed);
