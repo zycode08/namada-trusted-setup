@@ -394,6 +394,7 @@ impl Coordinator {
     #[inline]
     pub fn initialize(&mut self) -> Result<(), CoordinatorError> {
         // Check if the deployment is in production, that the signature scheme is secure.
+        // TODO: add again the signature check after the Signature trait is implemented
         // if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
         //     return Err(CoordinatorError::SignatureSchemeIsInsecure);
         // }
@@ -2618,7 +2619,10 @@ impl Coordinator {
 
         // Fetch whether this is the final contribution of the specified chunk.
         let is_final_contribution = chunk.only_contributions_complete(round.expected_number_of_contributions());
-        info!("EXPECTED NUMBER OF CONTRIBUTIONS: {}", round.expected_number_of_contributions());
+        info!(
+            "EXPECTED NUMBER OF CONTRIBUTIONS: {}",
+            round.expected_number_of_contributions()
+        );
 
         // Fetch the verified response locator and the contribution file signature locator.
         let verified_locator = match is_final_contribution {

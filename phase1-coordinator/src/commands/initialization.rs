@@ -94,7 +94,7 @@ impl Initialization {
         // The initialization contribution file contains [blank_hash, init.params]
         // The circuit parameters are appended to the blank_hash
         let hash = blank_hash();
-        // (&mut writer[0..]).write_all(hash.as_slice())?;
+
         writer.write_all(&hash.as_slice())?;
         writer.flush()?;
 
