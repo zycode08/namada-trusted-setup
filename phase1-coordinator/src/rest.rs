@@ -181,23 +181,14 @@ pub async fn get_challenge(
     let challenge_locator = request.current_contribution();
     let round_height = challenge_locator.round_height();
     let chunk_id = challenge_locator.chunk_id();
-    let contribution_id = challenge_locator.contribution_id();
-    // let contribution_id = 0;
-
 
     debug!(
-        "rest::get_challenge - round_height {}, chunk_id {}, contribution_id {} ",
-        round_height, chunk_id, contribution_id
+        "rest::get_challenge - round_height {}, chunk_id {}, contribution_id 0, is_verified true",
+        round_height, chunk_id
     );
-
-    let is_verified = if round_height == 0 { true } else { false };
-    // let is_verified = true;
-
-    match coordinator
-        .write()
-        .await
-        .get_challenge(round_height, chunk_id, 0, true)
-    {
+    // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
+    // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
+    match coordinator.write().await.get_challenge(round_height, chunk_id, 0, true) {
         Ok(challenge_hash) => Ok(Json(challenge_hash)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }

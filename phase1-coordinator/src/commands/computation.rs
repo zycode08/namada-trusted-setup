@@ -117,9 +117,10 @@ impl Computation {
 
     fn contribute(challenge_reader: &[u8], mut response_writer: &mut [u8]) -> Result<(), CoordinatorError> {
         trace!("Calculating previous contribution hash and writing it to the response");
+
         let challenge_hash = calculate_hash(&challenge_reader);
         debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
-        // (&mut response_writer[0..]).write_all(challenge_hash.as_slice())?;
+
         response_writer.write_all(&challenge_hash.as_slice())?;
         response_writer.flush()?;
 
@@ -132,6 +133,7 @@ impl Computation {
         debug!("Challenge file claims previous hash is {}", pretty_hash!(previous_hash));
         debug!("Please double check this yourself! Do not trust it blindly!");
 
+        // TODO: do we want to include the public key to the contribution file?
         // Construct our keypair using the RNG we created above.
         // let (public_key, private_key) =
         //     Phase1::key_generation(&mut rng, challenge_hash.as_ref()).expect("could not generate keypair");
