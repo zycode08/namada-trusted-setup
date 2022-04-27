@@ -337,24 +337,22 @@ impl Verification {
     }
     #[inline]
     fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        static ANOMA_FILE_SIZE: usize = 4_000;
-
-        let masp_spend = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
+        let masp_spend = MPCParameters::read(&challenge_reader[64..], false)
             .expect("couldn't deserialize MASP Spend params");
 
-        let masp_output = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
+        let masp_output = MPCParameters::read(&challenge_reader[64..], false)
             .expect("couldn't deserialize MASP Output params");
 
-        let masp_convert = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
+        let masp_convert = MPCParameters::read(&challenge_reader[64..], false)
             .expect("couldn't deserialize MASP Convert params");
 
-        let new_masp_spend = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
+        let new_masp_spend = MPCParameters::read(&response_reader[64..], true)
             .expect("couldn't deserialize MASP Spend new_params");
 
-        let new_masp_output = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
+        let new_masp_output = MPCParameters::read(&response_reader[64..], true)
             .expect("couldn't deserialize MASP Output new_params");
 
-        let new_masp_convert = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
+        let new_masp_convert = MPCParameters::read(&response_reader[64..], true)
             .expect("couldn't deserialize MASP Convert new_params");
 
         let spend_hash = match verify_contribution(&masp_spend, &new_masp_spend) {
@@ -383,12 +381,10 @@ impl Verification {
 
     #[inline]
     fn verify_test_masp(challenge_reader: &[u8], response_reader: &[u8]) {
-        static ANOMA_FILE_SIZE: usize = 4_000;
-
-        let masp_test = MPCParameters::read(&challenge_reader[64..ANOMA_FILE_SIZE], false)
+        let masp_test = MPCParameters::read(&challenge_reader[64..], false)
             .expect("couldn't deserialize MASP Test params");
 
-        let new_masp_test = MPCParameters::read(&response_reader[64..ANOMA_FILE_SIZE], true)
+        let new_masp_test = MPCParameters::read(&response_reader[64..], true)
             .expect("couldn't deserialize MASP Spend new_params");
 
         let test_hash = match verify_contribution(&masp_test, &new_masp_test) {

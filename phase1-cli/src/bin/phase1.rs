@@ -16,6 +16,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use tracing::debug;
 
+static ANOMA_FILE_SIZE: usize = 4_000;
+
 macro_rules! pretty_hash {
     ($hash:expr) => {{
         let mut output = format!("\n\n");
@@ -51,7 +53,7 @@ fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
     let mut f = File::open(&filename).expect("no file found");
     let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
     // let mut buffer = vec![0; metadata.len() as usize];
-    let mut buffer = vec![0; 4_000];
+    let mut buffer = vec![0; ANOMA_FILE_SIZE];
     debug!("metadata file length {}", metadata.len());
     f.read(&mut buffer).expect("buffer overflow");
 
