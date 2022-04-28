@@ -1,5 +1,5 @@
 use phase1_coordinator::{
-    authentication::Dummy,
+    authentication::Production as ProductionSig,
     environment::{ContributionMode, CurveKind, Parameters, Production, ProvingSystem, Settings, Testing},
     rest,
     Coordinator,
@@ -35,7 +35,7 @@ pub async fn main() {
 
     // Instantiate and start the coordinator
     let mut coordinator =
-        Coordinator::new(environment.into(), Arc::new(Dummy)).expect("Failed to instantiate coordinator"); //FIXME: proper signature
+        Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
     coordinator.initialize().expect("Initialization of coordinator failed!");
 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
