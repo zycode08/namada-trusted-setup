@@ -28,7 +28,7 @@ use reqwest::Url;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-pub struct CoordinatorUrl { //FIXME: tuple struct?
+pub struct CoordinatorUrl {
     #[structopt(
         help = "The ip address and port of the coordinator",
         required = true,
