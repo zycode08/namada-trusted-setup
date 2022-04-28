@@ -94,6 +94,11 @@ pub enum Parameters {
         power: usize,
         batch_size: usize,
     },
+    TestAnoma {
+        number_of_chunks: usize,
+        power: usize,
+        batch_size: usize,
+    },
 }
 
 impl Parameters {
@@ -112,6 +117,11 @@ impl Parameters {
                 power,
                 batch_size,
             } => Self::test_custom(number_of_chunks, power, batch_size),
+            Parameters::TestAnoma {
+                number_of_chunks,
+                power,
+                batch_size,
+            } => Self::test_anoma(number_of_chunks, power, batch_size),
         }
     }
 
@@ -187,9 +197,20 @@ impl Parameters {
     fn test_custom(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
         let proving_system = ProvingSystem::Groth16;
         Settings::new(
-            ContributionMode::Chunked,
+            ContributionMode::Full,
             proving_system,
-            CurveKind::Bls12_377,
+            CurveKind::Bls12_381,
+            *power,
+            *batch_size,
+            chunk_size!(number_of_chunks, proving_system, power),
+        )
+    }
+    fn test_anoma(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
+        let proving_system = ProvingSystem::Groth16;
+        Settings::new(
+            ContributionMode::Full,
+            proving_system,
+            CurveKind::Bls12_381,
             *power,
             *batch_size,
             chunk_size!(number_of_chunks, proving_system, power),
@@ -440,10 +461,11 @@ impl Environment {
     /// to run given a proof system, power and chunk size.
     ///
     pub fn number_of_chunks(&self) -> u64 {
-        let proving_system = &self.parameters.proving_system;
-        let power = self.parameters.power;
-        let chunk_size = self.parameters.chunk_size;
-        (total_size_in_g1!(proving_system, power) + chunk_size as u64 - 1) / chunk_size as u64
+        // let proving_system = &self.parameters.proving_system;
+        // let power = self.parameters.power;
+        // let chunk_size = self.parameters.chunk_size;
+        // (total_size_in_g1!(proving_system, power) + chunk_size as u64 - 1) / chunk_size as u64
+        1
     }
 
     /// Returns the storage system of the coordinator.
@@ -565,10 +587,12 @@ impl std::default::Default for Testing {
                 check_input_for_correctness: CheckForCorrectness::No,
 
                 minimum_contributors_per_round: 1,
-                maximum_contributors_per_round: 5,
+                maximum_contributors_per_round: 1,
+                // maximum_contributors_per_round: 5,
                 minimum_verifiers_per_round: 1,
                 maximum_verifiers_per_round: 5,
-                contributor_lock_chunk_limit: 5,
+                contributor_lock_chunk_limit: 1,
+                // contributor_lock_chunk_limit: 5,
                 verifier_lock_chunk_limit: 5,
                 contributor_seen_timeout: time::Duration::minutes(5),
                 verifier_seen_timeout: time::Duration::minutes(15),
@@ -681,10 +705,12 @@ impl std::default::Default for Development {
                 check_input_for_correctness: CheckForCorrectness::No,
 
                 minimum_contributors_per_round: 1,
-                maximum_contributors_per_round: 5,
+                maximum_contributors_per_round: 1,
+                // maximum_contributors_per_round: 5,
                 minimum_verifiers_per_round: 1,
                 maximum_verifiers_per_round: 5,
-                contributor_lock_chunk_limit: 5,
+                contributor_lock_chunk_limit: 1,
+                // contributor_lock_chunk_limit: 5,
                 verifier_lock_chunk_limit: 5,
                 contributor_seen_timeout: time::Duration::minutes(1),
                 verifier_seen_timeout: time::Duration::minutes(15),
@@ -796,10 +822,12 @@ impl std::default::Default for Production {
                 check_input_for_correctness: CheckForCorrectness::No,
 
                 minimum_contributors_per_round: 1,
-                maximum_contributors_per_round: 5,
+                maximum_contributors_per_round: 1,
+                // maximum_contributors_per_round: 5,
                 minimum_verifiers_per_round: 1,
                 maximum_verifiers_per_round: 5,
-                contributor_lock_chunk_limit: 5,
+                contributor_lock_chunk_limit: 1,
+                // contributor_lock_chunk_limit: 5,
                 verifier_lock_chunk_limit: 5,
                 contributor_seen_timeout: time::Duration::days(7),
                 verifier_seen_timeout: time::Duration::days(7),

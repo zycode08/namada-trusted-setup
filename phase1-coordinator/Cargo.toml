@@ -1,12 +1,12 @@
 [package]
-name = "phase1-coordinator"
-version = "0.3.0"
 authors = ["The Aleo Team <hello@aleo.org>"]
 description = "Coordinator implementation of Phase 1"
-homepage = "https://github.com/AleoHQ/aleo-setup"
-repository = "https://github.com/AleoHQ/aleo-setup"
-license = "MIT/Apache-2.0"
 edition = "2018"
+homepage = "https://github.com/AleoHQ/aleo-setup"
+license = "MIT/Apache-2.0"
+name = "phase1-coordinator"
+repository = "https://github.com/AleoHQ/aleo-setup"
+version = "0.3.0"
 
 [[bin]]
 name = "phase1-coordinator"
@@ -14,37 +14,72 @@ path = "src/main.rs"
 required-features = ["parallel"]
 
 [dependencies]
-phase1 = { path = "../phase1" }
-setup-utils = { path = "../setup-utils" }
-snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+phase1 = {path = "../phase1"}
+setup-utils = {path = "../setup-utils"}
+snarkvm-curves = {git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c"}
 
-anyhow = { version = "1.0.37" }
-fs-err = { version = "2.6.0" }
-itertools = "0.10"
-futures = { version = "0.3" }
-hex = { version = "0.4.2" }
-memmap = { version = "0.7.0" }
-once_cell = { version = "1.5.2" }
-rand = { version = "0.8" }
-rayon = { version = "1.4.1" }
-rocket = { version = "0.5.0-rc.1", features = ["json"] }
-serde = { version = "1.0", features = ["derive"] }
-serde-aux = { version = "3.0" }
-serde-diff = { version = "0.4" }
-serde_json = { version = "1.0" }
-serde_with = { version = "1.8", features = ["macros"] }
-thiserror = { version = "1.0" }
-time = { version = "0.3", features = ["serde-human-readable", "macros"] }
-tokio = { version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"] }
-tracing = { version = "0.1" }
-tracing-subscriber = { version = "0.3" }
+anyhow = {version = "1.0.37"}
+fs-err = {version = "2.6.0"}
+futures = {version = "0.3"}
+memmap = {version = "0.7.0"}
+once_cell = {version = "1.5.2"}
+rayon = {version = "1.4.1"}
+serde = {version = "1.0", features = ["derive"]}
+serde-aux = {version = "3.0"}
+serde-diff = {version = "0.4"}
+serde_json = {version = "1.0"}
+serde_with = {version = "1.8", features = ["macros"]}
+thiserror = {version = "1.0"}
+time = {version = "0.3", features = ["serde-human-readable", "macros"]}
+tokio = {version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"]}
+tracing = {version = "0.1"}
+tracing-subscriber = {version = "0.3"}
+
+# Dependencies from MASP MPC 
+bellman = {version = "0.11.1", features = ["groth16", "multicore"]}
+blake2 = "0.10.4"
+byteorder = "1"
+exitcode = "1.1.2"
+getrandom = {version = "0.2.6", features = ["js"]}
+hex = "0.4.2"
+itertools = "0.10.3"
+rand = {version = "0.8.5", default-features = false, features = ["getrandom"]}
+rand_chacha = "0.3.1"
+sha2 = "0.10.2"
+bls12_381 = "0.6"
+
+# TODO: add the correct github link before launching to production
+masp-phase2 = {path = "../../masp-phase2"}
+
+[dependencies.rocket]
+features = ["json"]
+version = "0.5.0-rc.1"
+
+# [dependencies.masp-phase2]
+# branch = "main"
+# git = "https://github.com/heliaxdev/masp-phase2"
+
+[dependencies.masp_proofs]
+git = "https://github.com/heliaxdev/masp"
+#rev = "b64af55d955a1bd0a77389f0b9c66f180815e73b"
+# optional = true
+
+[dependencies.hex-literal]
+optional = true
+version = "0.3.4"
 
 [dev-dependencies]
-serial_test = { version = "0.5" }
-tracing-subscriber = { version = "0.3" }
+serial_test = {version = "0.5"}
+# tracing-subscriber = {version = "0.3"}
 
 [features]
 default = []
+fast-deserialize = ["masp-phase2/fast-deserialize"]
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3

@@ -3,22 +3,19 @@ use crate::{
     commands::SigningKey,
     environment::Environment,
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        Object,
-        StorageLocator,
-        StorageObject,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, Object, StorageLocator, StorageObject,
     },
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, Phase1, Phase1Parameters, PublicKey};
-use setup_utils::{calculate_hash, CheckForCorrectness, GenericArray, U64};
-use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761, PairingEngine as Engine};
+use phase1::{helpers::CurveKind, PublicKey};
+use setup_utils::{calculate_hash, GenericArray, U64};
 
 use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
+
+use blake2::{Blake2b512, Digest};
+use itertools::Itertools;
+use masp_phase2::{verify_contribution, MPCParameters};
 
 pub(crate) struct Verification;
 
@@ -170,17 +167,17 @@ impl Verification {
         // Execute ceremony verification on chunk.
         let settings = environment.parameters();
         let result = match settings.curve() {
-            CurveKind::Bls12_377 => Self::transform_pok_and_correctness(
-                environment,
+            CurveKind::Bls12_381 => Self::transform_pok_and_correctness(
                 storage.reader(&challenge_locator)?.as_ref(),
                 storage.reader(&response_locator)?.as_ref(),
-                &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
+            ),
+            CurveKind::Bls12_377 => Self::transform_pok_and_correctness(
+                storage.reader(&challenge_locator)?.as_ref(),
+                storage.reader(&response_locator)?.as_ref(),
             ),
             CurveKind::BW6 => Self::transform_pok_and_correctness(
-                environment,
                 storage.reader(&challenge_locator)?.as_ref(),
                 storage.reader(&response_locator)?.as_ref(),
-                &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
             ),
         };
         let response_hash = match result {
@@ -194,6 +191,7 @@ impl Verification {
         trace!("Verification succeeded! Writing the next challenge file");
 
         // Fetch the compression settings.
+        // FIXME: removed the compression/decompression part, since we don't implement it
         let response_is_compressed = environment.compressed_outputs();
         let next_challenge_is_compressed = environment.compressed_inputs();
 
@@ -216,17 +214,20 @@ impl Verification {
             }
 
             match settings.curve() {
+                CurveKind::Bls12_381 => Self::decompress(
+                    storage.reader(&response_locator)?.as_ref(),
+                    storage.writer(&next_challenge_locator)?.as_mut(),
+                    response_hash.as_ref(),
+                )?,
                 CurveKind::Bls12_377 => Self::decompress(
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),
                     response_hash.as_ref(),
-                    &phase1_chunked_parameters!(Bls12_377, settings, chunk_id),
                 )?,
                 CurveKind::BW6 => Self::decompress(
                     storage.reader(&response_locator)?.as_ref(),
                     storage.writer(&next_challenge_locator)?.as_mut(),
                     response_hash.as_ref(),
-                    &phase1_chunked_parameters!(BW6_761, settings, chunk_id),
                 )?,
             };
 
@@ -258,13 +259,11 @@ impl Verification {
     }
 
     #[inline]
-    fn transform_pok_and_correctness<T: Engine + Sync>(
-        environment: &Environment,
+    fn transform_pok_and_correctness(
         challenge_reader: &[u8],
         response_reader: &[u8],
-        parameters: &Phase1Parameters<T>,
     ) -> Result<GenericArray<u8, U64>, CoordinatorError> {
-        debug!("Verifying 2^{} powers of tau", parameters.total_size_in_log2);
+        debug!("Verifying challenges");
 
         // Check that the challenge hashes match.
         let challenge_hash = {
@@ -290,55 +289,98 @@ impl Verification {
 
         // Compute the response hash using the response file.
         let response_hash = calculate_hash(response_reader);
-
-        // Fetch the compression settings.
-        let compressed_challenge = environment.compressed_inputs();
-        let compressed_response = environment.compressed_outputs();
+        debug!("Response Reader hash is {}", pretty_hash!(&response_hash));
+        debug!("Challenge Reader is {}", pretty_hash!(&challenge_reader[0..256]));
+        debug!("Response Reader is {}", pretty_hash!(&response_reader[0..256]));
 
         // Fetch the public key of the contributor.
-        let public_key = PublicKey::read(response_reader, compressed_response, &parameters)?;
+        // let public_key = PublicKey::read(response_reader, compressed_response, &parameters)?;
         // trace!("Public key of the contributor is {:#?}", public_key);
 
         trace!("Starting verification");
-        Phase1::verification(
-            challenge_reader,
-            response_reader,
-            &public_key,
-            &challenge_hash,
-            compressed_challenge,
-            compressed_response,
-            CheckForCorrectness::No,
-            CheckForCorrectness::Full,
-            &parameters,
-        )?;
+
+        // Self::verify_masp(&challenge_reader, &response_reader);
+        Self::verify_test_masp(&challenge_reader, &response_reader);
+
         trace!("Completed verification");
 
         Ok(response_hash)
     }
+    #[inline]
+    fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
+        let masp_spend =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Spend params");
+
+        let masp_output =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Output params");
+
+        let masp_convert =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Convert params");
+
+        let new_masp_spend =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Spend new_params");
+
+        let new_masp_output =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Output new_params");
+
+        let new_masp_convert =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Convert new_params");
+
+        let spend_hash = match verify_contribution(&masp_spend, &new_masp_spend) {
+            Ok(hash) => hash,
+            Err(_) => panic!("invalid MASP Spend transformation!"),
+        };
+
+        let output_hash = match verify_contribution(&masp_output, &new_masp_output) {
+            Ok(hash) => hash,
+            Err(_) => panic!("invalid MASP Output transformation!"),
+        };
+
+        let convert_hash = match verify_contribution(&masp_convert, &new_masp_convert) {
+            Ok(hash) => hash,
+            Err(_) => panic!("invalid MASP Convert transformation!"),
+        };
+
+        let mut h = Blake2b512::new();
+        h.update(&spend_hash);
+        h.update(&output_hash);
+        h.update(&convert_hash);
+        let h = h.finalize();
+
+        debug!("Verification hash: 0x{:02x}", h.iter().format(""));
+    }
 
     #[inline]
-    fn decompress<'a, T: Engine + Sync>(
+    fn verify_test_masp(challenge_reader: &[u8], response_reader: &[u8]) {
+        let masp_test =
+            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Test params");
+
+        let new_masp_test =
+            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Spend new_params");
+
+        let test_hash = match verify_contribution(&masp_test, &new_masp_test) {
+            Ok(hash) => hash,
+            Err(_) => panic!("invalid MASP Spend transformation!"),
+        };
+
+        let mut h = Blake2b512::new();
+        h.update(&test_hash);
+        let h = h.finalize();
+
+        debug!("Verification hash: 0x{:02x}", h.iter().format(""));
+    }
+
+    #[inline]
+    fn decompress(
         response_reader: &[u8],
         mut next_challenge_writer: &mut [u8],
         response_hash: &[u8],
-        parameters: &Phase1Parameters<T>,
     ) -> Result<(), CoordinatorError> {
-        {
-            (&mut next_challenge_writer[0..]).write_all(response_hash)?;
-            next_challenge_writer.flush()?;
-        }
+        // Copies hash of previous response to the new challenge locator, then adds the parameters
+        (&mut next_challenge_writer[0..]).write_all(response_hash)?;
+        (&mut next_challenge_writer[64..]).write_all(&response_reader[64..])?;
 
-        trace!("Decompressing the response file for the next challenge");
-        Phase1::decompress(
-            response_reader,
-            next_challenge_writer,
-            CheckForCorrectness::No,
-            &parameters,
-        )?;
-        next_challenge_writer.flush()?;
-        trace!("Decompressed the response file for the next challenge");
-
-        Ok(())
+        Ok(next_challenge_writer.flush()?)
     }
 }
 
@@ -361,9 +403,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_verification_run() {
-        initialize_test_environment(&TEST_ENVIRONMENT_3);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_3.clone(), Arc::new(Dummy)).unwrap();
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy)).unwrap();
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID).clone();
         let contributor_signing_key = "secret_key".to_string();
@@ -389,7 +431,7 @@ mod tests {
 
         // Define test parameters.
         let round_height = coordinator.current_round_height().unwrap();
-        let number_of_chunks = TEST_ENVIRONMENT_3.number_of_chunks();
+        let number_of_chunks = TEST_ENVIRONMENT_ANOMA.number_of_chunks();
         let is_final = true;
 
         for chunk_id in 0..number_of_chunks {
@@ -408,7 +450,7 @@ mod tests {
             let storage = coordinator.storage_mut();
 
             if !storage.exists(response_locator) {
-                let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_3, chunk_id, false);
+                let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {
@@ -422,7 +464,7 @@ mod tests {
             let mut seed: Seed = [0; SEED_LENGTH];
             rand::thread_rng().fill_bytes(&mut seed[..]);
             Computation::run(
-                &TEST_ENVIRONMENT_3,
+                &TEST_ENVIRONMENT_ANOMA,
                 storage,
                 signature.clone(),
                 &contributor_signing_key,
@@ -435,7 +477,7 @@ mod tests {
 
             // Run verification on chunk.
             Verification::run(
-                &TEST_ENVIRONMENT_3,
+                &TEST_ENVIRONMENT_ANOMA,
                 storage,
                 signature,
                 &verifier_signing_key,

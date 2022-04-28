@@ -3,8 +3,7 @@ use crate::{
     environment::{Environment, Parameters, Testing},
     objects::{Participant, Round},
     storage::Disk,
-    Coordinator,
-    CoordinatorError,
+    Coordinator, CoordinatorError,
 };
 
 use once_cell::sync::Lazy;
@@ -25,6 +24,16 @@ pub static TEST_ENVIRONMENT: Lazy<Environment> = Lazy::new(|| Testing::from(Para
 
 /// Environment for testing purposes only.
 pub static TEST_ENVIRONMENT_3: Lazy<Environment> = Lazy::new(|| Testing::from(Parameters::Test3Chunks).into());
+
+/// Environment for testing purposes only.
+pub static TEST_ENVIRONMENT_ANOMA: Lazy<Environment> = Lazy::new(|| {
+    Testing::from(Parameters::TestCustom {
+        number_of_chunks: 1,
+        power: 8,
+        batch_size: 128,
+    })
+    .into()
+});
 
 /// Round start datetime for testing purposes only.
 pub static TEST_STARTED_AT: Lazy<OffsetDateTime> = Lazy::new(|| datetime!(1970-01-01 00:01:01 UTC));

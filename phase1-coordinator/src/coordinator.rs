@@ -6,26 +6,14 @@ use crate::{
     authentication::Signature,
     commands::{Aggregation, Initialization},
     coordinator_state::{
-        CeremonyStorageAction,
-        CoordinatorState,
-        DropParticipant,
-        ParticipantInfo,
-        ResetCurrentRoundStorageAction,
+        CeremonyStorageAction, CoordinatorState, DropParticipant, ParticipantInfo, ResetCurrentRoundStorageAction,
         RoundMetrics,
     },
     environment::{Deployment, Environment},
     objects::{participant::*, task::TaskInitializationError, ContributionFileSignature, LockedLocators, Round, Task},
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        LocatorPath,
-        Object,
-        StorageAction,
-        StorageLocator,
-        StorageObject,
-        UpdateAction,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, LocatorPath, Object, StorageAction,
+        StorageLocator, StorageObject, UpdateAction,
     },
 };
 use setup_utils::calculate_hash;
@@ -406,9 +394,10 @@ impl Coordinator {
     #[inline]
     pub fn initialize(&mut self) -> Result<(), CoordinatorError> {
         // Check if the deployment is in production, that the signature scheme is secure.
-        if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
-            return Err(CoordinatorError::SignatureSchemeIsInsecure);
-        }
+        // TODO: add again the signature check after the Signature trait is implemented
+        // if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
+        //     return Err(CoordinatorError::SignatureSchemeIsInsecure);
+        // }
 
         info!("Coordinator is booting up");
         info!("{:#?}", self.environment.parameters());
@@ -1501,6 +1490,8 @@ impl Coordinator {
                 "Challenge is located in {}",
                 self.storage.to_path(&challenge_file_locator)?
             );
+
+            debug!("Challenge is {}", pretty_hash!(&challenge_reader));
             debug!("Challenge hash is {}", pretty_hash!(&challenge_hash.as_slice()));
 
             // Compute the response hash.
@@ -1511,6 +1502,7 @@ impl Coordinator {
                 self.storage
                     .to_path(&Locator::ContributionFile(response_file_locator))?
             );
+            debug!("Response is {}", pretty_hash!(&response_reader));
             debug!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
 
             // Fetch the challenge hash from the response file.
@@ -1595,6 +1587,28 @@ impl Coordinator {
             }
             _ => Err(CoordinatorError::StorageUpdateFailed),
         }
+    }
+
+    #[inline]
+    pub(crate) fn get_challenge(
+        &mut self,
+        round_height: u64,
+        chunk_id: u64,
+        contribution_id: u64,
+        is_verified: bool,
+    ) -> Result<Vec<u8>, CoordinatorError> {
+        // Fetch the challenge, response, and contribution file signature locators.
+        let challenge_file_locator = Locator::ContributionFile(ContributionLocator::new(
+            round_height,
+            chunk_id,
+            contribution_id,
+            is_verified,
+        ));
+        // Get the challenge from the challenge file locator
+        let challenge_reader = self.storage.reader(&challenge_file_locator)?;
+        // let challenge_hash = calculate_hash(challenge_reader.as_ref());
+
+        Ok(challenge_reader.to_vec())
     }
 
     /// Writes the bytes of a contribution to storage at the appropriate file
@@ -1956,6 +1970,7 @@ impl Coordinator {
         // Execute round aggregation and aggregate verification for the current round.
         {
             debug!("Coordinator is starting aggregation and aggregate verification");
+            // FIXME: removed aggregation and CoordinatorError::RoundFileMissing. We don't need the aggregation function. Hopefully, it doesn't break anything.
             Aggregation::run(&self.environment, &mut self.storage, &round)?;
             debug!("Coordinator completed aggregation and aggregate verification");
         }
@@ -2009,7 +2024,7 @@ impl Coordinator {
                 warn!("Coordinator may be missing a call to `try_aggregate` for the current round");
                 return Err(CoordinatorError::RoundFileMissing);
             }
-            // self.aggregate_contributions(&mut self.storage)?;
+            self.aggregate_contributions()?;
         }
 
         // Create the new round height.
@@ -2604,6 +2619,10 @@ impl Coordinator {
 
         // Fetch whether this is the final contribution of the specified chunk.
         let is_final_contribution = chunk.only_contributions_complete(round.expected_number_of_contributions());
+        info!(
+            "EXPECTED NUMBER OF CONTRIBUTIONS: {}",
+            round.expected_number_of_contributions()
+        );
 
         // Fetch the verified response locator and the contribution file signature locator.
         let verified_locator = match is_final_contribution {
@@ -2811,9 +2830,9 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_initialization() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
 
         {
             // Run initialization.
@@ -2869,12 +2888,12 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_contributor_try_lock_chunk() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID);
         let contributor_2 = Lazy::force(&TEST_CONTRIBUTOR_ID_2);
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
         initialize_coordinator(&mut coordinator)?;
 
         {
@@ -2933,12 +2952,12 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_contributor_add_contribution() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT_3);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID).clone();
         let contributor_signing_key: SigningKey = "secret_key".to_string();
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_3.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
         initialize_coordinator(&mut coordinator)?;
 
         {
@@ -2965,18 +2984,16 @@ mod tests {
             // Run the computation
             let mut seed: Seed = [0; SEED_LENGTH];
             rand::thread_rng().fill_bytes(&mut seed[..]);
-            assert!(
-                coordinator
-                    .run_computation(
-                        round_height,
-                        chunk_id,
-                        contribution_id,
-                        &contributor,
-                        &contributor_signing_key,
-                        &seed
-                    )
-                    .is_ok()
-            );
+            assert!(coordinator
+                .run_computation(
+                    round_height,
+                    chunk_id,
+                    contribution_id,
+                    &contributor,
+                    &contributor_signing_key,
+                    &seed
+                )
+                .is_ok());
         }
 
         // Add contribution for round 1 chunk 0 contribution 1.
@@ -2999,12 +3016,12 @@ mod tests {
     #[test]
     #[serial]
     fn coordinator_verifier_verify_contribution() -> anyhow::Result<()> {
-        initialize_test_environment(&TEST_ENVIRONMENT_3);
+        initialize_test_environment(&TEST_ENVIRONMENT_ANOMA);
 
         let contributor = Lazy::force(&TEST_CONTRIBUTOR_ID);
         let contributor_signing_key: SigningKey = "secret_key".to_string();
 
-        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_3.clone(), Arc::new(Dummy))?;
+        let mut coordinator = Coordinator::new(TEST_ENVIRONMENT_ANOMA.clone(), Arc::new(Dummy))?;
         initialize_coordinator(&mut coordinator)?;
 
         // Check current round height is now 1.
@@ -3021,18 +3038,16 @@ mod tests {
             // Run computation on round 1 chunk 0 contribution 1.
             let mut seed: Seed = [0; SEED_LENGTH];
             rand::thread_rng().fill_bytes(&mut seed[..]);
-            assert!(
-                coordinator
-                    .run_computation(
-                        round_height,
-                        chunk_id,
-                        contribution_id,
-                        contributor,
-                        &contributor_signing_key,
-                        &seed
-                    )
-                    .is_ok()
-            );
+            assert!(coordinator
+                .run_computation(
+                    round_height,
+                    chunk_id,
+                    contribution_id,
+                    contributor,
+                    &contributor_signing_key,
+                    &seed
+                )
+                .is_ok());
 
             // Add round 1 chunk 0 contribution 1.
             assert!(coordinator.add_contribution(chunk_id, &contributor).is_ok());
@@ -3330,13 +3345,11 @@ mod tests {
         let mut seeds = HashMap::new();
         for chunk_id in 0..TEST_ENVIRONMENT_3.number_of_chunks() {
             // Ensure contribution ID 0 is already verified by the coordinator.
-            assert!(
-                coordinator
-                    .current_round()?
-                    .chunk(chunk_id)?
-                    .get_contribution(0)?
-                    .is_verified()
-            );
+            assert!(coordinator
+                .current_round()?
+                .chunk(chunk_id)?
+                .get_contribution(0)?
+                .is_verified());
 
             // As contribution ID 0 is initialized by the coordinator, iterate from
             // contribution ID 1 up to the expected number of contributions.

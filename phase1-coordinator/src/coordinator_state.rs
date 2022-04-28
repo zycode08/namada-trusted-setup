@@ -5,10 +5,9 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError,
-    TimeSource,
+    CoordinatorError, TimeSource,
 };
-use phase1::ProvingSystem;
+// use phase1::ProvingSystem;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -2804,11 +2803,15 @@ impl CoordinatorState {
                                         as u64
                             })
                             .sum::<u64>();
-
+                        // Removed dependencies to given ProvingSystems in parameters
+                        /*
                         let estimated_time_remaining = match self.environment.parameters().proving_system() {
                             ProvingSystem::Groth16 => (cumulative_seconds / number_of_contributors_left) / 2,
                             ProvingSystem::Marlin => cumulative_seconds / number_of_contributors_left,
                         };
+                        */
+
+                        let estimated_time_remaining = cumulative_seconds / number_of_contributors_left;
 
                         let estimated_aggregation_time = (contributor_average_per_task + verifier_average_per_task)
                             * self.environment.number_of_chunks();
@@ -3355,9 +3358,7 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState,
-        MockTimeSource,
-        SystemTimeSource,
+        CoordinatorState, MockTimeSource, SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

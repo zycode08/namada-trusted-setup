@@ -1,5 +1,6 @@
 use phase1_coordinator::{
     authentication::{Dummy, Signature},
+    commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::ContributionLocator,
@@ -11,33 +12,73 @@ use phase1_cli::{requests, ContributorOpt};
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
-const challenge_hash: [u8; 64] = [
-    //FIXME: remove
-    158, 167, 167, 94, 234, 132, 233, 197, 1, 148, 182, 205, 36, 136, 75, 54, 202, 188, 135, 189, 177, 222, 187, 165,
-    159, 128, 163, 15, 86, 185, 122, 72, 126, 37, 93, 199, 216, 101, 191, 240, 140, 245, 71, 217, 225, 170, 47, 76, 74,
-    27, 38, 64, 190, 181, 33, 94, 137, 255, 187, 144, 45, 114, 74, 232,
-];
+use std::fs::File;
+use std::io::{Read, Write};
+use tracing::debug;
 
-fn compute_contribution_mock() -> Vec<u8> {
-    //FIXME: remove and compute proper contribution
-    let mut contribution: Vec<u8> = Vec::with_capacity(4576);
+static ANOMA_FILE_SIZE: usize = 4_000;
 
-    // Set bytes 0..64 of contribution to be the hash of the challenge (hardcoded for now)
-    contribution.extend_from_slice(&challenge_hash);
-    // Fill the rest of contribution with random bytes
-    let random: Vec<u8> = (64..4576).map(|_| rand::random::<u8>()).collect();
-    contribution.extend_from_slice(&random);
+macro_rules! pretty_hash {
+    ($hash:expr) => {{
+        let mut output = format!("\n\n");
+        for line in $hash.chunks(16) {
+            output += "\t";
+            for section in line.chunks(4) {
+                for b in section {
+                    output += &format!("{:02x}", b);
+                }
+                output += " ";
+            }
+            output += "\n";
+        }
+        output
+    }};
+}
 
-    contribution
+fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
+    let mut f = File::open(&filename).expect("no file found");
+    let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
+    // let mut buffer = vec![0; metadata.len() as usize];
+    let mut buffer = vec![0; ANOMA_FILE_SIZE];
+    debug!("metadata file length {}", metadata.len());
+    f.read(&mut buffer).expect("buffer overflow");
+
+    buffer
+}
+
+fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
+    let filename: String = String::from(format!("pubkey_{}_contribution_round_{}.params", pubkey, round_height));
+    let mut response_writer = File::create(&filename).unwrap();
+    response_writer.write_all(challenge_hash.as_slice());
+
+    // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
+    Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
+    debug!("response writer {:?}", response_writer);
+
+    get_file_as_byte_vec(&filename)
 }
 
 async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
+    let response_locator = locked_locators.next_contribution();
+    let round_height = response_locator.round_height();
 
     let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
-    let contribution = compute_contribution_mock();
+    let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
+    debug!("Challenge is {}", pretty_hash!(&challenge));
+
+    // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
+    let mut challenge_writer = File::create(String::from(format!("challenge_round_{}.params", round_height))).unwrap();
+    challenge_writer.write_all(challenge.as_slice());
+
+    let challenge_hash = calculate_hash(challenge.as_ref());
+    debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
+
+    let contribution = compute_contribution(pubkey.clone(), round_height, &challenge, challenge_hash.to_vec().as_ref());
+
+    debug!("Contribution length: {}", contribution.len());
 
     let contribution_state = ContributionState::new(
         challenge_hash.to_vec(),
@@ -72,12 +113,12 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
-    let pubkey = String::from("random public key");
+    let pubkey = String::from("random public key 3");
     requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
 
     let mut i = 0;
     loop {
-        if i == 3 {
+        if i == 1 {
             //FIXME: just for testing, remove for production
             break;
         }
@@ -110,13 +151,23 @@ async fn verify_contributions(client: &Client, coordinator: &mut Url) {
     }
 }
 
+async fn update_coordinator(client: &Client, coordinator: &mut Url) {
+    match requests::get_update(client, coordinator).await {
+        Ok(()) => println!("Coordinator updated!"),
+        Err(e) => eprintln!("{}", e),
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
     let opt = ContributorOpt::from_args();
     let client = Client::new();
 
     match opt {
-        ContributorOpt::Contribute(mut url) => { //FIXME: share code
+        ContributorOpt::Contribute(mut url) => {
+            //FIXME: share code
             contribute(&client, &mut url.coordinator).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
@@ -124,6 +175,9 @@ async fn main() {
         }
         ContributorOpt::VerifyContributions(mut url) => {
             verify_contributions(&client, &mut url.coordinator).await;
+        }
+        ContributorOpt::UpdateCoordinator(mut url) => {
+            update_coordinator(&client, &mut url.coordinator).await;
         }
     }
 }

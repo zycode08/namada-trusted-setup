@@ -16,6 +16,9 @@ close-ceremony: # Stop local coordinator (127.0.0.1:8000)
 verify: # Verify pending contributions on local coordinator (127.0.0.1:8000)
 	$(CARGO) run --bin phase1 --features=cli verify-contributions
 
+update-coordinator: # Update manually the coordinator
+	$(CARGO) run --bin phase1 --features=cli update-coordinator
+
 run-coordinator:
 	$(CARGO) run --bin phase1-coordinator
 

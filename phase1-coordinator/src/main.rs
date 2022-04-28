@@ -13,12 +13,13 @@ use tokio::sync::RwLock;
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
 pub async fn main() {
+    tracing_subscriber::fmt::init();
     // Set the environment
     let parameters = Parameters::Custom(Settings::new(
         //FIXME: update these
-        ContributionMode::Chunked,
+        ContributionMode::Full,
         ProvingSystem::Groth16,
-        CurveKind::Bls12_377,
+        CurveKind::Bls12_381,
         6,  /* power */
         16, /* batch_size */
         16, /* chunk_size */
@@ -52,7 +53,8 @@ pub async fn main() {
             rest::heartbeat,
             rest::get_tasks_left,
             rest::stop_coordinator,
-            rest::verify_chunks
+            rest::verify_chunks,
+            rest::get_challenge,
         ])
         .manage(coordinator);
 

@@ -26,7 +26,7 @@
 //! number of participants in the round.
 
 #[macro_use]
-mod macros;
+pub mod macros;
 
 pub mod authentication;
 
