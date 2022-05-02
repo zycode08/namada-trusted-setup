@@ -1,4 +1,4 @@
-use crate::{objects::Participant, storage::Disk};
+use crate::{objects::Participant, storage::Disk, authentication::KeyPair};
 pub use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
 use setup_utils::{CheckForCorrectness, UseCompression};
 
@@ -269,6 +269,8 @@ pub struct Environment {
     coordinator_contributors: Vec<Participant>,
     /// The verifiers managed by the coordinator.
     coordinator_verifiers: Vec<Participant>,
+    /// The signing key used by the default coordinator's verifier
+    default_verifier_signing_key: String,
 
     /// The software version number of the coordinator.
     software_version: u64,
@@ -435,6 +437,11 @@ impl Environment {
         &self.coordinator_verifiers
     }
 
+    /// Returns the default verifiers' signing key.
+    pub fn default_verifier_signing_key(&self) -> String {
+        self.default_verifier_signing_key.clone()
+    }
+
     ///
     /// Returns the software version number of the coordinator.
     ///
@@ -579,6 +586,9 @@ impl std::ops::Deref for Testing {
 
 impl std::default::Default for Testing {
     fn default() -> Self {
+        // Generate default verifier of coordinator
+        let keypair = KeyPair::new();
+
         Self {
             environment: Environment {
                 parameters: Parameters::Test3Chunks.to_settings(),
@@ -604,7 +614,8 @@ impl std::default::Default for Testing {
                 queue_wait_time: 0,
 
                 coordinator_contributors: vec![Participant::new_contributor("testing-coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier("testing-coordinator-verifier")],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
+                default_verifier_signing_key: keypair.sigkey(),
 
                 software_version: 1,
                 deployment: Deployment::Testing,
@@ -697,6 +708,9 @@ impl std::ops::DerefMut for Development {
 
 impl std::default::Default for Development {
     fn default() -> Self {
+        // Generate default verifier of coordinator
+        let keypair = KeyPair::new();
+
         Self {
             environment: Environment {
                 parameters: Parameters::AleoInner.to_settings(),
@@ -722,7 +736,8 @@ impl std::default::Default for Development {
                 queue_wait_time: 60,
 
                 coordinator_contributors: vec![Participant::new_contributor("development-coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier("development-coordinator-verifier")],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
+                default_verifier_signing_key: keypair.sigkey(),
 
                 software_version: 1,
                 deployment: Deployment::Development,
@@ -814,6 +829,9 @@ impl std::ops::Deref for Production {
 
 impl std::default::Default for Production {
     fn default() -> Self {
+        // Generate default verifier of coordinator
+        let keypair = KeyPair::new();
+
         Self {
             environment: Environment {
                 parameters: Parameters::AleoInner.to_settings(),
@@ -839,7 +857,8 @@ impl std::default::Default for Production {
                 queue_wait_time: 120,
 
                 coordinator_contributors: vec![Participant::new_contributor("coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier("coordinator-verifier")], //FIXME: generate a random address here and save the corresponding private key somewhere
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
+                default_verifier_signing_key: keypair.sigkey(),
 
                 software_version: 1,
                 deployment: Deployment::Production,

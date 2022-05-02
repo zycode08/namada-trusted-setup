@@ -5,7 +5,7 @@
 
 use std::{
     net::{IpAddr, SocketAddr},
-    sync::Arc, collections::HashMap,
+    sync::Arc, io::Write,
 };
 
 use phase1::{ContributionMode, ProvingSystem};
@@ -14,12 +14,12 @@ use phase1_coordinator::{
     environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ContributionLocator, ContributionSignatureLocator},
+    storage::{ANOMA_FILE_SIZE, ContributionLocator, ContributionSignatureLocator},
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
     Coordinator,
-    Participant,
+    Participant, commands::Computation,
 };
 use rocket::{
     http::{ContentType, Status},
@@ -31,7 +31,6 @@ use rocket::{
 
 use tokio::sync::RwLock;
 
-const CONTRIBUTION_SIZE: usize = 4576;
 const ROUND_HEIGHT: u64 = 1;
 
 struct TestParticipant {
@@ -43,15 +42,16 @@ struct TestParticipant {
 struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
+    locked_locators: LockedLocators,
     unknown_pariticipant: TestParticipant
 }
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
     let parameters = Parameters::Custom(Settings::new(
-        ContributionMode::Chunked,
+        ContributionMode::Full,
         ProvingSystem::Groth16,
-        CurveKind::Bls12_377,
+        CurveKind::Bls12_381,
         6,  /* power */
         16, /* batch_size */
         16, /* chunk_size */
@@ -85,7 +85,7 @@ fn build_context() -> TestCtx {
         .unwrap();
     coordinator.update().unwrap();
 
-    coordinator.try_lock(&contributor2.clone()).unwrap();
+    let (_, locked_locators) = coordinator.try_lock(&contributor1).unwrap();
 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
@@ -94,6 +94,7 @@ fn build_context() -> TestCtx {
             rest::join_queue,
             rest::lock_chunk,
             rest::get_chunk,
+            rest::get_challenge,
             rest::post_contribution_chunk,
             rest::contribute_chunk,
             rest::update_coordinator,
@@ -108,7 +109,7 @@ fn build_context() -> TestCtx {
     let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2 };
     let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3 };
 
-    TestCtx { rocket, contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant }
+    TestCtx { rocket, contributors: vec![test_participant1, test_pariticpant2], locked_locators, unknown_pariticipant }
 }
 
 #[test]
@@ -211,19 +212,8 @@ fn test_get_tasks_left() {
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
-    // Ok no tasks left
-    let mut pubkey = ctx.contributors[0].keypair.pubkey();
-    req = client
-        .get("/contributor/get_tasks_left")
-        .json(&pubkey);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
-    let list: LinkedList<Task> = response.into_json().unwrap();
-    assert!(list.is_empty());
-
     // Ok tasks left
-    pubkey = ctx.contributors[1].keypair.pubkey();
+    let pubkey = ctx.contributors[0].keypair.pubkey();
     req = client
         .get("/contributor/get_tasks_left")
         .json(&pubkey);
@@ -258,20 +248,10 @@ fn test_join_queue() {
     assert!(response.body().is_some());
 
     // Ok request
-    let pubkey = ctx.contributors[0].keypair.pubkey();
+    let pubkey = ctx.unknown_pariticipant.keypair.pubkey();
     req = client
         .post("/contributor/join_queue")
         .json(&pubkey)
-        .remote(socket_address);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
-
-    // Ok request, different contributor, same ip
-    let pubkey2 = ctx.contributors[1].keypair.pubkey();
-    req = client
-        .post("/contributor/join_queue")
-        .json(&pubkey2)
         .remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -331,6 +311,22 @@ fn test_wrong_get_chunk() {
     assert!(response.body().is_some());
 }
 
+/// Test wrong usage of get_challenge.
+#[test]
+fn test_wrong_get_challenge() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong request, non-json body
+    let req = client
+        .post("/contributor/challenge")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::NotFound);
+    assert!(response.body().is_some());
+}
+
 /// Test wrong usage of post_contribution_chunk.
 #[test]
 fn test_wrong_post_contribution_chunk() {
@@ -387,8 +383,8 @@ fn test_wrong_contribute_chunk() {
 
 /// To test a full contribution we need to test the 5 involved endpoints sequentially:
 /// 
-/// - lock_chunk
 /// - get_chunk
+/// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
@@ -400,40 +396,33 @@ fn test_contribution() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Lock chunk
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    let mut req = client
-        .post("/contributor/lock_chunk")
-        .json(&pubkey);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
-    let locked_locators: LockedLocators = response.into_json().unwrap();
-
     // Download chunk
-    let chunk_request = GetChunkRequest::new(pubkey.clone(), locked_locators);
-    req = client.get("/download/chunk").json(&chunk_request);
+    let pubkey = ctx.contributors[0].keypair.pubkey();
+    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.locked_locators.clone());
+    let mut req = client.get("/download/chunk").json(&chunk_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
     let task: Task = response.into_json().unwrap();
 
+    // Get challenge
+    req = client.get("/contributor/challenge").json(&ctx.locked_locators);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+    let challenge: Vec<u8> = response.into_json().unwrap();
+
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
 
-    let mut contribution: Vec<u8> = Vec::with_capacity(CONTRIBUTION_SIZE);
+    let challenge_hash = calculate_hash(challenge.as_ref());
 
-    // Set bytes 0..64 of contribution to be the hash of the challenge (hardcoded for now)
-    let challenge_hash: [u8; 64] = [
-        158, 167, 167, 94, 234, 132, 233, 197, 1, 148, 182, 205, 36, 136, 75, 54, 202, 188, 135, 189, 177, 222, 187,
-        165, 159, 128, 163, 15, 86, 185, 122, 72, 126, 37, 93, 199, 216, 101, 191, 240, 140, 245, 71, 217, 225, 170,
-        47, 76, 74, 27, 38, 64, 190, 181, 33, 94, 137, 255, 187, 144, 45, 114, 74, 232,
-    ];
-    contribution.extend_from_slice(&challenge_hash);
+    let mut contribution: Vec<u8> = Vec::new();
+    contribution.write_all(challenge_hash.as_slice()).unwrap();
+    Computation::contribute_test_masp_cli(&challenge, &mut contribution);
 
-    // Fill the rest of contribution with random bytes
-    let random: Vec<u8> = (64..CONTRIBUTION_SIZE).map(|_| rand::random::<u8>()).collect();
-    contribution.extend_from_slice(&random);
+    // Initial contribution size is 2332 but the Coordinator expect ANOMA_FILE_SIZE. Extend to this size with trailing 0s
+    contribution.resize(ANOMA_FILE_SIZE as usize, 0);
 
     let contribution_file_signature_locator =
         ContributionSignatureLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
@@ -478,6 +467,4 @@ fn test_contribution() {
      let response = req.dispatch();
      assert_eq!(response.status(), Status::Ok);
      assert!(response.body().is_none());
-
-    panic!(); //FIXME: remove
 }

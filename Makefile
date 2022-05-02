@@ -1,5 +1,6 @@
 CARGO := cargo
 CARGO_NIGHTLY := $(CARGO) +nightly
+CLI_FLAGS := --bin phase1 --features=cli
 
 build:
 	$(CARGO) build
@@ -8,16 +9,16 @@ check:
 	$(CARGO) check
 
 contribution: # Run contributor against a local coordinator (127.0.0.1:8000)
-	$(CARGO) run --bin phase1 --features=cli contribute
+	$(CARGO) run $(CLI_FLAGS) contribute
 
 close-ceremony: # Stop local coordinator (127.0.0.1:8000)
-	$(CARGO) run --bin phase1 --features=cli close-ceremony
+	$(CARGO) run $(CLI_FLAGS) close-ceremony
 
 verify: # Verify pending contributions on local coordinator (127.0.0.1:8000)
-	$(CARGO) run --bin phase1 --features=cli verify-contributions
+	$(CARGO) run $(CLI_FLAGS) verify-contributions
 
 update-coordinator: # Update manually the coordinator
-	$(CARGO) run --bin phase1 --features=cli update-coordinator
+	$(CARGO) run $(CLI_FLAGS) update-coordinator
 
 run-coordinator:
 	$(CARGO) run --bin phase1-coordinator

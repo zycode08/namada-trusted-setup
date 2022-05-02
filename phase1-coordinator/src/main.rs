@@ -16,7 +16,6 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
     // Set the environment
     let parameters = Parameters::Custom(Settings::new(
-        //FIXME: update these
         ContributionMode::Full,
         ProvingSystem::Groth16,
         CurveKind::Bls12_381,
@@ -47,6 +46,7 @@ pub async fn main() {
             rest::join_queue,
             rest::lock_chunk,
             rest::get_chunk,
+            rest::get_challenge,
             rest::post_contribution_chunk,
             rest::contribute_chunk,
             rest::update_coordinator,
@@ -54,7 +54,6 @@ pub async fn main() {
             rest::get_tasks_left,
             rest::stop_coordinator,
             rest::verify_chunks,
-            rest::get_challenge,
         ])
         .manage(coordinator);
 

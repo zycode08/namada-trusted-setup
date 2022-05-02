@@ -297,12 +297,12 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
 
     let mut write_lock = coordinator.write().await;
 
-    for (task, verifier) in &pending_verifications {
+    for (task, _) in &pending_verifications {
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
-        if let Err(e) = write_lock.verify(verifier, &String::from("secret_key"), task) {
-            // FIXME: need a random constant private key for the verifier. Save it somewhere in the Coordinator struct
-            return Err(ResponseError::VerificationError(format!("{}", e))); // FIXME: continue with verification of other chunks before returning err?
+        if let Err(e) = write_lock.default_verify(task) {
+            // FIXME: continue verification even if theres' an error? Review the logic of this method and the one of the code that sends the request to this endpoint
+            return Err(ResponseError::VerificationError(format!("{}", e)));
         }
     }
 
