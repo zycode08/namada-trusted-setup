@@ -2,6 +2,7 @@
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
+//  NOTE: these test require the phase1radix files to be placed in the phase1-coordinator folder
 
 use std::{
     net::{IpAddr, SocketAddr},
@@ -36,13 +37,13 @@ const ROUND_HEIGHT: u64 = 1;
 struct TestParticipant {
     inner: Participant,
     address: IpAddr,
-    keypair: KeyPair
+    keypair: KeyPair,
+    locked_locators: Option<LockedLocators>,
 }
 
 struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
-    locked_locators: LockedLocators,
     unknown_pariticipant: TestParticipant
 }
 
@@ -105,11 +106,11 @@ fn build_context() -> TestCtx {
         ])
         .manage(coordinator);
 
-    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1 };
-    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2 };
-    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3 };
+    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
+    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2, locked_locators: None };
+    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
 
-    TestCtx { rocket, contributors: vec![test_participant1, test_pariticpant2], locked_locators, unknown_pariticipant }
+    TestCtx { rocket, contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant }
 }
 
 #[test]
@@ -398,7 +399,7 @@ fn test_contribution() {
 
     // Download chunk
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.locked_locators.clone());
+    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.contributors[0].locked_locators.clone().unwrap());
     let mut req = client.get("/download/chunk").json(&chunk_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -406,7 +407,7 @@ fn test_contribution() {
     let task: Task = response.into_json().unwrap();
 
     // Get challenge
-    req = client.get("/contributor/challenge").json(&ctx.locked_locators);
+    req = client.get("/contributor/challenge").json(ctx.contributors[0].locked_locators.as_ref().unwrap());
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());

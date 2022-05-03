@@ -2,8 +2,9 @@
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
+//  NOTE: these test require the phase1radix files to be placed in the phase1-cli folder
 
-use std::{net::IpAddr, sync::Arc};
+use std::{net::IpAddr, sync::Arc, io::Write};
 
 use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
@@ -11,12 +12,13 @@ use phase1_coordinator::{
     environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ContributionLocator, ContributionSignatureLocator},
+    storage::{ANOMA_FILE_SIZE, ContributionLocator, ContributionSignatureLocator},
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
     Coordinator,
     Participant,
+    commands::Computation,
 };
 use rocket::{routes, Error};
 
@@ -30,13 +32,13 @@ use tokio::{
 };
 
 const COORDINATOR_ADDRESS: &str = "http://127.0.0.1:8000";
-const CONTRIBUTION_SIZE: usize = 4576;
 const ROUND_HEIGHT: u64 = 1;
 
 struct TestParticipant {
     inner: Participant,
     address: IpAddr,
-    keypair: KeyPair
+    keypair: KeyPair,
+    locked_locators: Option<LockedLocators>
 }
 
 struct TestCtx {
@@ -47,9 +49,9 @@ struct TestCtx {
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
 async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) { 
     let parameters = Parameters::Custom(Settings::new(
-        ContributionMode::Chunked,
+        ContributionMode::Full,
         ProvingSystem::Groth16,
-        CurveKind::Bls12_377,
+        CurveKind::Bls12_381,
         6,  /* power */
         16, /* batch_size */
         16, /* chunk_size */
@@ -83,7 +85,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
         .unwrap();
     coordinator.update().unwrap();
 
-    coordinator.try_lock(&contributor2).unwrap();
+    let (_, locked_locators) = coordinator.try_lock(&contributor1).unwrap();
 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
@@ -92,6 +94,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
             rest::join_queue,
             rest::lock_chunk,
             rest::get_chunk,
+            rest::get_challenge,
             rest::post_contribution_chunk,
             rest::contribute_chunk,
             rest::update_coordinator,
@@ -105,9 +108,9 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
     let ignite = build.ignite().await.unwrap();
     let handle = tokio::spawn(ignite.launch());
 
-    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1 };
-    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2 };
-    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3 };
+    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
+    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2, locked_locators: None };
+    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
 
     let ctx = TestCtx { contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant };
 
@@ -196,15 +199,8 @@ async fn test_get_tasks_left() {
     let response = requests::get_tasks_left(&client, &mut url, &unknown_pubkey).await;
     assert!(response.is_err());
 
-    // Ok no tasks left
-    let mut pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, &pubkey)
-        .await
-        .unwrap();
-    assert!(response.is_empty());
-
     // Ok tasks left
-    pubkey = ctx.contributors[1].keypair.pubkey();
+    let pubkey = ctx.contributors[0].keypair.pubkey();
     let response = requests::get_tasks_left(&client, &mut url, &pubkey)
         .await
         .unwrap();
@@ -260,8 +256,8 @@ async fn test_wrong_contribute_chunk() {
 
 /// To test a full contribution we need to test the 5 involved endpoints sequentially:
 /// 
-/// - lock_chunk
 /// - get_chunk
+/// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
@@ -276,34 +272,28 @@ async fn test_contribution() {
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 
-    // Lock chunk
+    // Download chunk
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::post_lock_chunk(&client, &mut url, &pubkey).await;
-    let locked_locators: LockedLocators = response.unwrap();
-
-    // Download chunk
-    let chunk_request = GetChunkRequest::new(pubkey.clone(), locked_locators);
+    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.contributors[0].locked_locators.clone().unwrap());
 
     let response = requests::get_chunk(&client, &mut url, &chunk_request).await;
     let task: Task = response.unwrap();
 
+    // Get challenge
+    let challenge = requests::get_challenge(&client, &mut url, ctx.contributors[0].locked_locators.as_ref().unwrap()).await.unwrap();
+
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
 
-    let mut contribution: Vec<u8> = Vec::with_capacity(CONTRIBUTION_SIZE);
+    let challenge_hash = calculate_hash(challenge.as_ref());
 
-    // Set bytes 0..64 of contribution to be the hash of the challenge (hardcoded for now)
-    let challenge_hash: [u8; 64] = [
-        158, 167, 167, 94, 234, 132, 233, 197, 1, 148, 182, 205, 36, 136, 75, 54, 202, 188, 135, 189, 177, 222, 187,
-        165, 159, 128, 163, 15, 86, 185, 122, 72, 126, 37, 93, 199, 216, 101, 191, 240, 140, 245, 71, 217, 225, 170,
-        47, 76, 74, 27, 38, 64, 190, 181, 33, 94, 137, 255, 187, 144, 45, 114, 74, 232,
-    ];
-    contribution.extend_from_slice(&challenge_hash);
+    let mut contribution: Vec<u8> = Vec::new();
+    contribution.write_all(challenge_hash.as_slice()).unwrap();
+    Computation::contribute_test_masp_cli(&challenge, &mut contribution);
 
-    // Fill the rest of contribution with random bytes
-    let random: Vec<u8> = (64..CONTRIBUTION_SIZE).map(|_| rand::random::<u8>()).collect();
-    contribution.extend_from_slice(&random);
+    // Initial contribution size is 2332 but the Coordinator expect ANOMA_FILE_SIZE. Extend to this size with trailing 0s
+    contribution.resize(ANOMA_FILE_SIZE as usize, 0);
 
     let contribution_file_signature_locator =
         ContributionSignatureLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
@@ -339,7 +329,7 @@ async fn test_contribution() {
         .unwrap();
 
     // Verify chunk
-    requests::get_verify_chunks(&client, &mut url).await.unwrap(); //FIXME: breaks here
+    requests::get_verify_chunks(&client, &mut url).await.unwrap();
 
     // Drop the server
     handle.abort()

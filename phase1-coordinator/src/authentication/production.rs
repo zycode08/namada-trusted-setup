@@ -71,3 +71,18 @@ impl SigTrait for Production {
       public_key.verify(message, &signature).is_ok()
   }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sign_and_verify() {
+        let sig_scheme = Production;
+        let keypair = KeyPair::new();
+        let msg = "This is the message to sign";
+        let signature = sig_scheme.sign(keypair.sigkey().as_ref(), msg).unwrap();
+
+        assert!(sig_scheme.verify(keypair.pubkey().as_ref(), msg, signature.as_ref()));
+    }
+}
