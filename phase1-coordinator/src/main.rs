@@ -13,6 +13,9 @@ use tokio::sync::RwLock;
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
 pub async fn main() {
+    // Add logging 
+    tracing_subscriber::fmt::init();
+
     // Set the environment
     let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
 

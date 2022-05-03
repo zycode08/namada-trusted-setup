@@ -16,7 +16,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tracing::debug;
@@ -58,9 +58,15 @@ fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, 
     let mut response_writer = File::create(&filename).unwrap();
     response_writer.write_all(challenge_hash.as_slice());
 
+    let now = Instant::now();
+
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
-    Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
+    // Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
+    Computation::contribute_masp(&challenge, &mut response_writer);
     debug!("response writer {:?}", response_writer);
+
+    let elapsed_time = now.elapsed();
+    println!("Computing your contribution took {} seconds.", elapsed_time.as_secs());
 
     get_file_as_byte_vec(&filename)
 }
@@ -129,7 +135,7 @@ async fn do_contribute(
 async fn contribute(client: &Client, coordinator: &mut Url) {
     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
     let keypair = KeyPair::new();
-    debug!("Contributor pubkey {:?}", &keypair.pubkey());
+    debug!("Contributor's pubkey {:?}", &keypair.pubkey());
 
     requests::post_join_queue(&client, coordinator, &keypair.pubkey())
         .await
@@ -142,13 +148,18 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             eprintln!("{}", e);
         }
 
-        // Check the contributor's position in the queue 
+        // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey())
             .await
             .unwrap();
 
         match queue_status {
-            ContributorStatus::Queue(position, size) => println!("Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min", position, size, position * 2  ),
+            ContributorStatus::Queue(position, size) => println!(
+                "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
+                position,
+                size,
+                position * 2
+            ),
             ContributorStatus::Round => {
                 if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
                     eprintln!("{}", e);

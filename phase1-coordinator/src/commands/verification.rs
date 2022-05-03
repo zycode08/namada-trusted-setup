@@ -299,8 +299,8 @@ impl Verification {
 
         trace!("Starting verification");
 
-        // Self::verify_masp(&challenge_reader, &response_reader);
-        Self::verify_test_masp(&challenge_reader, &response_reader);
+        Self::verify_masp(&challenge_reader, &response_reader);
+        // Self::verify_test_masp(&challenge_reader, &response_reader);
 
         trace!("Completed verification");
 

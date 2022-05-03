@@ -106,8 +106,8 @@ impl Initialization {
         // NOTE: Add your MPC Parameters initialization function below
         //
 
-        // Self::initialize_masp(&mut writer);
-        Self::initialize_test_masp(&mut writer);
+        Self::initialize_masp(&mut writer);
+        // Self::initialize_test_masp(&mut writer);
 
         trace!("Completed Phase 2 initialization operation");
 
