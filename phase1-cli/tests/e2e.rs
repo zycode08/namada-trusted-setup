@@ -149,12 +149,12 @@ async fn test_heartbeat() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    let response = requests::post_heartbeat(&client, &mut url, &unknown_pubkey).await;
+    let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey).await;
     assert!(response.is_err());
 
     // Ok
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_heartbeat(&client, &mut url, &pubkey)
+    requests::post_heartbeat(&client, &mut url, pubkey)
         .await
         .unwrap();
 
@@ -189,12 +189,12 @@ async fn test_get_tasks_left() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, &unknown_pubkey).await;
+    let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey).await;
     assert!(response.is_err());
 
     // Ok tasks left
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, &pubkey)
+    let response = requests::get_tasks_left(&client, &mut url, pubkey)
         .await
         .unwrap();
     assert_eq!(response.len(), 1);
@@ -214,12 +214,12 @@ async fn test_join_queue() {
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_join_queue(&client, &mut url, &pubkey)
+    requests::post_join_queue(&client, &mut url, pubkey)
         .await
         .unwrap();
 
     // Wrong request, already existing contributor
-    let response = requests::post_join_queue(&client, &mut url, &pubkey).await;
+    let response = requests::post_join_queue(&client, &mut url, pubkey).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -238,7 +238,7 @@ async fn test_wrong_contribute_chunk() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    let contribute_request = ContributeChunkRequest::new(unknown_pubkey, 0);
+    let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
 
     let response = requests::post_contribute_chunk(&client, &mut url, &contribute_request).await;
     assert!(response.is_err());
@@ -268,7 +268,7 @@ async fn test_contribution() {
     // Download chunk
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.contributors[0].locked_locators.clone().unwrap());
+    let chunk_request = GetChunkRequest::new(pubkey.to_owned(), ctx.contributors[0].locked_locators.clone().unwrap());
 
     let response = requests::get_chunk(&client, &mut url, &chunk_request).await;
     let task: Task = response.unwrap();
@@ -298,7 +298,7 @@ async fn test_contribution() {
     let sigkey = ctx.contributors[0].keypair.sigkey();
     let signature = Production
         .sign(
-            sigkey.as_str(),
+            sigkey,
             &contribution_state.signature_message().unwrap(),
         )
         .unwrap();
@@ -315,7 +315,7 @@ async fn test_contribution() {
     requests::post_chunk(&client, &mut url, &post_chunk).await.unwrap();
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(pubkey, task.chunk_id());
+    let contribute_request = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
 
     requests::post_contribute_chunk(&client, &mut url, &contribute_request)
         .await

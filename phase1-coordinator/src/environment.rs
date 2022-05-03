@@ -615,7 +615,7 @@ impl std::default::Default for Testing {
 
                 coordinator_contributors: vec![Participant::new_contributor("testing-coordinator-contributor")],
                 coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
-                default_verifier_signing_key: keypair.sigkey(),
+                default_verifier_signing_key: keypair.sigkey().to_owned(),
 
                 software_version: 1,
                 deployment: Deployment::Testing,
@@ -737,7 +737,7 @@ impl std::default::Default for Development {
 
                 coordinator_contributors: vec![Participant::new_contributor("development-coordinator-contributor")],
                 coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
-                default_verifier_signing_key: keypair.sigkey(),
+                default_verifier_signing_key: keypair.sigkey().to_owned(),
 
                 software_version: 1,
                 deployment: Deployment::Development,
@@ -858,7 +858,7 @@ impl std::default::Default for Production {
 
                 coordinator_contributors: vec![Participant::new_contributor("coordinator-contributor")],
                 coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
-                default_verifier_signing_key: keypair.sigkey(),
+                default_verifier_signing_key: keypair.sigkey().to_owned(),
 
                 software_version: 1,
                 deployment: Deployment::Production,

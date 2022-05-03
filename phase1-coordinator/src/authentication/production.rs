@@ -18,16 +18,16 @@ impl KeyPair {
         KeyPair { pubkey: base64::encode(keypair.pk.deref()), sigkey: base64::encode(keypair.sk.deref()) }
     }
 
-    /// Get the key pair's public key.
+    /// Get a reference to the key pair's pubkey.
     #[must_use]
-    pub fn pubkey(&self) -> String {
-        self.pubkey.clone()
+    pub fn pubkey(&self) -> &str {
+        self.pubkey.as_ref()
     }
 
-    /// Get the key pair's signing (private) key.
+    /// Get a reference to the key pair's sigkey.
     #[must_use]
-    pub fn sigkey(&self) -> String {
-        self.sigkey.clone()
+    pub fn sigkey(&self) -> &str {
+        self.sigkey.as_ref()
     }
 }
 
@@ -81,8 +81,8 @@ mod tests {
         let sig_scheme = Production;
         let keypair = KeyPair::new();
         let msg = "This is the message to sign";
-        let signature = sig_scheme.sign(keypair.sigkey().as_ref(), msg).unwrap();
+        let signature = sig_scheme.sign(keypair.sigkey(), msg).unwrap();
 
-        assert!(sig_scheme.verify(keypair.pubkey().as_ref(), msg, signature.as_ref()));
+        assert!(sig_scheme.verify(keypair.pubkey(), msg, signature.as_ref()));
     }
 }

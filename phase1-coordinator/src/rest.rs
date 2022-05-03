@@ -299,11 +299,8 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
 
     for (task, _) in &pending_verifications {
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
-        //  no external verifiers
-        if let Err(e) = write_lock.default_verify(task) {
-            // FIXME: continue verification even if theres' an error? Review the logic of this method and the one of the code that sends the request to this endpoint
-            return Err(ResponseError::VerificationError(format!("{}", e)));
-        }
+        //  no external verifiers. If a verification fails return immediately without verifying the remaining contributions
+        write_lock.default_verify(task).map_err(|e| ResponseError::VerificationError(format!("{}", e)))?;
     }
 
     Ok(())

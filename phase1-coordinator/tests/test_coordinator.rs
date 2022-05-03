@@ -61,9 +61,9 @@ fn build_context() -> TestCtx {
     let keypair2 = KeyPair::new();
     let keypair3 = KeyPair::new();
 
-    let contributor1 = Participant::new_contributor(keypair1.pubkey().as_ref());
-    let contributor2 = Participant::new_contributor(keypair2.pubkey().as_ref());
-    let unknown_contributor = Participant::new_contributor(keypair3.pubkey().as_ref());
+    let contributor1 = Participant::new_contributor(keypair1.pubkey());
+    let contributor2 = Participant::new_contributor(keypair2.pubkey());
+    let unknown_contributor = Participant::new_contributor(keypair3.pubkey());
 
     let contributor1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
@@ -368,7 +368,7 @@ fn test_wrong_contribute_chunk() {
 
     // Non-existing contributor key
     let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    let contribute_request = ContributeChunkRequest::new(unknown_pubkey, 0);
+    let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
     req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -392,7 +392,7 @@ fn test_contribution() {
 
     // Download chunk
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.contributors[0].locked_locators.clone().unwrap());
+    let chunk_request = GetChunkRequest::new(pubkey.to_owned(), ctx.contributors[0].locked_locators.clone().unwrap());
     let mut req = client.get("/download/chunk").json(&chunk_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -429,7 +429,7 @@ fn test_contribution() {
     let sigkey = ctx.contributors[0].keypair.sigkey();
     let signature = Production
     .sign(
-        sigkey.as_str(),
+        sigkey,
         &contribution_state.signature_message().unwrap(),
     )
     .unwrap();
@@ -449,7 +449,7 @@ fn test_contribution() {
     assert!(response.body().is_none());
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(pubkey, task.chunk_id());
+    let contribute_request = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
 
     req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
