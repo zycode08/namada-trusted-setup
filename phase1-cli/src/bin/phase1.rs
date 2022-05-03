@@ -1,5 +1,5 @@
 use phase1_coordinator::{
-    authentication::{Dummy, Signature},
+    authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
@@ -16,7 +16,9 @@ use std::fs::File;
 use std::io::{Read, Write};
 use tracing::debug;
 
-static ANOMA_FILE_SIZE: usize = 4_000;
+// FIXME: review all this file
+
+static ANOMA_FILE_SIZE: usize = 4_000; //FIXME: take this from storage
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -58,7 +60,7 @@ fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, 
     get_file_as_byte_vec(&filename)
 }
 
-async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
+async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: String, pubkey: String) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
@@ -86,9 +88,10 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
         None,
     )
     .unwrap();
-    let signature = Dummy //FIXME: proper signature
+
+    let signature = Production
         .sign(
-            String::from("private_key").as_str(),
+            sigkey.as_str(),
             &contribution_state.signature_message().unwrap(),
         )
         .unwrap();
@@ -113,8 +116,9 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
-    let pubkey = String::from("random public key 3");
-    requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
+    let keypair = KeyPair::new();
+
+    requests::post_join_queue(&client, coordinator, &keypair.pubkey()).await.unwrap();
 
     let mut i = 0;
     loop {
@@ -128,7 +132,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             eprintln!("{}", e);
         }
 
-        if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
+        if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
             eprintln!("{}", e);
             panic!();
         }
@@ -158,6 +162,7 @@ async fn update_coordinator(client: &Client, coordinator: &mut Url) {
     }
 }
 
+// FIXME: tracing
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -167,7 +172,6 @@ async fn main() {
 
     match opt {
         ContributorOpt::Contribute(mut url) => {
-            //FIXME: share code
             contribute(&client, &mut url.coordinator).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {

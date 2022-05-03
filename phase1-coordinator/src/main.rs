@@ -49,15 +49,14 @@ pub async fn main() {
         ])
         .manage(coordinator);
 
-    match build_rocket.ignite().await {
+    let ignite_rocket = match build_rocket.ignite().await {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Coordinator server didn't ignite: {}", e);
-            return;
+            panic!("Coordinator server didn't ignite: {}", e);
         }
     };
 
     if let Err(e) = ignite_rocket.launch().await {
-        eprintln!("Coordinator server didn't launch: {}", e);
+        panic!("Coordinator server didn't launch: {}", e);
     };
 }
