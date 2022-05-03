@@ -23,7 +23,7 @@ use tracing::debug;
 
 // FIXME: review all this file
 
-static ANOMA_FILE_SIZE: usize = 4_000; //FIXME: take this from storage
+static ANOMA_FILE_SIZE: usize = 400_000_000; //FIXME: take this from storage
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
