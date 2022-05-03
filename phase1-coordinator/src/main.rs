@@ -13,16 +13,8 @@ use tokio::sync::RwLock;
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
 pub async fn main() {
-    tracing_subscriber::fmt::init();
     // Set the environment
-    let parameters = Parameters::Custom(Settings::new(
-        ContributionMode::Full,
-        ProvingSystem::Groth16,
-        CurveKind::Bls12_381,
-        6,  /* power */
-        16, /* batch_size */
-        16, /* chunk_size */
-    ));
+    let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
 
     #[cfg(debug_assertions)]
     let environment: Testing = {
@@ -57,7 +49,7 @@ pub async fn main() {
         ])
         .manage(coordinator);
 
-    let ignite_rocket = match build_rocket.ignite().await {
+    match build_rocket.ignite().await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("Coordinator server didn't ignite: {}", e);

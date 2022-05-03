@@ -49,14 +49,7 @@ struct TestCtx {
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
-    let parameters = Parameters::Custom(Settings::new(
-        ContributionMode::Full,
-        ProvingSystem::Groth16,
-        CurveKind::Bls12_381,
-        6,  /* power */
-        16, /* batch_size */
-        16, /* chunk_size */
-    ));
+    let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
 
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
