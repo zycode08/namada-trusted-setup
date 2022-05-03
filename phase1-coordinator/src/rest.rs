@@ -53,6 +53,15 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 
 type Result<T> = std::result::Result<T, ResponseError>;
 
+/// The status of the contributor related to the current round.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum ContributorStatus {
+    Queue(u64, u64),
+    Round,
+    Finished,
+    Other,
+}
+
 /// Request to get a [Chunk](`crate::objects::Chunk`).
 #[derive(Deserialize, Serialize)]
 pub struct GetChunkRequest {
@@ -171,6 +180,7 @@ pub async fn get_chunk(
     }
 }
 
+/// Download the challenge from the [Coordinator](`crate::Coordinator`) accordingly to the [`LockedLocators`] received from the Contributor.
 #[get("/contributor/challenge", format = "json", data = "<locked_locators>")]
 pub async fn get_challenge(
     coordinator: &State<Coordinator>,
@@ -307,4 +317,37 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Get the queue status of the contributor.
+#[get("/contributor/queue_status", format = "json", data = "<contributor_pubkey>")]
+pub async fn get_contributor_queue_status(
+    coordinator: &State<Coordinator>,
+    contributor_pubkey: Json<String>,
+) -> Result<Json<ContributorStatus>> {
+    let pubkey = contributor_pubkey.into_inner();
+    let contributor = Participant::new_contributor(pubkey.as_str());
+
+    // Check that the contributor is authorized to lock a chunk in the current round.
+    if coordinator.read().await.is_current_contributor(&contributor) {
+        return Ok(Json(ContributorStatus::Round));
+    }
+
+    if coordinator.read().await.is_queue_contributor(&contributor) {
+        let queue_size = coordinator.read().await.state().number_of_queue_contributors() as u64;
+        let queue_position = match coordinator.read().await.state().queue_contributor_info(&contributor) {
+            Some((_, Some(round), _, _)) => round - coordinator.read().await.state().current_round_height(),
+            Some((_, None, _, _)) => queue_size,
+            None => return Ok(Json(ContributorStatus::Other)),
+        };
+
+        return Ok(Json(ContributorStatus::Queue(queue_position, queue_size)));
+    }
+
+    if coordinator.read().await.is_finished_contributor(&contributor) {
+        return Ok(Json(ContributorStatus::Finished));
+    }
+
+    // Not in the queue, not finished, nor in the current round
+    Ok(Json(ContributorStatus::Other))
 }

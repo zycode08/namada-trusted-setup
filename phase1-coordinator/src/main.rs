@@ -46,6 +46,7 @@ pub async fn main() {
             rest::get_tasks_left,
             rest::stop_coordinator,
             rest::verify_chunks,
+            rest::get_contributor_queue_status,
         ])
         .manage(coordinator);
 

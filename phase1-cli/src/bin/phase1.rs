@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
-    rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
+    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
     storage::ContributionLocator,
 };
 use reqwest::{Client, Url};
@@ -12,8 +12,13 @@ use phase1_cli::{requests, ContributorOpt};
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
-use std::fs::File;
-use std::io::{Read, Write};
+use std::{
+    fs::File,
+    io::{Read, Write},
+    thread,
+    time::Duration,
+};
+
 use tracing::debug;
 
 // FIXME: review all this file
@@ -60,7 +65,12 @@ fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, 
     get_file_as_byte_vec(&filename)
 }
 
-async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: String, pubkey: String) -> Result<(), RequestError> {
+async fn do_contribute(
+    client: &Client,
+    coordinator: &mut Url,
+    sigkey: String,
+    pubkey: String,
+) -> Result<(), RequestError> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
@@ -78,7 +88,12 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: String, p
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
 
-    let contribution = compute_contribution(pubkey.clone(), round_height, &challenge, challenge_hash.to_vec().as_ref());
+    let contribution = compute_contribution(
+        pubkey.clone(),
+        round_height,
+        &challenge,
+        challenge_hash.to_vec().as_ref(),
+    );
 
     debug!("Contribution length: {}", contribution.len());
 
@@ -90,10 +105,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: String, p
     .unwrap();
 
     let signature = Production
-        .sign(
-            sigkey.as_str(),
-            &contribution_state.signature_message().unwrap(),
-        )
+        .sign(sigkey.as_str(), &contribution_state.signature_message().unwrap())
         .unwrap();
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
@@ -117,27 +129,42 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: String, p
 async fn contribute(client: &Client, coordinator: &mut Url) {
     // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
     let keypair = KeyPair::new();
+    debug!("Contributor pubkey {:?}", &keypair.pubkey());
 
-    requests::post_join_queue(&client, coordinator, &keypair.pubkey()).await.unwrap();
+    requests::post_join_queue(&client, coordinator, &keypair.pubkey())
+        .await
+        .unwrap();
 
-    let mut i = 0;
     loop {
-        if i == 1 {
-            //FIXME: just for testing, remove for production
-            break;
-        }
+        // For testing purposes only. this needs to be moved to the operator.
         // Update the coordinator
         if let Err(e) = requests::get_update(&client, coordinator).await {
-            //FIXME: ignore this error and continue
             eprintln!("{}", e);
         }
 
-        if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
-            eprintln!("{}", e);
-            panic!();
+        // Check the contributor's position in the queue 
+        let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey())
+            .await
+            .unwrap();
+
+        match queue_status {
+            ContributorStatus::Queue(position, size) => println!("Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min", position, size, position * 2  ),
+            ContributorStatus::Round => {
+                if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
+                    eprintln!("{}", e);
+                    panic!();
+                }
+            }
+            ContributorStatus::Finished => {
+                println!("Contribution done!");
+                break;
+            }
+            ContributorStatus::Other => println!("Something went wrong!"),
         }
 
-        i += 1;
+        // Get status updates each 10 seconds
+        let ten_seconds = Duration::from_secs(10);
+        thread::sleep(ten_seconds);
     }
 }
 
