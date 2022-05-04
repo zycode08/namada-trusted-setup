@@ -21,7 +21,7 @@ update-coordinator: # Update manually the coordinator
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) update-coordinator
 
 run-coordinator:
-	$(CARGO) run --bin phase1-coordinator
+	RUST_LOG=debug $(CARGO) run --bin phase1-coordinator
 
 test-coordinator:
 	$(CARGO) test --test test_coordinator --features testing -- --test-threads=1

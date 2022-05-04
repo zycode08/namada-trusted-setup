@@ -12,7 +12,9 @@ use tokio::sync::RwLock;
 
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
-pub async fn main() {
+pub async fn main() { //FIXME: tracing instead of expects and unwraps?
+    tracing_subscriber::fmt::init(); //FIXME: need this?
+
     // Set the environment
     let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
 

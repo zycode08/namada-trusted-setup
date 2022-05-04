@@ -205,6 +205,7 @@ impl Parameters {
             chunk_size!(number_of_chunks, proving_system, power),
         )
     }
+
     fn test_anoma(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
         let proving_system = ProvingSystem::Groth16;
         Settings::new(
@@ -213,7 +214,7 @@ impl Parameters {
             CurveKind::Bls12_381,
             *power,
             *batch_size,
-            chunk_size!(number_of_chunks, proving_system, power),
+            ChunkSize::from(16_usize),
         )
     }
 }

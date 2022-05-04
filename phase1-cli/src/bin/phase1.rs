@@ -54,7 +54,7 @@ fn compute_contribution(pubkey: &str, round_height: u64, challenge: &[u8], chall
     Computation::contribute_test_masp_cli(challenge, &mut response_writer);
     debug!("response writer {:?}", response_writer);
 
-    Ok(get_file_as_byte_vec(filename.as_str()))
+    Ok(get_file_as_byte_vec(filename.as_str())?)
 }
 
 async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pubkey: &str) -> Result<()> {
@@ -75,7 +75,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
 
-    let contribution = compute_contribution(pubkey, round_height, &challenge, challenge_hash.to_vec().as_ref());
+    let contribution = compute_contribution(pubkey, round_height, &challenge, challenge_hash.to_vec().as_ref())?;
 
     debug!("Contribution length: {}", contribution.len());
 
