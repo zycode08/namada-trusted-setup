@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
-    storage::ContributionLocator,
+    storage::{ContributionLocator, Object},
 };
 use reqwest::{Client, Url};
 
@@ -19,11 +19,9 @@ use std::{
     time::Duration,
 };
 
+use std::convert::TryFrom;
+
 use tracing::debug;
-
-// FIXME: review all this file
-
-static ANOMA_FILE_SIZE: usize = 4_000; //FIXME: take this from storage
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -42,19 +40,36 @@ macro_rules! pretty_hash {
     }};
 }
 
-fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
+fn get_file_as_byte_vec(filename: &String, round_height: u64, contribution_id: u64) -> Vec<u8> {
     let mut f = File::open(&filename).expect("no file found");
     let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
     // let mut buffer = vec![0; metadata.len() as usize];
-    let mut buffer = vec![0; ANOMA_FILE_SIZE];
+
+    let a: u64 = Object::anoma_contribution_file_size(round_height, contribution_id);
+    let b = a as usize;
+    let b = usize::try_from(a).unwrap();
+    let mut buffer = vec![0; b];
+    debug!(
+        "anoma_contribution_file_size: round_height {}, contribution_id {}",
+        round_height, contribution_id
+    );
     debug!("metadata file length {}", metadata.len());
     f.read(&mut buffer).expect("buffer overflow");
 
     buffer
 }
 
-fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
-    let filename: String = String::from(format!("pubkey_{}_contribution_round_{}.params", pubkey, round_height));
+fn compute_contribution(
+    pubkey: String,
+    round_height: u64,
+    challenge: &Vec<u8>,
+    challenge_hash: &Vec<u8>,
+    contribution_id: u64,
+) -> Vec<u8> {
+    let filename: String = String::from(format!(
+        "pubkey_pubkey-placeholder_contribution_round_{}.params",
+        round_height
+    ));
     let mut response_writer = File::create(&filename).unwrap();
     response_writer.write_all(challenge_hash.as_slice());
 
@@ -62,7 +77,7 @@ fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, 
     Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
     debug!("response writer {:?}", response_writer);
 
-    get_file_as_byte_vec(&filename)
+    get_file_as_byte_vec(&filename, round_height, contribution_id)
 }
 
 async fn do_contribute(
@@ -74,6 +89,7 @@ async fn do_contribute(
     let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
+    let contribution_id = response_locator.contribution_id();
 
     let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
@@ -93,6 +109,7 @@ async fn do_contribute(
         round_height,
         &challenge,
         challenge_hash.to_vec().as_ref(),
+        contribution_id,
     );
 
     debug!("Contribution length: {}", contribution.len());
@@ -142,13 +159,18 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             eprintln!("{}", e);
         }
 
-        // Check the contributor's position in the queue 
+        // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey())
             .await
             .unwrap();
 
         match queue_status {
-            ContributorStatus::Queue(position, size) => println!("Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min", position, size, position * 2  ),
+            ContributorStatus::Queue(position, size) => println!(
+                "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
+                position,
+                size,
+                position * 2
+            ),
             ContributorStatus::Round => {
                 if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
                     eprintln!("{}", e);

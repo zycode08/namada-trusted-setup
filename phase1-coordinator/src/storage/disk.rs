@@ -154,10 +154,9 @@ impl Disk {
             }
             Locator::ContributionFile(contribution_locator) => {
                 // Check that the contribution size is correct.
-                let expected_size = Object::contribution_file_size(
-                    &self.environment,
-                    contribution_locator.chunk_id(),
-                    contribution_locator.is_verified(),
+                let expected_size = Object::anoma_contribution_file_size(
+                    contribution_locator.round_height(),
+                    contribution_locator.contribution_id(),
                 );
                 let found_size = file_bytes.len() as u64;
                 debug!(
@@ -495,10 +494,9 @@ impl StorageObject for Disk {
             }
             Locator::ContributionFile(contribution_locator) => {
                 // Check that the contribution size is correct.
-                let expected_size = Object::contribution_file_size(
-                    &self.environment,
-                    contribution_locator.chunk_id(),
-                    contribution_locator.is_verified(),
+                let expected_size = Object::anoma_contribution_file_size(
+                    contribution_locator.round_height(),
+                    contribution_locator.contribution_id(),
                 );
                 let found_size = data.len() as u64;
                 debug!(
@@ -552,10 +550,9 @@ impl StorageObject for Disk {
             }
             Locator::ContributionFile(contribution_locator) => {
                 // Check that the contribution size is correct.
-                let expected_size = Object::contribution_file_size(
-                    &self.environment,
-                    contribution_locator.chunk_id(),
-                    contribution_locator.is_verified(),
+                let expected_size = Object::anoma_contribution_file_size(
+                    contribution_locator.round_height(),
+                    contribution_locator.contribution_id(),
                 );
                 let found_size = memmap.len() as u64;
                 debug!("File size of {} is {}", self.to_path(locator)?, found_size);

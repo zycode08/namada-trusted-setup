@@ -1,8 +1,7 @@
 use crate::{
     environment::Environment,
     objects::{ContributionFileSignature, Round},
-    CoordinatorError,
-    CoordinatorState,
+    CoordinatorError, CoordinatorState,
 };
 use phase1::helpers::CurveKind;
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
@@ -24,7 +23,8 @@ pub struct ContributionLocator {
     is_verified: bool,
 }
 
-pub const ANOMA_FILE_SIZE: u64 = 4_000;
+pub const ANOMA_BASE_FILE_SIZE: u64 = 2_332;
+pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 544;
 
 impl ContributionLocator {
     pub fn new(round_height: u64, chunk_id: u64, contribution_id: u64, is_verified: bool) -> Self {
@@ -157,7 +157,7 @@ impl Object {
 
         match settings.curve() {
             // TODO: change round_filesize
-            CurveKind::Bls12_381 => ANOMA_FILE_SIZE,
+            CurveKind::Bls12_381 => ANOMA_BASE_FILE_SIZE,
             CurveKind::Bls12_377 => round_filesize!(Bls12_377, settings, compressed),
             CurveKind::BW6 => round_filesize!(BW6_761, settings, compressed),
         }
@@ -177,12 +177,20 @@ impl Object {
 
         match (curve, verified) {
             // TODO: add correct verified_contribution_size
-            (CurveKind::Bls12_381, true) => ANOMA_FILE_SIZE,
-            (CurveKind::Bls12_381, false) => ANOMA_FILE_SIZE,
+            (CurveKind::Bls12_381, true) => ANOMA_BASE_FILE_SIZE,
+            (CurveKind::Bls12_381, false) => ANOMA_BASE_FILE_SIZE,
             (CurveKind::Bls12_377, true) => verified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::Bls12_377, false) => unverified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::BW6, true) => verified_contribution_size!(BW6_761, settings, chunk_id, compressed),
             (CurveKind::BW6, false) => unverified_contribution_size!(BW6_761, settings, chunk_id, compressed),
+        }
+    }
+
+    /// Returns dynamically the expected file size of a contribution file.
+    pub fn anoma_contribution_file_size(round_height: u64, contribution_id: u64) -> u64 {
+        match round_height {
+            0 => ANOMA_BASE_FILE_SIZE,
+            _ => ANOMA_BASE_FILE_SIZE + (ANOMA_PER_ROUND_FILE_SIZE_INCREASE * (round_height + contribution_id - 1)),
         }
     }
 

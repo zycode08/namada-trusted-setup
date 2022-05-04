@@ -109,6 +109,8 @@ impl Verification {
             challenge_locator.clone(),
             response_locator.clone(),
             next_challenge_locator.clone(),
+            round_height,
+            current_contribution_id,
         ) {
             error!("Verification failed with {}", error);
             return Err(error);
@@ -158,6 +160,8 @@ impl Verification {
         challenge_locator: Locator,
         response_locator: Locator,
         next_challenge_locator: Locator,
+        round_height: u64,
+        contribution_id: u64,
     ) -> Result<(), CoordinatorError> {
         // Check that the previous and current locators exist in storage.
         if !storage.exists(&challenge_locator) || !storage.exists(&response_locator) {
@@ -209,7 +213,7 @@ impl Verification {
             if !storage.exists(&next_challenge_locator) {
                 storage.initialize(
                     next_challenge_locator.clone(),
-                    Object::contribution_file_size(environment, chunk_id, true),
+                    Object::anoma_contribution_file_size(round_height, contribution_id),
                 )?;
             }
 
@@ -450,7 +454,8 @@ mod tests {
             let storage = coordinator.storage_mut();
 
             if !storage.exists(response_locator) {
-                let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
+                // let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
+                let expected_filesize = Object::anoma_contribution_file_size(round_height, 1);
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {

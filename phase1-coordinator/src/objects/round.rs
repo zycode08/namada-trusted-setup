@@ -2,15 +2,8 @@ use crate::{
     environment::Environment,
     objects::{participant::*, Chunk},
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        LocatorPath,
-        Object,
-        StorageAction,
-        StorageLocator,
-        UpdateAction,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, LocatorPath, Object, StorageAction,
+        StorageLocator, UpdateAction,
     },
     CoordinatorError,
 };
@@ -621,7 +614,10 @@ impl Round {
                 // Initialize the unverified response file.
                 storage.initialize(
                     Locator::ContributionFile(locked_locators.next_contribution.clone()),
-                    Object::contribution_file_size(environment, chunk_id, false),
+                    Object::anoma_contribution_file_size(
+                        locked_locators.next_contribution.round_height(),
+                        locked_locators.next_contribution.contribution_id(),
+                    ),
                 )?;
 
                 // Initialize the contribution file signature.
@@ -654,7 +650,10 @@ impl Round {
         // Initialize the next challenge file.
         storage.initialize(
             Locator::ContributionFile(locators.next_contribution.clone()),
-            Object::contribution_file_size(environment, chunk_id, true),
+            Object::anoma_contribution_file_size(
+                locators.next_contribution.round_height(),
+                locators.next_contribution.contribution_id(),
+            ),
         )?;
 
         // Initialize the contribution file signature.

@@ -394,7 +394,7 @@ mod tests {
             );
 
             if !storage.exists(response_locator) {
-                let expected_filesize = Object::contribution_file_size(&TEST_ENVIRONMENT_ANOMA, chunk_id, false);
+                let expected_filesize = Object::anoma_contribution_file_size(round_height, 1);
                 storage.initialize(response_locator.clone(), expected_filesize).unwrap();
             }
             if !storage.exists(contribution_file_signature_locator) {
