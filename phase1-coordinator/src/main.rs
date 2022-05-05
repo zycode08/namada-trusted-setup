@@ -1,8 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     environment::{ContributionMode, CurveKind, Parameters, Production, ProvingSystem, Settings, Testing},
-    rest,
-    Coordinator,
+    rest, Coordinator,
 };
 
 use rocket::{self, routes};
@@ -13,8 +12,14 @@ use tokio::sync::RwLock;
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
 pub async fn main() {
+    // Add logging
+    tracing_subscriber::fmt::init();
     // Set the environment
-    let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
+    let parameters = Parameters::TestAnoma {
+        number_of_chunks: 1,
+        power: 6,
+        batch_size: 16,
+    };
 
     #[cfg(debug_assertions)]
     let environment: Testing = {
@@ -34,20 +39,23 @@ pub async fn main() {
 
     // Launch Rocket REST server
     let build_rocket = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::get_chunk,
-            rest::get_challenge,
-            rest::post_contribution_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::get_tasks_left,
-            rest::stop_coordinator,
-            rest::verify_chunks,
-            rest::get_contributor_queue_status,
-        ])
+        .mount(
+            "/",
+            routes![
+                rest::join_queue,
+                rest::lock_chunk,
+                rest::get_chunk,
+                rest::get_challenge,
+                rest::post_contribution_chunk,
+                rest::contribute_chunk,
+                rest::update_coordinator,
+                rest::heartbeat,
+                rest::get_tasks_left,
+                rest::stop_coordinator,
+                rest::verify_chunks,
+                rest::get_contributor_queue_status,
+            ],
+        )
         .manage(coordinator);
 
     let ignite_rocket = match build_rocket.ignite().await {

@@ -48,11 +48,7 @@ impl Initialization {
         let start = Instant::now();
 
         // Determine the expected challenge size.
-        // For Anoma Phase 2, the expected challenge size is hardcoded under phase1-coordinator/storage/storage.rs at the const ANOMA_FILE_SIZE
-        // TODO: refactor this parameter to the environment file and find a way to calculate the expected size
-        // let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
         let expected_challenge_size = Object::anoma_contribution_file_size(0, 0);
-        // TODO: implement calculate size macro for our curve
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
         // Initialize and fetch a writer for the contribution locator so the output is saved.
@@ -107,8 +103,7 @@ impl Initialization {
         // NOTE: Add your MPC Parameters initialization function below
         //
 
-        // Self::initialize_masp(&mut writer);
-        Self::initialize_test_masp(&mut writer);
+        Self::initialize_masp(&mut writer);
 
         trace!("Completed Phase 2 initialization operation");
 

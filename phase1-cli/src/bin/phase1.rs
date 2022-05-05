@@ -13,13 +13,12 @@ use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
+    convert::TryFrom,
     fs::File,
     io::{Read, Write},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
-
-use std::convert::TryFrom;
 
 use tracing::debug;
 
@@ -74,8 +73,11 @@ fn compute_contribution(
     response_writer.write_all(challenge_hash.as_slice());
 
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
-    Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
+    let start = Instant::now();
+    Computation::contribute_masp_cli(&challenge, &mut response_writer);
+    let elapsed = Instant::now().duration_since(start);
     debug!("response writer {:?}", response_writer);
+    debug!("Completed contribution in {:?}", elapsed);
 
     get_file_as_byte_vec(&filename, round_height, contribution_id)
 }
