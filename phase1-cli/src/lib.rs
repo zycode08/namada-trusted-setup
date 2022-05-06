@@ -49,5 +49,5 @@ pub enum ContributorOpt {
     #[structopt(about = "Verify the pending contributions")]
     VerifyContributions(CoordinatorUrl),
     #[structopt(about = "Update manually the coordinator")]
-    UpdateCoordinator(CoordinatorUrl)
+    UpdateCoordinator(CoordinatorUrl),
 }

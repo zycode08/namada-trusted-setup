@@ -51,8 +51,10 @@ where
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to join the queue of contributors.
-pub async fn post_join_queue<T>(client: &Client, coordinator_address: &mut Url, request_body: T) -> Result<()> 
-where T: Into<String> {
+pub async fn post_join_queue<T>(client: &Client, coordinator_address: &mut Url, request_body: T) -> Result<()>
+where
+    T: Into<String>,
+{
     submit_request::<String>(
         client,
         coordinator_address,
@@ -70,8 +72,10 @@ pub async fn post_lock_chunk<T>(
     client: &Client,
     coordinator_address: &mut Url,
     request_body: T,
-) -> Result<LockedLocators> 
-where T: Into<String> {
+) -> Result<LockedLocators>
+where
+    T: Into<String>,
+{
     let response = submit_request::<String>(
         client,
         coordinator_address,
@@ -98,7 +102,11 @@ pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_b
     Ok(response.json::<Task>().await?)
 }
 
-pub async fn get_challenge(client: &Client, coordinator_address: &mut Url, request_body: &LockedLocators) -> Result<Vec<u8>> {
+pub async fn get_challenge(
+    client: &Client,
+    coordinator_address: &mut Url,
+    request_body: &LockedLocators,
+) -> Result<Vec<u8>> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -144,8 +152,10 @@ pub async fn post_contribute_chunk(
 }
 
 /// Let the [Coordinator](`phase1-coordinator::Coordinator`) know that the contributor is still alive.
-pub async fn post_heartbeat<T>(client: &Client, coordinator_address: &mut Url, request_body: T) -> Result<()> 
-where T: Into<String> {
+pub async fn post_heartbeat<T>(client: &Client, coordinator_address: &mut Url, request_body: T) -> Result<()>
+where
+    T: Into<String>,
+{
     submit_request::<String>(
         client,
         coordinator_address,
@@ -164,7 +174,9 @@ pub async fn get_tasks_left<T>(
     coordinator_address: &mut Url,
     request_body: T,
 ) -> Result<LinkedList<Task>>
-where T: Into<String> {
+where
+    T: Into<String>,
+{
     let response = submit_request::<String>(
         client,
         coordinator_address,

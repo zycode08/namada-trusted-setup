@@ -3,19 +3,21 @@ use phase1_coordinator::{
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ANOMA_FILE_SIZE, ContributionLocator},
+    storage::{ContributionLocator, ANOMA_FILE_SIZE},
 };
 use reqwest::{Client, Url};
 
 use crate::requests::RequestError;
+use anyhow::Result;
 use phase1_cli::{requests, ContributorOpt};
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
-use anyhow::Result;
 
-use std::fs::File;
-use std::io::{Read, Write};
-use tracing::{debug, info, error};
+use std::{
+    fs::File,
+    io::{Read, Write},
+};
+use tracing::{debug, error, info};
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -85,11 +87,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
         None,
     )?;
 
-    let signature = Production
-        .sign(
-            sigkey,
-            &contribution_state.signature_message()?,
-        )?;
+    let signature = Production.sign(sigkey, &contribution_state.signature_message()?)?;
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 

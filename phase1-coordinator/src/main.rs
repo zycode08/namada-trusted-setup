@@ -1,9 +1,4 @@
-use phase1_coordinator::{
-    authentication::Production as ProductionSig,
-    environment::Parameters,
-    rest,
-    Coordinator,
-};
+use phase1_coordinator::{authentication::Production as ProductionSig, environment::Parameters, rest, Coordinator};
 
 #[cfg(debug_assertions)]
 use phase1_coordinator::environment::Testing;
@@ -22,7 +17,11 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
 
     // Set the environment
-    let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
+    let parameters = Parameters::TestAnoma {
+        number_of_chunks: 1,
+        power: 6,
+        batch_size: 16,
+    };
 
     #[cfg(debug_assertions)]
     let environment: Testing = {

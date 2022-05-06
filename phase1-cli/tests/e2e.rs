@@ -4,20 +4,20 @@
 //	but it's simpler to just run the tests sequentially.
 //  NOTE: these test require the phase1radix files to be placed in the phase1-cli folder
 
-use std::{net::IpAddr, sync::Arc, io::Write};
+use std::{io::Write, net::IpAddr, sync::Arc};
 
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
+    commands::Computation,
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ANOMA_FILE_SIZE, ContributionLocator, ContributionSignatureLocator},
+    storage::{ContributionLocator, ContributionSignatureLocator, ANOMA_FILE_SIZE},
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
     Coordinator,
     Participant,
-    commands::Computation,
 };
 use rocket::{routes, Error};
 
@@ -37,17 +37,21 @@ struct TestParticipant {
     _inner: Participant,
     _address: IpAddr,
     keypair: KeyPair,
-    locked_locators: Option<LockedLocators>
+    locked_locators: Option<LockedLocators>,
 }
 
 struct TestCtx {
     contributors: Vec<TestParticipant>,
-    unknown_pariticipant: TestParticipant
+    unknown_pariticipant: TestParticipant,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
-async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) { 
-    let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
+async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
+    let parameters = Parameters::TestAnoma {
+        number_of_chunks: 1,
+        power: 6,
+        batch_size: 16,
+    };
 
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
@@ -100,11 +104,29 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
     let ignite = build.ignite().await.unwrap();
     let handle = tokio::spawn(ignite.launch());
 
-    let test_participant1 = TestParticipant { _inner: contributor1, _address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
-    let test_pariticpant2 = TestParticipant { _inner: contributor2, _address: contributor2_ip, keypair: keypair2, locked_locators: None };
-    let unknown_pariticipant = TestParticipant { _inner: unknown_contributor, _address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
+    let test_participant1 = TestParticipant {
+        _inner: contributor1,
+        _address: contributor1_ip,
+        keypair: keypair1,
+        locked_locators: Some(locked_locators),
+    };
+    let test_pariticpant2 = TestParticipant {
+        _inner: contributor2,
+        _address: contributor2_ip,
+        keypair: keypair2,
+        locked_locators: None,
+    };
+    let unknown_pariticipant = TestParticipant {
+        _inner: unknown_contributor,
+        _address: unknown_contributor_ip,
+        keypair: keypair3,
+        locked_locators: None,
+    };
 
-    let ctx = TestCtx { contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant };
+    let ctx = TestCtx {
+        contributors: vec![test_participant1, test_pariticpant2],
+        unknown_pariticipant,
+    };
 
     (ctx, handle)
 }
@@ -153,9 +175,7 @@ async fn test_heartbeat() {
 
     // Ok
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_heartbeat(&client, &mut url, pubkey)
-        .await
-        .unwrap();
+    requests::post_heartbeat(&client, &mut url, pubkey).await.unwrap();
 
     // Drop the server
     handle.abort();
@@ -193,9 +213,7 @@ async fn test_get_tasks_left() {
 
     // Ok tasks left
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, pubkey)
-        .await
-        .unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, pubkey).await.unwrap();
     assert_eq!(response.len(), 1);
 
     // Drop the server
@@ -213,9 +231,7 @@ async fn test_join_queue() {
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_join_queue(&client, &mut url, pubkey)
-        .await
-        .unwrap();
+    requests::post_join_queue(&client, &mut url, pubkey).await.unwrap();
 
     // Wrong request, already existing contributor
     let response = requests::post_join_queue(&client, &mut url, pubkey).await;
@@ -247,13 +263,13 @@ async fn test_wrong_contribute_chunk() {
 }
 
 /// To test a full contribution we need to test the 5 involved endpoints sequentially:
-/// 
+///
 /// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
-/// 
+///
 #[tokio::test]
 async fn test_contribution() {
     use setup_utils::calculate_hash;
@@ -273,7 +289,9 @@ async fn test_contribution() {
     let task: Task = response.unwrap();
 
     // Get challenge
-    let challenge = requests::get_challenge(&client, &mut url, ctx.contributors[0].locked_locators.as_ref().unwrap()).await.unwrap();
+    let challenge = requests::get_challenge(&client, &mut url, ctx.contributors[0].locked_locators.as_ref().unwrap())
+        .await
+        .unwrap();
 
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
@@ -296,10 +314,7 @@ async fn test_contribution() {
 
     let sigkey = ctx.contributors[0].keypair.sigkey();
     let signature = Production
-        .sign(
-            sigkey,
-            &contribution_state.signature_message().unwrap(),
-        )
+        .sign(sigkey, &contribution_state.signature_message().unwrap())
         .unwrap();
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();

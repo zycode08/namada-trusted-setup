@@ -6,12 +6,15 @@ use crate::{
     ContributionFileSignature,
 };
 use rocket::{
-    error, get,
+    error,
+    get,
     http::{ContentType, Status},
     post,
     response::{Responder, Response},
     serde::{json::Json, Deserialize, Serialize},
-    Request, Shutdown, State,
+    Request,
+    Shutdown,
+    State,
 };
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
@@ -300,7 +303,9 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
     for (task, _) in &pending_verifications {
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers. If a verification fails return immediately without verifying the remaining contributions
-        write_lock.default_verify(task).map_err(|e| ResponseError::VerificationError(format!("{}", e)))?;
+        write_lock
+            .default_verify(task)
+            .map_err(|e| ResponseError::VerificationError(format!("{}", e)))?;
     }
 
     Ok(())
