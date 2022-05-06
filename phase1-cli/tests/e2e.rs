@@ -42,7 +42,7 @@ struct TestParticipant {
 
 struct TestCtx {
     contributors: Vec<TestParticipant>,
-    unknown_pariticipant: TestParticipant,
+    unknown_participant: TestParticipant,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
@@ -110,13 +110,13 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
-    let test_pariticpant2 = TestParticipant {
+    let test_participant2 = TestParticipant {
         _inner: contributor2,
         _address: contributor2_ip,
         keypair: keypair2,
         locked_locators: None,
     };
-    let unknown_pariticipant = TestParticipant {
+    let unknown_participant = TestParticipant {
         _inner: unknown_contributor,
         _address: unknown_contributor_ip,
         keypair: keypair3,
@@ -124,8 +124,8 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
     };
 
     let ctx = TestCtx {
-        contributors: vec![test_participant1, test_pariticpant2],
-        unknown_pariticipant,
+        contributors: vec![test_participant1, test_participant2],
+        unknown_participant,
     };
 
     (ctx, handle)
@@ -169,7 +169,7 @@ async fn test_heartbeat() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
     let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey).await;
     assert!(response.is_err());
 
@@ -207,7 +207,7 @@ async fn test_get_tasks_left() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
     let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey).await;
     assert!(response.is_err());
 
@@ -252,7 +252,7 @@ async fn test_wrong_contribute_chunk() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
     let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
 
     let response = requests::post_contribute_chunk(&client, &mut url, &contribute_request).await;

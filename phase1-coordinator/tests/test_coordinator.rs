@@ -45,7 +45,7 @@ struct TestParticipant {
 struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
-    unknown_pariticipant: TestParticipant,
+    unknown_participant: TestParticipant,
 }
 
 /// Build the rocket server for testing with the proper configuration.
@@ -110,13 +110,13 @@ fn build_context() -> TestCtx {
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
-    let test_pariticpant2 = TestParticipant {
+    let test_participant2 = TestParticipant {
         _inner: contributor2,
         address: contributor2_ip,
         keypair: keypair2,
         locked_locators: None,
     };
-    let unknown_pariticipant = TestParticipant {
+    let unknown_participant = TestParticipant {
         _inner: unknown_contributor,
         address: unknown_contributor_ip,
         keypair: keypair3,
@@ -125,8 +125,8 @@ fn build_context() -> TestCtx {
 
     TestCtx {
         rocket,
-        contributors: vec![test_participant1, test_pariticpant2],
-        unknown_pariticipant,
+        contributors: vec![test_participant1, test_participant2],
+        unknown_participant,
     }
 }
 
@@ -163,7 +163,7 @@ fn test_heartbeat() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
     req = client.post("/contributor/heartbeat").json(&unknown_pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -218,7 +218,7 @@ fn test_get_tasks_left() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
     req = client.get("/contributor/get_tasks_left").json(&unknown_pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -258,7 +258,7 @@ fn test_join_queue() {
     assert!(response.body().is_some());
 
     // Ok request
-    let pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let pubkey = ctx.unknown_participant.keypair.pubkey();
     req = client
         .post("/contributor/join_queue")
         .json(&pubkey)
@@ -383,7 +383,7 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
     let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
     req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
