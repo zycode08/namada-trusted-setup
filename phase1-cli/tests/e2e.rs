@@ -6,10 +6,9 @@
 
 use std::{net::IpAddr, sync::Arc, io::Write};
 
-use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    environment::{CurveKind, Parameters, Settings, Testing},
+    environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{ANOMA_FILE_SIZE, ContributionLocator, ContributionSignatureLocator},
@@ -35,8 +34,8 @@ const COORDINATOR_ADDRESS: &str = "http://127.0.0.1:8000";
 const ROUND_HEIGHT: u64 = 1;
 
 struct TestParticipant {
-    inner: Participant,
-    address: IpAddr,
+    _inner: Participant,
+    _address: IpAddr,
     keypair: KeyPair,
     locked_locators: Option<LockedLocators>
 }
@@ -101,9 +100,9 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
     let ignite = build.ignite().await.unwrap();
     let handle = tokio::spawn(ignite.launch());
 
-    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
-    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2, locked_locators: None };
-    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
+    let test_participant1 = TestParticipant { _inner: contributor1, _address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
+    let test_pariticpant2 = TestParticipant { _inner: contributor2, _address: contributor2_ip, keypair: keypair2, locked_locators: None };
+    let unknown_pariticipant = TestParticipant { _inner: unknown_contributor, _address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
 
     let ctx = TestCtx { contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant };
 
@@ -114,7 +113,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
 async fn test_stop_coordinator() {
     let client = Client::new();
     // Spawn the server and get the test context
-    let (ctx, handle) = test_prelude().await;
+    let (_ctx, handle) = test_prelude().await;
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 
@@ -166,7 +165,7 @@ async fn test_heartbeat() {
 async fn test_update_coordinator() {
     let client = Client::new();
     // Spawn the server and get the test context
-    let (ctx, handle) = test_prelude().await;
+    let (_ctx, handle) = test_prelude().await;
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 

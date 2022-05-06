@@ -214,7 +214,7 @@ impl Parameters {
             CurveKind::Bls12_381,
             *power,
             *batch_size,
-            ChunkSize::from(16_usize),
+            chunk_size!(number_of_chunks, proving_system, power),
         )
     }
 }

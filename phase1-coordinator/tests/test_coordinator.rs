@@ -9,10 +9,9 @@ use std::{
     sync::Arc, io::Write,
 };
 
-use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    environment::{CurveKind, Parameters, Settings, Testing},
+    environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{ANOMA_FILE_SIZE, ContributionLocator, ContributionSignatureLocator},
@@ -35,7 +34,7 @@ use tokio::sync::RwLock;
 const ROUND_HEIGHT: u64 = 1;
 
 struct TestParticipant {
-    inner: Participant,
+    _inner: Participant,
     address: IpAddr,
     keypair: KeyPair,
     locked_locators: Option<LockedLocators>,
@@ -99,9 +98,9 @@ fn build_context() -> TestCtx {
         ])
         .manage(coordinator);
 
-    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
-    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2, locked_locators: None };
-    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
+    let test_participant1 = TestParticipant { _inner: contributor1, address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
+    let test_pariticpant2 = TestParticipant { _inner: contributor2, address: contributor2_ip, keypair: keypair2, locked_locators: None };
+    let unknown_pariticipant = TestParticipant { _inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
 
     TestCtx { rocket, contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant }
 }
