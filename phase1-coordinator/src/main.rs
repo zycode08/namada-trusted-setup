@@ -31,11 +31,13 @@ pub async fn main() {
     let environment: Production = Production::from(parameters);
 
     // Instantiate and start the coordinator
-    let mut coordinator =
+    let coordinator =
         Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
-    coordinator.initialize().expect("Initialization of coordinator failed!");
-
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
+
+    let mut write_lock = coordinator.clone().write_owned().await;
+
+    tokio::task::spawn_blocking(move || write_lock.initialize().expect("Initialization of coordinator failed!")).await.expect("Initialization task panicked");
 
     // Launch Rocket REST server
     let build_rocket = rocket::build()
