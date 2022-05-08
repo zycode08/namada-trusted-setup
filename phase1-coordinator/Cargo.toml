@@ -18,24 +18,36 @@ phase1 = {path = "../phase1"}
 setup-utils = {path = "../setup-utils"}
 snarkvm-curves = {git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c"}
 
-anyhow = {version = "1.0.37"}
-fs-err = {version = "2.6.0"}
-futures = {version = "0.3"}
-memmap = {version = "0.7.0"}
-once_cell = {version = "1.5.2"}
-rayon = {version = "1.4.1"}
-serde = {version = "1.0", features = ["derive"]}
-serde-aux = {version = "3.0"}
-serde-diff = {version = "0.4"}
-serde_json = {version = "1.0"}
-serde_with = {version = "1.8", features = ["macros"]}
-thiserror = {version = "1.0"}
-time = {version = "0.3", features = ["serde-human-readable", "macros"]}
-tokio = {version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"]}
-tracing = {version = "0.1"}
-tracing-subscriber = {version = "0.3"}
+anyhow = { version = "1.0.37" }
+base64 = "0.13.0"
+ed25519-compact = "1.0.11"
+fs-err = { version = "2.6.0" }
+futures = { version = "0.3" }
+memmap = { version = "0.7.0" }
+once_cell = { version = "1.5.2" }
+rayon = { version = "1.4.1" }
+serde = { version = "1.0", features = ["derive"] }
+serde-aux = { version = "3.0" }
+serde-diff = { version = "0.4" }
+serde_json = { version = "1.0" }
+serde_with = { version = "1.8", features = ["macros"] }
+thiserror = { version = "1.0" }
+time = { version = "0.3", features = ["serde-human-readable", "macros"] }
+tokio = { version = "1.13", features = ["macros", "rt-multi-thread", "time", "sync", "signal"] }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3" }
 
-# Dependencies from MASP MPC 
+# Dependencies from Sapling MPC 
+
+pairing = "0.14"
+phase2 = "0.2.1"
+# rand = "0.4"
+blake2-rfc = "0.2"
+
+# masp_mpc = {git = "https://github.com/heliaxdev/masp-mpc", branch="joe/update"}
+rand-04 = {package = "rand", version = "0.4"}
+sapling-crypto = {git = "https://github.com/zcash-hackworks/sapling-crypto", rev = "eb409fa3cf8df215ae8d35f5e385751a0c5ffb85"}
+
 bellman = {version = "0.11.1", features = ["groth16", "multicore"]}
 blake2 = "0.10.4"
 byteorder = "1"

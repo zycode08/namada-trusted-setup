@@ -23,7 +23,8 @@ pub struct ContributionLocator {
     contribution_id: u64,
     is_verified: bool,
 }
-static ANOMA_FILE_SIZE: u64 = 4_000;
+
+pub const ANOMA_FILE_SIZE: u64 = 4_000;
 
 impl ContributionLocator {
     pub fn new(round_height: u64, chunk_id: u64, contribution_id: u64, is_verified: bool) -> Self {

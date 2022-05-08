@@ -1,22 +1,23 @@
 use phase1_coordinator::{
-    authentication::{Dummy, Signature},
+    authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::ContributionLocator,
+    storage::{ContributionLocator, ANOMA_FILE_SIZE},
 };
 use reqwest::{Client, Url};
 
 use crate::requests::RequestError;
+use anyhow::Result;
 use phase1_cli::{requests, ContributorOpt};
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
-use std::fs::File;
-use std::io::{Read, Write};
-use tracing::debug;
-
-static ANOMA_FILE_SIZE: usize = 4_000;
+use std::{
+    fs::File,
+    io::{Read, Write},
+};
+use tracing::{debug, error, info};
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -35,48 +36,48 @@ macro_rules! pretty_hash {
     }};
 }
 
-fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
-    let mut f = File::open(&filename).expect("no file found");
-    let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
-    // let mut buffer = vec![0; metadata.len() as usize];
-    let mut buffer = vec![0; ANOMA_FILE_SIZE];
-    debug!("metadata file length {}", metadata.len());
-    f.read(&mut buffer).expect("buffer overflow");
+fn get_file_as_byte_vec(filename: &str) -> Result<Vec<u8>> {
+    let mut f = File::open(filename)?;
+    let metadata = std::fs::metadata(filename)?;
 
-    buffer
+    let mut buffer = vec![0; ANOMA_FILE_SIZE as usize];
+    debug!("metadata file length {}", metadata.len());
+    f.read(&mut buffer)?;
+
+    Ok(buffer)
 }
 
-fn compute_contribution(pubkey: String, round_height: u64, challenge: &Vec<u8>, challenge_hash: &Vec<u8>) -> Vec<u8> {
+fn compute_contribution(pubkey: &str, round_height: u64, challenge: &[u8], challenge_hash: &[u8]) -> Result<Vec<u8>> {
     let filename: String = String::from(format!("pubkey_{}_contribution_round_{}.params", pubkey, round_height));
-    let mut response_writer = File::create(&filename).unwrap();
-    response_writer.write_all(challenge_hash.as_slice());
+    let mut response_writer = File::create(filename.as_str())?;
+    response_writer.write_all(challenge_hash);
 
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
-    Computation::contribute_test_masp_cli(&challenge, &mut response_writer);
+    Computation::contribute_test_masp_cli(challenge, &mut response_writer);
     debug!("response writer {:?}", response_writer);
 
-    get_file_as_byte_vec(&filename)
+    Ok(get_file_as_byte_vec(filename.as_str())?)
 }
 
-async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -> Result<(), RequestError> {
-    let locked_locators = requests::post_lock_chunk(client, coordinator, &pubkey).await?;
+async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pubkey: &str) -> Result<()> {
+    let locked_locators = requests::post_lock_chunk(client, coordinator, pubkey).await?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
 
-    let get_chunk_req = GetChunkRequest::new(pubkey.clone(), locked_locators.clone());
+    let get_chunk_req = GetChunkRequest::new(pubkey.to_owned(), locked_locators.clone());
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
     let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
     debug!("Challenge is {}", pretty_hash!(&challenge));
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
-    let mut challenge_writer = File::create(String::from(format!("challenge_round_{}.params", round_height))).unwrap();
+    let mut challenge_writer = File::create(String::from(format!("challenge_round_{}.params", round_height)))?;
     challenge_writer.write_all(challenge.as_slice());
 
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
 
-    let contribution = compute_contribution(pubkey.clone(), round_height, &challenge, challenge_hash.to_vec().as_ref());
+    let contribution = compute_contribution(pubkey, round_height, &challenge, challenge_hash.to_vec().as_ref())?;
 
     debug!("Contribution length: {}", contribution.len());
 
@@ -84,16 +85,11 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
         challenge_hash.to_vec(),
         calculate_hash(contribution.as_ref()).to_vec(),
         None,
-    )
-    .unwrap();
-    let signature = Dummy //FIXME: proper signature
-        .sign(
-            String::from("private_key").as_str(),
-            &contribution_state.signature_message().unwrap(),
-        )
-        .unwrap();
+    )?;
 
-    let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
+    let signature = Production.sign(sigkey, &contribution_state.signature_message()?)?;
+
+    let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
     let post_chunk_req = PostChunkRequest::new(
         locked_locators.next_contribution(),
@@ -103,51 +99,53 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, pubkey: String) -
     );
     requests::post_chunk(client, coordinator, &post_chunk_req).await?;
 
-    let contribute_chunk_req = ContributeChunkRequest::new(pubkey.clone(), task.chunk_id());
+    let contribute_chunk_req = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
     let contribution_locator = requests::post_contribute_chunk(client, coordinator, &contribute_chunk_req).await?;
 
-    requests::post_heartbeat(client, coordinator, &pubkey).await?;
+    requests::post_heartbeat(client, coordinator, pubkey).await?;
 
     Ok(())
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
-    // FIXME: generate proper keypair and loop till finds a public key not known by the coordinator
-    let pubkey = String::from("random public key 3");
-    requests::post_join_queue(&client, coordinator, &pubkey).await.unwrap();
+    let keypair = KeyPair::new();
 
-    let mut i = 0;
-    loop {
-        if i == 1 {
-            //FIXME: just for testing, remove for production
-            break;
-        }
-        // Update the coordinator
-        if let Err(e) = requests::get_update(&client, coordinator).await {
-            //FIXME: ignore this error and continue
-            eprintln!("{}", e);
-        }
+    if let Err(e) = requests::post_join_queue(&client, coordinator, &keypair.pubkey().to_owned()).await {
+        error!("{}", e);
+        panic!();
+    }
 
-        if let Err(e) = do_contribute(&client, coordinator, pubkey.clone()).await {
-            eprintln!("{}", e);
-            panic!();
-        }
+    // Update the coordinator
+    if let Err(e) = requests::get_update(&client, coordinator).await {
+        // Log this error and continue
+        error!("{}", e);
+    }
 
-        i += 1;
+    // Perform a single contribution
+    match do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
+        Ok(()) => info!("Contribution completed, thank you!"),
+        Err(e) => error!("{}", e),
     }
 }
 
 async fn close_ceremony(client: &Client, coordinator: &mut Url) {
     match requests::get_stop_coordinator(client, coordinator).await {
-        Ok(()) => println!("Ceremony completed!"),
-        Err(e) => eprintln!("{}", e),
+        Ok(()) => info!("Ceremony completed!"),
+        Err(e) => error!("{}", e),
     }
 }
 
 async fn verify_contributions(client: &Client, coordinator: &mut Url) {
     match requests::get_verify_chunks(client, coordinator).await {
-        Ok(()) => println!("Verification of contributions completed!"),
-        Err(e) => eprintln!("{}", e), // FIXME: what to do in this case? Stop coordinator?
+        Ok(()) => info!("Verification of pending contributions completed"),
+        Err(e) => error!("{}", e), // FIXME: what to do in this case? Stop coordinator?
+    }
+}
+
+async fn update_coordinator(client: &Client, coordinator: &mut Url) {
+    match requests::get_update(client, coordinator).await {
+        Ok(()) => info!("Coordinator updated"),
+        Err(e) => error!("{}", e),
     }
 }
 
@@ -167,7 +165,6 @@ async fn main() {
 
     match opt {
         ContributorOpt::Contribute(mut url) => {
-            //FIXME: share code
             contribute(&client, &mut url.coordinator).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {

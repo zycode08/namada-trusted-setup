@@ -2443,6 +2443,22 @@ impl Coordinator {
         self.state.get_pending_verifications()
     }
 
+    /// Verify a contribution using the coordinator's default verifier.
+    /// This is just an interface to [`verify`]
+    /// 
+    /// #Error
+    /// This function assumes that the given task has been indeed assigned to the
+    /// default verifier.
+    pub fn default_verify(
+        &mut self,
+        task: &Task,
+    ) -> anyhow::Result<()> {
+        let verifier = self.environment.coordinator_verifiers()[0].clone();
+        let sigkey = self.environment.default_verifier_signing_key();
+
+        self.verify(&verifier, &sigkey, task)
+    }
+
     #[tracing::instrument(
         skip(self, verifier, verifier_signing_key),
         fields(verifier = %verifier),

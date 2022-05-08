@@ -6,12 +6,15 @@ use crate::{
     ContributionFileSignature,
 };
 use rocket::{
-    error, get,
+    error,
+    get,
     http::{ContentType, Status},
     post,
     response::{Responder, Response},
     serde::{json::Json, Deserialize, Serialize},
-    Request, Shutdown, State,
+    Request,
+    Shutdown,
+    State,
 };
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
@@ -297,13 +300,12 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
 
     let mut write_lock = coordinator.write().await;
 
-    for (task, verifier) in &pending_verifications {
+    for (task, _) in &pending_verifications {
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
-        //  no external verifiers
-        if let Err(e) = write_lock.verify(verifier, &String::from("secret_key"), task) {
-            // FIXME: need a random constant private key for the verifier. Save it somewhere in the Coordinator struct
-            return Err(ResponseError::VerificationError(format!("{}", e))); // FIXME: continue with verification of other chunks before returning err?
-        }
+        //  no external verifiers. If a verification fails return immediately without verifying the remaining contributions
+        write_lock
+            .default_verify(task)
+            .map_err(|e| ResponseError::VerificationError(format!("{}", e)))?;
     }
 
     Ok(())

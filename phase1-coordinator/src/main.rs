@@ -1,9 +1,10 @@
-use phase1_coordinator::{
-    authentication::Dummy,
-    environment::{ContributionMode, CurveKind, Parameters, Production, ProvingSystem, Settings, Testing},
-    rest,
-    Coordinator,
-};
+use phase1_coordinator::{authentication::Production as ProductionSig, environment::Parameters, rest, Coordinator};
+
+#[cfg(debug_assertions)]
+use phase1_coordinator::environment::Testing;
+
+#[cfg(not(debug_assertions))]
+use phase1_coordinator::environment::Production;
 
 use rocket::{self, routes};
 
@@ -14,16 +15,13 @@ use tokio::sync::RwLock;
 #[rocket::main]
 pub async fn main() {
     tracing_subscriber::fmt::init();
+
     // Set the environment
-    let parameters = Parameters::Custom(Settings::new(
-        //FIXME: update these
-        ContributionMode::Full,
-        ProvingSystem::Groth16,
-        CurveKind::Bls12_381,
-        6,  /* power */
-        16, /* batch_size */
-        16, /* chunk_size */
-    ));
+    let parameters = Parameters::TestAnoma {
+        number_of_chunks: 1,
+        power: 6,
+        batch_size: 16,
+    };
 
     #[cfg(debug_assertions)]
     let environment: Testing = {
@@ -36,7 +34,7 @@ pub async fn main() {
 
     // Instantiate and start the coordinator
     let mut coordinator =
-        Coordinator::new(environment.into(), Arc::new(Dummy)).expect("Failed to instantiate coordinator"); //FIXME: proper signature
+        Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
     coordinator.initialize().expect("Initialization of coordinator failed!");
 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
@@ -47,6 +45,7 @@ pub async fn main() {
             rest::join_queue,
             rest::lock_chunk,
             rest::get_chunk,
+            rest::get_challenge,
             rest::post_contribution_chunk,
             rest::contribute_chunk,
             rest::update_coordinator,
@@ -54,19 +53,10 @@ pub async fn main() {
             rest::get_tasks_left,
             rest::stop_coordinator,
             rest::verify_chunks,
-            rest::get_challenge,
         ])
         .manage(coordinator);
 
-    let ignite_rocket = match build_rocket.ignite().await {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Coordinator server didn't ignite: {}", e);
-            return;
-        }
-    };
+    let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
-    if let Err(e) = ignite_rocket.launch().await {
-        eprintln!("Coordinator server didn't launch: {}", e);
-    };
+    ignite_rocket.launch().await.expect("Coordinator server didn't launch");
 }
