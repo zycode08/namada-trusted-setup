@@ -1,7 +1,8 @@
 use crate::{
     environment::Environment,
     objects::{ContributionFileSignature, Round},
-    CoordinatorError, CoordinatorState,
+    CoordinatorError,
+    CoordinatorState,
 };
 use phase1::helpers::CurveKind;
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};

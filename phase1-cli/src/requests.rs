@@ -6,7 +6,12 @@ use std::collections::LinkedList;
 use thiserror::Error;
 
 use crate::{
-    ContributeChunkRequest, ContributionLocator, ContributorStatus, GetChunkRequest, LockedLocators, PostChunkRequest,
+    ContributeChunkRequest,
+    ContributionLocator,
+    ContributorStatus,
+    GetChunkRequest,
+    LockedLocators,
+    PostChunkRequest,
     Task,
 };
 
