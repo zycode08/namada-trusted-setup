@@ -15,14 +15,13 @@ use rocket::{
     Request,
     Shutdown,
     State,
+    tokio::sync::RwLock,
 };
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
 use std::{collections::LinkedList, io::Cursor, net::SocketAddr, sync::Arc};
 use thiserror::Error;
-
-use tokio::sync::RwLock;
 
 use tracing::debug;
 

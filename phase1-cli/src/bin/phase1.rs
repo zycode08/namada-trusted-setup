@@ -115,11 +115,11 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         panic!();
     }
 
-    // Update the coordinator
-    if let Err(e) = requests::get_update(&client, coordinator).await {
-        // Log this error and continue
-        error!("{}", e);
-    }
+    // Update the coordinator FIXME: remove
+    // if let Err(e) = requests::get_update(&client, coordinator).await {
+    //     // Log this error and continue
+    //     error!("{}", e);
+    // }
 
     // Perform a single contribution
     match do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
@@ -146,13 +146,6 @@ async fn update_coordinator(client: &Client, coordinator: &mut Url) {
     match requests::get_update(client, coordinator).await {
         Ok(()) => info!("Coordinator updated"),
         Err(e) => error!("{}", e),
-    }
-}
-
-async fn update_coordinator(client: &Client, coordinator: &mut Url) {
-    match requests::get_update(client, coordinator).await {
-        Ok(()) => println!("Coordinator updated!"),
-        Err(e) => eprintln!("{}", e),
     }
 }
 

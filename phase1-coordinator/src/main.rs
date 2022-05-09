@@ -6,10 +6,25 @@ use phase1_coordinator::environment::Testing;
 #[cfg(not(debug_assertions))]
 use phase1_coordinator::environment::Production;
 
-use rocket::{self, routes};
+use rocket::{self, routes, tokio::{self, sync::RwLock, time::Duration}};
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use anyhow::Result;
+
+#[cfg(debug_assertions)]
+const SLEEP_TIME: Duration = Duration::from_secs(5);
+#[cfg(not(debug_assertions))]
+const SLEEP_TIME: Duration = Duration::from_secs(30);
+
+/// Loops forever and updates the [`Coordinator`] periodically
+async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+    loop {
+        let mut write_lock = coordinator.clone().write_owned().await;
+        tokio::task::spawn_blocking(move || write_lock.update()).await??;
+
+        tokio::time::sleep(SLEEP_TIME).await;
+    }
+}
 
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
@@ -38,8 +53,9 @@ pub async fn main() {
     coordinator.initialize().expect("Initialization of coordinator failed!");
 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
+    let up_coordinator = coordinator.clone();
 
-    // Launch Rocket REST server
+    // Build Rocket REST server
     let build_rocket = rocket::build()
         .mount("/", routes![
             rest::join_queue,
@@ -58,5 +74,35 @@ pub async fn main() {
 
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
-    ignite_rocket.launch().await.expect("Coordinator server didn't launch");
+    // Spawn task to update the coordinator periodically
+    let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
+
+    // Spawn Rocket server task
+    let rocket_handle = rocket::tokio::spawn(ignite_rocket.launch());
+
+    tokio::select! {
+        update_result = update_handle => {
+            match update_result { //FIXME: export to function? Or to macro?
+                Ok(inner) => {
+                    match inner {
+                        Ok(()) => println!("Update task completed"),
+                        Err(e) => eprintln!("Update of Coordinator failed: {}", e),
+                    }
+                },
+                Err(e) => eprintln!("Update task panicked! {}", e),
+            }
+        },
+        rocket_result = rocket_handle => {
+            match rocket_result {
+                Ok(inner) => match inner {
+                    Ok(()) => println!("Rocket task completed"),
+                    Err(e) => eprintln!("Rocket failed: {}", e)
+                },
+                Err(e) => eprintln!("Rocket task panicked! {}", e),
+            }
+        }
+    }   
+    // FIXME: log with tracing
+    // FIXME: let the update enpoint and request only in debug mode (conditional compilation) 
+    // FIXME: resolve all FIXMEs
 }
