@@ -1,6 +1,6 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
-    environment::{ContributionMode, CurveKind, Parameters, Production, ProvingSystem, Settings, Testing},
+    environment::{Parameters, Production, Testing},
     rest, Coordinator,
 };
 

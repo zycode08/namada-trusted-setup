@@ -94,7 +94,7 @@ impl ContributeChunkRequest {
 }
 
 /// Request to post a [Chunk](`crate::objects::Chunk`).
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct PostChunkRequest {
     contribution_locator: ContributionLocator,
     contribution: Vec<u8>,
@@ -172,7 +172,8 @@ pub async fn get_chunk(
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
 
     let read_lock = (*coordinator).clone().read_owned().await;
-    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
+
+    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
         Some(info) => {
             if !info.pending_tasks().contains(&task) {
                 return Err(ResponseError::UnknownTask(task));
@@ -218,20 +219,19 @@ pub async fn post_contribution_chunk(
     post_chunk_request: Json<PostChunkRequest>,
 ) -> Result<()> {
     let request = post_chunk_request.into_inner();
+    let request_clone = request.clone();
+    let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    if let Err(e) = coordinator
-        .write()
-        .await
-        .write_contribution(request.contribution_locator, request.contribution)
+    if let Err(e) = task::spawn_blocking(move || 
+        write_lock.write_contribution(request.contribution_locator, request.contribution)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
     {
         return Err(ResponseError::CoordinatorError(e));
     }
 
-    let mut write_lock = (*coordinator).clone().write_owned().await;
-
+    write_lock = (*coordinator).clone().write_owned().await;
     match task::spawn_blocking(move || write_lock.write_contribution_file_signature(
-        request.contribution_file_signature_locator,
-        request.contribution_file_signature,
+        request_clone.contribution_file_signature_locator,
+        request_clone.contribution_file_signature,
     )).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
@@ -294,7 +294,8 @@ pub async fn get_tasks_left(
     let contributor = Participant::new_contributor(pubkey.as_str());
 
     let read_lock = (*coordinator).clone().read_owned().await;
-    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
+
+    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
         Some(info) => Ok(Json(info.pending_tasks().to_owned())),
         None => Err(ResponseError::UnknownContributor(pubkey)),
     }
@@ -303,34 +304,34 @@ pub async fn get_tasks_left(
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
 #[get("/stop")]
 pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
-    let mut write_lock = coordinator.clone().write_owned().await; //FIXME: check if it's correct without the * operator
+    let mut write_lock = (*coordinator).clone().write_owned().await;
 
     let result = task::spawn_blocking(move || write_lock
         .shutdown()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?;
         
     if let Err(e) = result {
-        Err(ResponseError::ShutdownError(format!("{}", e)))
-    }
+        return Err(ResponseError::ShutdownError(format!("{}", e)));
+    };
 
     // Shut Rocket server down
     shutdown.notify();
 
-    result
+    Ok(())
 }
+
+// FIXME: speed tests
 
 /// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
 #[get("/verify")]
-pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> { // FIXME: restart from here
+pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
 
-    let mut write_lock = coordinator.write().await;
-
-    for (task, _) in &pending_verifications {
+    for (task, _) in pending_verifications {
+        let mut write_lock = (*coordinator).clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
-        if let Err(e) = write_lock.default_verify(task) {
-            // FIXME: continue verification even if theres' an error? Review the logic of this method and the one of the code that sends the request to this endpoint
+        if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
             return Err(ResponseError::VerificationError(format!("{}", e)));
         }
     }
