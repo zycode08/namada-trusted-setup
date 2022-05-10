@@ -13,10 +13,15 @@ use std::{
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
-    environment::{Parameters, Testing},
+    environment::{CurveKind, Parameters, Settings, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ContributionLocator, ContributionSignatureLocator, ANOMA_FILE_SIZE},
+    storage::{
+        ContributionLocator,
+        ContributionSignatureLocator,
+        ANOMA_BASE_FILE_SIZE,
+        ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
+    },
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
@@ -45,7 +50,7 @@ struct TestParticipant {
 struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
-    unknown_participant: TestParticipant,
+    unknown_pariticipant: TestParticipant,
 }
 
 /// Build the rocket server for testing with the proper configuration.
@@ -105,19 +110,19 @@ fn build_context() -> TestCtx {
         .manage(coordinator);
 
     let test_participant1 = TestParticipant {
-        _inner: contributor1,
+        inner: contributor1,
         address: contributor1_ip,
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
-    let test_participant2 = TestParticipant {
-        _inner: contributor2,
+    let test_pariticpant2 = TestParticipant {
+        inner: contributor2,
         address: contributor2_ip,
         keypair: keypair2,
         locked_locators: None,
     };
-    let unknown_participant = TestParticipant {
-        _inner: unknown_contributor,
+    let unknown_pariticipant = TestParticipant {
+        inner: unknown_contributor,
         address: unknown_contributor_ip,
         keypair: keypair3,
         locked_locators: None,
@@ -125,8 +130,8 @@ fn build_context() -> TestCtx {
 
     TestCtx {
         rocket,
-        contributors: vec![test_participant1, test_participant2],
-        unknown_participant,
+        contributors: vec![test_participant1, test_pariticpant2],
+        unknown_pariticipant,
     }
 }
 
@@ -163,7 +168,7 @@ fn test_heartbeat() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
     req = client.post("/contributor/heartbeat").json(&unknown_pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -218,7 +223,7 @@ fn test_get_tasks_left() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
     req = client.get("/contributor/get_tasks_left").json(&unknown_pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -433,8 +438,9 @@ fn test_contribution() {
     contribution.write_all(challenge_hash.as_slice()).unwrap();
     Computation::contribute_test_masp_cli(&challenge, &mut contribution);
 
-    // Initial contribution size is 2332 but the Coordinator expect ANOMA_FILE_SIZE. Extend to this size with trailing 0s
-    contribution.resize(ANOMA_FILE_SIZE as usize, 0);
+    // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
+    let contrib_size = ANOMA_BASE_FILE_SIZE + ANOMA_PER_ROUND_FILE_SIZE_INCREASE;
+    contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =
         ContributionSignatureLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
@@ -445,7 +451,7 @@ fn test_contribution() {
 
     let sigkey = ctx.contributors[0].keypair.sigkey();
     let signature = Production
-        .sign(sigkey, &contribution_state.signature_message().unwrap())
+        .sign(sigkey.as_str(), &contribution_state.signature_message().unwrap())
         .unwrap();
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();

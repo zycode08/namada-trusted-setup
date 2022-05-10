@@ -22,7 +22,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use tokio::time;
+
 use tracing::{debug, error, info};
+
+const TEN_SECONDS: Duration = Duration::from_secs(10);
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -186,8 +190,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         }
 
         // Get status updates each 10 seconds
-        let ten_seconds = Duration::from_secs(10);
-        thread::sleep(ten_seconds);
+        time::sleep(TEN_SECONDS).await;
     }
 }
 

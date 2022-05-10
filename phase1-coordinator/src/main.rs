@@ -33,34 +33,42 @@ pub async fn main() {
     let environment: Production = Production::from(parameters);
 
     // Instantiate and start the coordinator
-    let mut coordinator =
+    let coordinator =
         Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
-    coordinator.initialize().expect("Initialization of coordinator failed!");
-
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
+
+    let mut write_lock = coordinator.clone().write_owned().await;
+
+    tokio::task::spawn_blocking(move || write_lock.initialize().expect("Initialization of coordinator failed!"))
+        .await
+        .expect("Initialization task panicked");
 
     // Launch Rocket REST server
     let build_rocket = rocket::build()
-        .mount(
-            "/",
-            routes![
-                rest::join_queue,
-                rest::lock_chunk,
-                rest::get_chunk,
-                rest::get_challenge,
-                rest::post_contribution_chunk,
-                rest::contribute_chunk,
-                rest::update_coordinator,
-                rest::heartbeat,
-                rest::get_tasks_left,
-                rest::stop_coordinator,
-                rest::verify_chunks,
-                rest::get_contributor_queue_status,
-            ],
-        )
+        .mount("/", routes![
+            rest::join_queue,
+            rest::lock_chunk,
+            rest::get_chunk,
+            rest::get_challenge,
+            rest::post_contribution_chunk,
+            rest::contribute_chunk,
+            rest::update_coordinator,
+            rest::heartbeat,
+            rest::get_tasks_left,
+            rest::stop_coordinator,
+            rest::verify_chunks,
+            rest::get_contributor_queue_status,
+        ])
         .manage(coordinator);
 
-    let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
+    let ignite_rocket = match build_rocket.ignite().await {
+        Ok(v) => v,
+        Err(e) => {
+            panic!("Coordinator server didn't ignite: {}", e);
+        }
+    };
 
-    ignite_rocket.launch().await.expect("Coordinator server didn't launch");
+    if let Err(e) = ignite_rocket.launch().await {
+        panic!("Coordinator server didn't launch: {}", e);
+    };
 }

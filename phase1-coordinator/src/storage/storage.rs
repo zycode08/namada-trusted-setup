@@ -1,7 +1,8 @@
 use crate::{
     environment::Environment,
     objects::{ContributionFileSignature, Round},
-    CoordinatorError, CoordinatorState,
+    CoordinatorError,
+    CoordinatorState,
 };
 use phase1::helpers::CurveKind;
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
@@ -23,17 +24,16 @@ pub struct ContributionLocator {
     is_verified: bool,
 }
 
-#[cfg(debug_assertions)]
-pub const ANOMA_BASE_FILE_SIZE: u64 = 2_332;
-#[cfg(debug_assertions)]
-pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 544;
-
 // Parameters generated from `masp-mpc` crate have size 84_720_180, to this add the needed 64 bytes for the hash of the contribution that is placed at the head of the contribution file.
+#[cfg(not(debug_assertions))]
+pub const ANOMA_BASE_FILE_SIZE: u64 = 84_720_244; // prod: 84_720_244, testing: 2_332
+#[cfg(debug_assertions)]
+pub const ANOMA_BASE_FILE_SIZE: u64 = 2_332; // prod: 84_720_244, testing: 2_332
 // With `masp-mpc` the contribution file grows by 1632 bytes on each new contribution
 #[cfg(not(debug_assertions))]
-pub const ANOMA_BASE_FILE_SIZE: u64 = 84_720_244;
-#[cfg(not(debug_assertions))]
-pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 1_632;
+pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 1_632; // prod: 1_632, testing: 544
+#[cfg(debug_assertions)]
+pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 544; // prod: 1_632, testing: 544
 
 impl ContributionLocator {
     pub fn new(round_height: u64, chunk_id: u64, contribution_id: u64, is_verified: bool) -> Self {

@@ -22,7 +22,7 @@ use crate::{objects::LockedLocators, CoordinatorError, Participant};
 use std::{collections::LinkedList, io::Cursor, net::SocketAddr, sync::Arc};
 use thiserror::Error;
 
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, task};
 
 use tracing::debug;
 
@@ -33,6 +33,8 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
+    #[error("Thread panicked: {0}")]
+    RuntimeError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
     #[error("Could not find contributor with public key {0}")]
@@ -95,7 +97,7 @@ impl ContributeChunkRequest {
 }
 
 /// Request to post a [Chunk](`crate::objects::Chunk`).
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct PostChunkRequest {
     contribution_locator: ContributionLocator,
     contribution: Vec<u8>,
@@ -133,10 +135,11 @@ pub async fn join_queue(
     let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
 
-    match coordinator
-        .write()
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    match task::spawn_blocking(move || write_lock.add_to_queue(contributor, Some(contributor_ip.ip()), 10))
         .await
-        .add_to_queue(contributor, Some(contributor_ip.ip()), 10)
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
     {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
@@ -152,7 +155,12 @@ pub async fn lock_chunk(
     let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
 
-    match coordinator.write().await.try_lock(&contributor) {
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    match task::spawn_blocking(move || write_lock.try_lock(&contributor))
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -172,7 +180,12 @@ pub async fn get_chunk(
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
 
-    match coordinator.read().await.state().current_participant_info(&contributor) {
+    let read_lock = (*coordinator).clone().read_owned().await;
+
+    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned())
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Some(info) => {
             if !info.pending_tasks().contains(&task) {
                 return Err(ResponseError::UnknownTask(task));
@@ -199,9 +212,15 @@ pub async fn get_challenge(
         "rest::get_challenge - round_height {}, chunk_id {}, contribution_id 0, is_verified true",
         round_height, chunk_id
     );
+
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
-    match coordinator.write().await.get_challenge(round_height, chunk_id, 0, true) {
+    match task::spawn_blocking(move || write_lock.get_challenge(round_height, chunk_id, 0, true))
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Ok(challenge_hash) => Ok(Json(challenge_hash)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -215,19 +234,27 @@ pub async fn post_contribution_chunk(
     post_chunk_request: Json<PostChunkRequest>,
 ) -> Result<()> {
     let request = post_chunk_request.into_inner();
+    let request_clone = request.clone();
+    let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    if let Err(e) = coordinator
-        .write()
-        .await
-        .write_contribution(request.contribution_locator, request.contribution)
+    if let Err(e) =
+        task::spawn_blocking(move || write_lock.write_contribution(request.contribution_locator, request.contribution))
+            .await
+            .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
     {
         return Err(ResponseError::CoordinatorError(e));
     }
 
-    match coordinator.write().await.write_contribution_file_signature(
-        request.contribution_file_signature_locator,
-        request.contribution_file_signature,
-    ) {
+    write_lock = (*coordinator).clone().write_owned().await;
+    match task::spawn_blocking(move || {
+        write_lock.write_contribution_file_signature(
+            request_clone.contribution_file_signature_locator,
+            request_clone.contribution_file_signature,
+        )
+    })
+    .await
+    .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -246,7 +273,12 @@ pub async fn contribute_chunk(
     let request = contribute_chunk_request.into_inner();
     let contributor = Participant::new_contributor(request.pubkey.as_ref());
 
-    match coordinator.write().await.try_contribute(&contributor, request.chunk_id) {
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    match task::spawn_blocking(move || write_lock.try_contribute(&contributor, request.chunk_id))
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -255,7 +287,12 @@ pub async fn contribute_chunk(
 /// Update the [Coordinator](`crate::Coordinator`) state.
 #[get("/update")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
-    match coordinator.write().await.update() {
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    match task::spawn_blocking(move || write_lock.update())
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -266,7 +303,13 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> 
 pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_pubkey: Json<String>) -> Result<()> {
     let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
-    match coordinator.write().await.heartbeat(&contributor) {
+
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    match task::spawn_blocking(move || write_lock.heartbeat(&contributor))
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -281,7 +324,12 @@ pub async fn get_tasks_left(
     let pubkey = contributor_pubkey.into_inner();
     let contributor = Participant::new_contributor(pubkey.as_str());
 
-    match coordinator.read().await.state().current_participant_info(&contributor) {
+    let read_lock = (*coordinator).clone().read_owned().await;
+
+    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned())
+        .await
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+    {
         Some(info) => Ok(Json(info.pending_tasks().to_owned())),
         None => Err(ResponseError::UnknownContributor(pubkey)),
     }
@@ -290,17 +338,23 @@ pub async fn get_tasks_left(
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
 #[get("/stop")]
 pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
-    let result = coordinator
-        .write()
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    let result = task::spawn_blocking(move || write_lock.shutdown())
         .await
-        .shutdown()
-        .map_err(|e| ResponseError::ShutdownError(format!("{}", e)));
+        .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?;
+
+    if let Err(e) = result {
+        return Err(ResponseError::ShutdownError(format!("{}", e)));
+    };
 
     // Shut Rocket server down
     shutdown.notify();
 
-    result
+    Ok(())
 }
+
+// FIXME: speed tests
 
 /// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
 #[get("/verify")]
@@ -308,14 +362,16 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
 
-    let mut write_lock = coordinator.write().await;
-
-    for (task, _) in &pending_verifications {
+    for (task, _) in pending_verifications {
+        let mut write_lock = (*coordinator).clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
-        //  no external verifiers. If a verification fails return immediately without verifying the remaining contributions
-        write_lock
-            .default_verify(task)
-            .map_err(|e| ResponseError::VerificationError(format!("{}", e)))?;
+        //  no external verifiers
+        if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task))
+            .await
+            .map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+        {
+            return Err(ResponseError::VerificationError(format!("{}", e)));
+        }
     }
 
     Ok(())
