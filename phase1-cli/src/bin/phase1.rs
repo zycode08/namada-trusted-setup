@@ -15,10 +15,8 @@ use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
-    convert::TryFrom,
     fs::File,
     io::{Read, Write},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -69,10 +67,7 @@ fn compute_contribution(
     contribution_id: u64,
 ) -> Result<Vec<u8>> {
     // FIXME: pubkey contains special chars that aren't written to the filename. This makes the program fail when it tries to read a filename that doesn't exist.
-    let filename: String = String::from(format!(
-        "anoma_contribution_round_{}_public_key_{}.params",
-        round_height, pubkey
-    ));
+    let filename: String = String::from(format!("anoma_contribution_round_{}_public_key_.params", round_height));
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(challenge_hash);
 
