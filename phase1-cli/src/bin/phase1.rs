@@ -1,3 +1,9 @@
+#[cfg(debug_assertions)]
+use phase1_coordinator::commands::Computation::contribute_test_masp;
+
+#[cfg(not(debug_assertions))]
+use phase1_coordinator::commands::Computation::contribute_masp;
+
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
@@ -5,6 +11,7 @@ use phase1_coordinator::{
     rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, Object},
 };
+
 use reqwest::{Client, Url};
 
 use crate::requests::RequestError;
@@ -57,14 +64,26 @@ fn get_file_as_byte_vec(filename: &String, round_height: u64, contribution_id: u
     Ok(buffer)
 }
 
-fn compute_contribution(pubkey: &str, round_height: u64, challenge: &[u8], challenge_hash: &[u8],contribution_id: u64) -> Result<Vec<u8>> {
+fn compute_contribution(
+    pubkey: &str,
+    round_height: u64,
+    challenge: &[u8],
+    challenge_hash: &[u8],
+    contribution_id: u64,
+) -> Result<Vec<u8>> {
     let filename: String = String::from(format!("pubkey_{}_contribution_round_{}.params", pubkey, round_height));
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(challenge_hash);
 
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
     let start = Instant::now();
-    Computation::contribute_test_masp_cli(challenge, &mut response_writer);
+
+    #[cfg(debug_assertions)]
+    Computation::contribute_test_masp(challenge, &mut response_writer);
+
+    #[cfg(not(debug_assertions))]
+    Computation::contribute_masp(challenge, &mut response_writer);
+
     let elapsed = Instant::now().duration_since(start);
     debug!("response writer {:?}", response_writer);
     println!("Completed contribution in {:?}", elapsed);
@@ -91,7 +110,13 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
 
-    let contribution = compute_contribution(pubkey, round_height, &challenge, challenge_hash.to_vec().as_ref(), contribution_id)?;
+    let contribution = compute_contribution(
+        pubkey,
+        round_height,
+        &challenge,
+        challenge_hash.to_vec().as_ref(),
+        contribution_id,
+    )?;
 
     debug!("Contribution length: {}", contribution.len());
 

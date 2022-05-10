@@ -102,7 +102,10 @@ impl Initialization {
         //
         // NOTE: Add your MPC Parameters initialization function below
         //
+        #[cfg(debug_assertions)]
+        Self::initialize_test_masp(&mut writer);
 
+        #[cfg(not(debug_assertions))]
         Self::initialize_masp(&mut writer);
 
         trace!("Completed Phase 2 initialization operation");
@@ -131,6 +134,7 @@ impl Initialization {
     }
 
     #[inline]
+    #[cfg(not(debug_assertions))]
     fn initialize_masp(mut writer: &mut [u8]) {
         //
         // MASP spend circuit
@@ -203,6 +207,7 @@ impl Initialization {
     }
 
     #[inline]
+    #[cfg(debug_assertions)]
     fn initialize_test_masp(mut writer: &mut [u8]) {
         // MASP Test circuit
         trace!("Creating initial parameters for MASP Test Circuit...");
