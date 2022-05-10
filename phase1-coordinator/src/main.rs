@@ -1,8 +1,10 @@
-use phase1_coordinator::{
-    authentication::Production as ProductionSig,
-    environment::{ContributionMode, CurveKind, Parameters, Production, ProvingSystem, Settings, Testing},
-    rest, Coordinator,
-};
+use phase1_coordinator::{authentication::Production as ProductionSig, environment::Parameters, rest, Coordinator};
+
+#[cfg(debug_assertions)]
+use phase1_coordinator::environment::Testing;
+
+#[cfg(not(debug_assertions))]
+use phase1_coordinator::environment::Production;
 
 use rocket::{self, routes};
 
@@ -12,8 +14,8 @@ use tokio::sync::RwLock;
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
 pub async fn main() {
-    // Add logging
     tracing_subscriber::fmt::init();
+
     // Set the environment
     let parameters = Parameters::TestAnoma {
         number_of_chunks: 1,
@@ -58,14 +60,7 @@ pub async fn main() {
         )
         .manage(coordinator);
 
-    let ignite_rocket = match build_rocket.ignite().await {
-        Ok(v) => v,
-        Err(e) => {
-            panic!("Coordinator server didn't ignite: {}", e);
-        }
-    };
+    let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
-    if let Err(e) = ignite_rocket.launch().await {
-        panic!("Coordinator server didn't launch: {}", e);
-    };
+    ignite_rocket.launch().await.expect("Coordinator server didn't launch");
 }

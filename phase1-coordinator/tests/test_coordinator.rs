@@ -5,22 +5,23 @@
 //  NOTE: these test require the phase1radix files to be placed in the phase1-coordinator folder
 
 use std::{
+    io::Write,
     net::{IpAddr, SocketAddr},
-    sync::Arc, io::Write,
+    sync::Arc,
 };
 
-use phase1::{ContributionMode, ProvingSystem};
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    environment::{CurveKind, Parameters, Settings, Testing},
+    commands::Computation,
+    environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ANOMA_FILE_SIZE, ContributionLocator, ContributionSignatureLocator},
+    storage::{ContributionLocator, ContributionSignatureLocator, ANOMA_FILE_SIZE},
     testing::coordinator,
     ContributionFileSignature,
     ContributionState,
     Coordinator,
-    Participant, commands::Computation,
+    Participant,
 };
 use rocket::{
     http::{ContentType, Status},
@@ -35,7 +36,7 @@ use tokio::sync::RwLock;
 const ROUND_HEIGHT: u64 = 1;
 
 struct TestParticipant {
-    inner: Participant,
+    _inner: Participant,
     address: IpAddr,
     keypair: KeyPair,
     locked_locators: Option<LockedLocators>,
@@ -44,12 +45,16 @@ struct TestParticipant {
 struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
-    unknown_pariticipant: TestParticipant
+    unknown_participant: TestParticipant,
 }
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
-    let parameters = Parameters::TestAnoma { number_of_chunks: 1, power: 6, batch_size: 16 };
+    let parameters = Parameters::TestAnoma {
+        number_of_chunks: 1,
+        power: 6,
+        batch_size: 16,
+    };
 
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
@@ -61,9 +66,9 @@ fn build_context() -> TestCtx {
     let keypair2 = KeyPair::new();
     let keypair3 = KeyPair::new();
 
-    let contributor1 = Participant::new_contributor(keypair1.pubkey().as_ref());
-    let contributor2 = Participant::new_contributor(keypair2.pubkey().as_ref());
-    let unknown_contributor = Participant::new_contributor(keypair3.pubkey().as_ref());
+    let contributor1 = Participant::new_contributor(keypair1.pubkey());
+    let contributor2 = Participant::new_contributor(keypair2.pubkey());
+    let unknown_contributor = Participant::new_contributor(keypair3.pubkey());
 
     let contributor1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
@@ -99,11 +104,30 @@ fn build_context() -> TestCtx {
         ])
         .manage(coordinator);
 
-    let test_participant1 = TestParticipant { inner: contributor1, address: contributor1_ip, keypair: keypair1, locked_locators: Some(locked_locators) };
-    let test_pariticpant2 = TestParticipant { inner: contributor2, address: contributor2_ip, keypair: keypair2, locked_locators: None };
-    let unknown_pariticipant = TestParticipant { inner: unknown_contributor, address: unknown_contributor_ip, keypair: keypair3, locked_locators: None };
+    let test_participant1 = TestParticipant {
+        _inner: contributor1,
+        address: contributor1_ip,
+        keypair: keypair1,
+        locked_locators: Some(locked_locators),
+    };
+    let test_participant2 = TestParticipant {
+        _inner: contributor2,
+        address: contributor2_ip,
+        keypair: keypair2,
+        locked_locators: None,
+    };
+    let unknown_participant = TestParticipant {
+        _inner: unknown_contributor,
+        address: unknown_contributor_ip,
+        keypair: keypair3,
+        locked_locators: None,
+    };
 
-    TestCtx { rocket, contributors: vec![test_participant1, test_pariticpant2], unknown_pariticipant }
+    TestCtx {
+        rocket,
+        contributors: vec![test_participant1, test_participant2],
+        unknown_participant,
+    }
 }
 
 #[test]
@@ -139,19 +163,15 @@ fn test_heartbeat() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    req = client
-        .post("/contributor/heartbeat")
-        .json(&unknown_pubkey);
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    req = client.post("/contributor/heartbeat").json(&unknown_pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    req = client
-        .post("/contributor/heartbeat")
-        .json(&pubkey);
+    req = client.post("/contributor/heartbeat").json(&pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -198,19 +218,15 @@ fn test_get_tasks_left() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    req = client
-        .get("/contributor/get_tasks_left")
-        .json(&unknown_pubkey);
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    req = client.get("/contributor/get_tasks_left").json(&unknown_pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok tasks left
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    req = client
-        .get("/contributor/get_tasks_left")
-        .json(&pubkey);
+    req = client.get("/contributor/get_tasks_left").json(&pubkey);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -242,7 +258,7 @@ fn test_join_queue() {
     assert!(response.body().is_some());
 
     // Ok request
-    let pubkey = ctx.unknown_pariticipant.keypair.pubkey();
+    let pubkey = ctx.unknown_participant.keypair.pubkey();
     req = client
         .post("/contributor/join_queue")
         .json(&pubkey)
@@ -367,8 +383,8 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_pariticipant.keypair.pubkey();
-    let contribute_request = ContributeChunkRequest::new(unknown_pubkey, 0);
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
     req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -376,13 +392,13 @@ fn test_wrong_contribute_chunk() {
 }
 
 /// To test a full contribution we need to test the 5 involved endpoints sequentially:
-/// 
+///
 /// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
-/// 
+///
 #[test]
 fn test_contribution() {
     use setup_utils::calculate_hash;
@@ -392,7 +408,7 @@ fn test_contribution() {
 
     // Download chunk
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let chunk_request = GetChunkRequest::new(pubkey.clone(), ctx.contributors[0].locked_locators.clone().unwrap());
+    let chunk_request = GetChunkRequest::new(pubkey.to_owned(), ctx.contributors[0].locked_locators.clone().unwrap());
     let mut req = client.get("/download/chunk").json(&chunk_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -400,7 +416,9 @@ fn test_contribution() {
     let task: Task = response.into_json().unwrap();
 
     // Get challenge
-    req = client.get("/contributor/challenge").json(ctx.contributors[0].locked_locators.as_ref().unwrap());
+    req = client
+        .get("/contributor/challenge")
+        .json(ctx.contributors[0].locked_locators.as_ref().unwrap());
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -425,14 +443,10 @@ fn test_contribution() {
 
     let contribution_state = ContributionState::new(challenge_hash.to_vec(), response_hash.to_vec(), None).unwrap();
 
-
     let sigkey = ctx.contributors[0].keypair.sigkey();
     let signature = Production
-    .sign(
-        sigkey.as_str(),
-        &contribution_state.signature_message().unwrap(),
-    )
-    .unwrap();
+        .sign(sigkey, &contribution_state.signature_message().unwrap())
+        .unwrap();
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
 
@@ -449,16 +463,16 @@ fn test_contribution() {
     assert!(response.body().is_none());
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(pubkey, task.chunk_id());
+    let contribute_request = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
 
     req = client.post("/contributor/contribute_chunk").json(&contribute_request);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
 
-     // Verify chunk
-     req = client.get("/verify");
-     let response = req.dispatch();
-     assert_eq!(response.status(), Status::Ok);
-     assert!(response.body().is_none());
+    // Verify chunk
+    req = client.get("/verify");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
 }
