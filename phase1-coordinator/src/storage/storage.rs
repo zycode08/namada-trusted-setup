@@ -26,7 +26,7 @@ pub struct ContributionLocator {
 
 // Parameters generated from `masp-mpc` crate have size 84_720_180, to this add the needed 64 bytes for the hash of the contribution that is placed at the head of the contribution file.
 #[cfg(not(debug_assertions))]
-pub const ANOMA_BASE_FILE_SIZE: u64 = 84_720_244; // prod: 84_720_244, testing: 2_332
+pub const ANOMA_BASE_FILE_SIZE: u64 = 145_449_460; // prod: 84_720_244, testing: 2_332
 #[cfg(debug_assertions)]
 pub const ANOMA_BASE_FILE_SIZE: u64 = 2_332; // prod: 84_720_244, testing: 2_332
 // With `masp-mpc` the contribution file grows by 1632 bytes on each new contribution
