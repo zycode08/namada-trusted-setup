@@ -1,14 +1,8 @@
-#[cfg(debug_assertions)]
-use phase1_coordinator::commands::Computation::contribute_test_masp;
-
-#[cfg(not(debug_assertions))]
-use phase1_coordinator::commands::Computation::contribute_masp;
-
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
-    rest::{ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
+    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, Object},
 };
 
@@ -47,10 +41,9 @@ macro_rules! pretty_hash {
     }};
 }
 
-fn get_file_as_byte_vec(filename: &String, round_height: u64, contribution_id: u64) -> Vec<u8> {
+fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
     let mut f = File::open(&filename).expect("no file found");
     let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
-    // let mut buffer = vec![0; metadata.len() as usize];
 
     let anoma_file_size: u64 = Object::anoma_contribution_file_size(round_height, contribution_id);
     let mut buffer = vec![0; anoma_file_size as usize];
@@ -71,7 +64,11 @@ fn compute_contribution(
     challenge_hash: &[u8],
     contribution_id: u64,
 ) -> Result<Vec<u8>> {
-    let filename: String = String::from(format!("pubkey_{}_contribution_round_{}.params", pubkey, round_height));
+    // FIXME: pubkey contains special chars that aren't written to the filename. This makes the program fail when it tries to read a filename that doesn't exist.
+    let filename: String = String::from(format!(
+        "anoma_contribution_round_{}_public_key_{}.params",
+        round_height, pubkey
+    ));
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(challenge_hash);
 
@@ -104,7 +101,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     debug!("Challenge is {}", pretty_hash!(&challenge));
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
-    let mut challenge_writer = File::create(String::from(format!("challenge_round_{}.params", round_height)))?;
+    let mut challenge_writer = File::create(String::from(format!("anoma_challenge_round_{}.params", round_height)))?;
     challenge_writer.write_all(challenge.as_slice());
 
     let challenge_hash = calculate_hash(challenge.as_ref());
@@ -164,7 +161,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         }
 
         // Check the contributor's position in the queue
-        let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey())
+        let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey().to_owned())
             .await
             .unwrap();
 
@@ -212,13 +209,6 @@ async fn update_coordinator(client: &Client, coordinator: &mut Url) {
     match requests::get_update(client, coordinator).await {
         Ok(()) => info!("Coordinator updated"),
         Err(e) => error!("{}", e),
-    }
-}
-
-async fn update_coordinator(client: &Client, coordinator: &mut Url) {
-    match requests::get_update(client, coordinator).await {
-        Ok(()) => println!("Coordinator updated!"),
-        Err(e) => eprintln!("{}", e),
     }
 }
 

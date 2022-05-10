@@ -240,7 +240,7 @@ impl Computation {
     }
 
     #[cfg(debug_assertions)]
-    pub fn contribute_test_masp(challenge_reader: &[u8], mut response_writer: &mut [u8]) {
+    pub fn contribute_test_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W) {
         let entropy = "entropy";
         // Create an RNG based on a mixture of system randomness and user provided randomness
         let mut rng = {
