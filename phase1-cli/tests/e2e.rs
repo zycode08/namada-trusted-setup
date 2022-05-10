@@ -9,22 +9,16 @@ use std::{io::Write, net::IpAddr, sync::Arc};
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
-    environment::{CurveKind, Parameters, Settings, Testing},
+    environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        ANOMA_BASE_FILE_SIZE,
-        ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
+        ContributionLocator, ContributionSignatureLocator, ANOMA_BASE_FILE_SIZE, ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
     },
     testing::coordinator,
-    ContributionFileSignature,
-    ContributionState,
-    Coordinator,
-    Participant,
+    ContributionFileSignature, ContributionState, Coordinator, Participant,
 };
-use rocket::{routes, Error};
+use rocket::{routes, Error, Ignite, Rocket};
 
 use phase1_cli::requests;
 use reqwest::{Client, Url};
@@ -47,11 +41,11 @@ struct TestParticipant {
 
 struct TestCtx {
     contributors: Vec<TestParticipant>,
-    unknown_pariticipant: TestParticipant,
+    unknown_participant: TestParticipant,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
-async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
+async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) {
     let parameters = Parameters::TestAnoma {
         number_of_chunks: 1,
         power: 6,
@@ -91,46 +85,50 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<(), Error>>) {
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let build = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::get_chunk,
-            rest::get_challenge,
-            rest::post_contribution_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::get_tasks_left,
-            rest::stop_coordinator,
-            rest::verify_chunks
-        ])
+        .mount(
+            "/",
+            routes![
+                rest::join_queue,
+                rest::lock_chunk,
+                rest::get_chunk,
+                rest::get_challenge,
+                rest::post_contribution_chunk,
+                rest::contribute_chunk,
+                rest::update_coordinator,
+                rest::heartbeat,
+                rest::get_tasks_left,
+                rest::stop_coordinator,
+                rest::verify_chunks,
+                rest::get_contributor_queue_status
+            ],
+        )
         .manage(coordinator);
 
     let ignite = build.ignite().await.unwrap();
     let handle = tokio::spawn(ignite.launch());
 
     let test_participant1 = TestParticipant {
-        inner: contributor1,
-        address: contributor1_ip,
+        _inner: contributor1,
+        _address: contributor1_ip,
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
     let test_pariticpant2 = TestParticipant {
-        inner: contributor2,
-        address: contributor2_ip,
+        _inner: contributor2,
+        _address: contributor2_ip,
         keypair: keypair2,
         locked_locators: None,
     };
-    let unknown_pariticipant = TestParticipant {
-        inner: unknown_contributor,
-        address: unknown_contributor_ip,
+    let unknown_participant = TestParticipant {
+        _inner: unknown_contributor,
+        _address: unknown_contributor_ip,
         keypair: keypair3,
         locked_locators: None,
     };
 
     let ctx = TestCtx {
         contributors: vec![test_participant1, test_pariticpant2],
-        unknown_pariticipant,
+        unknown_participant,
     };
 
     (ctx, handle)
@@ -175,12 +173,14 @@ async fn test_heartbeat() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey).await;
+    let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey.to_owned()).await;
     assert!(response.is_err());
 
     // Ok
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_heartbeat(&client, &mut url, &pubkey).await.unwrap();
+    requests::post_heartbeat(&client, &mut url, pubkey.to_owned())
+        .await
+        .unwrap();
 
     // Drop the server
     handle.abort();
@@ -213,12 +213,14 @@ async fn test_get_tasks_left() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey).await;
+    let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey.to_owned()).await;
     assert!(response.is_err());
 
     // Ok tasks left
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, &pubkey).await.unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, pubkey.to_owned())
+        .await
+        .unwrap();
     assert_eq!(response.len(), 1);
 
     // Drop the server
@@ -236,10 +238,12 @@ async fn test_join_queue() {
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_join_queue(&client, &mut url, &pubkey).await.unwrap();
+    requests::post_join_queue(&client, &mut url, pubkey.to_owned())
+        .await
+        .unwrap();
 
     // Wrong request, already existing contributor
-    let response = requests::post_join_queue(&client, &mut url, pubkey).await;
+    let response = requests::post_join_queue(&client, &mut url, pubkey.to_owned()).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -320,7 +324,7 @@ async fn test_contribution() {
 
     let sigkey = ctx.contributors[0].keypair.sigkey();
     let signature = Production
-        .sign(sigkey.as_str(), &contribution_state.signature_message().unwrap())
+        .sign(sigkey, &contribution_state.signature_message().unwrap())
         .unwrap();
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();

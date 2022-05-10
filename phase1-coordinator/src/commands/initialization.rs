@@ -20,8 +20,8 @@ struct TestCircuit {
 }
 impl Circuit<Scalar> for TestCircuit {
     fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let mut x_value = self.x;
-        let mut x = cs.alloc(|| "x", || x_value.ok_or(SynthesisError::AssignmentMissing))?;
+        let x_value = self.x;
+        let x = cs.alloc(|| "x", || x_value.ok_or(SynthesisError::AssignmentMissing))?;
 
         cs.enforce(|| "x = x^2", |lc| lc + x, |lc| lc + x, |lc| lc + x);
 
