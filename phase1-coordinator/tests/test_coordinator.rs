@@ -25,10 +25,11 @@ use phase1_coordinator::{
 use rocket::{
     http::{ContentType, Status},
     local::blocking::Client,
-    routes, Build, Rocket,
+    routes,
+    Build,
+    Rocket,
+    tokio::sync::RwLock
 };
-
-use tokio::sync::RwLock;
 
 const ROUND_HEIGHT: u64 = 1;
 

@@ -15,14 +15,13 @@ use rocket::{
     Request,
     Shutdown,
     State,
+    tokio::{sync::RwLock, task},
 };
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
 use std::{collections::LinkedList, io::Cursor, net::SocketAddr, sync::Arc};
 use thiserror::Error;
-
-use tokio::{sync::RwLock, task};
 
 use tracing::debug;
 
@@ -285,6 +284,7 @@ pub async fn contribute_chunk(
 }
 
 /// Update the [Coordinator](`crate::Coordinator`) state.
+#[cfg(debug_assertions)]
 #[get("/update")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;

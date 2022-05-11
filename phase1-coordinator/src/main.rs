@@ -6,10 +6,27 @@ use phase1_coordinator::environment::Testing;
 #[cfg(not(debug_assertions))]
 use phase1_coordinator::environment::Production;
 
-use rocket::{self, routes};
+use rocket::{self, routes, tokio::{self, sync::RwLock, time::Duration}};
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use anyhow::Result;
+
+use tracing::{info, error};
+
+#[cfg(debug_assertions)]
+const UPDATE_TIME: Duration = Duration::from_secs(5);
+#[cfg(not(debug_assertions))]
+const UPDATE_TIME: Duration = Duration::from_secs(60);
+
+/// Loops forever and updates the [`Coordinator`] periodically
+async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+    loop {
+        let mut write_lock = coordinator.clone().write_owned().await;
+        tokio::task::spawn_blocking(move || write_lock.update()).await??;
+
+        tokio::time::sleep(UPDATE_TIME).await;
+    }
+}
 
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
@@ -36,6 +53,7 @@ pub async fn main() {
     let coordinator =
         Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
+    let up_coordinator = coordinator.clone();
 
     let mut write_lock = coordinator.clone().write_owned().await;
 
@@ -43,23 +61,37 @@ pub async fn main() {
         .await
         .expect("Initialization task panicked");
 
-    // Launch Rocket REST server
-    let build_rocket = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::get_chunk,
-            rest::get_challenge,
-            rest::post_contribution_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::get_tasks_left,
-            rest::stop_coordinator,
-            rest::verify_chunks,
-            rest::get_contributor_queue_status,
-        ])
-        .manage(coordinator);
+    // Build Rocket REST server
+    #[cfg(debug_assertions)]
+    let routes = routes![
+        rest::join_queue,
+        rest::lock_chunk,
+        rest::get_chunk,
+        rest::get_challenge,
+        rest::post_contribution_chunk,
+        rest::contribute_chunk,
+        rest::update_coordinator,
+        rest::heartbeat,
+        rest::get_tasks_left,
+        rest::stop_coordinator,
+        rest::verify_chunks,
+    ];
+
+    #[cfg(not(debug_assertions))]
+    let routes = routes![
+        rest::join_queue,
+        rest::lock_chunk,
+        rest::get_chunk,
+        rest::get_challenge,
+        rest::post_contribution_chunk,
+        rest::contribute_chunk,
+        rest::heartbeat,
+        rest::get_tasks_left,
+        rest::stop_coordinator,
+        rest::verify_chunks,
+    ];
+
+    let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
 
     let ignite_rocket = match build_rocket.ignite().await {
         Ok(v) => v,
@@ -68,7 +100,37 @@ pub async fn main() {
         }
     };
 
-    if let Err(e) = ignite_rocket.launch().await {
-        panic!("Coordinator server didn't launch: {}", e);
-    };
+    // Spawn task to update the coordinator periodically
+    let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
+
+    // Spawn Rocket server task
+    let rocket_handle = rocket::tokio::spawn(ignite_rocket.launch());
+
+    tokio::select! {
+        update_result = update_handle => {
+            match update_result {
+                Ok(inner) => {
+                    match inner {
+                        Ok(()) => info!("Update task completed"),
+                        Err(e) => error!("Update of Coordinator failed: {}", e),
+                    }
+                },
+                Err(e) => error!("Update task panicked! {}", e),
+            }
+        },
+        rocket_result = rocket_handle => {
+            match rocket_result {
+                Ok(inner) => match inner {
+                    Ok(()) => info!("Rocket task completed"),
+                    Err(e) => error!("Rocket failed: {}", e)
+                },
+                Err(e) => error!("Rocket task panicked! {}", e),
+            }
+        }
+    }   
+ 
+    // FIXME: resolve all FIXMEs
+    // FIXME: test locally
+    // FIXME: test production
+    // FIXME: clippy + fmt
 }

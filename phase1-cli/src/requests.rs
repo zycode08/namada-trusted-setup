@@ -198,6 +198,7 @@ where
 }
 
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
+#[cfg(debug_assertions)]
 pub async fn get_update(client: &Client, coordinator_address: &mut Url) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/update", None, &Method::GET).await?;
 

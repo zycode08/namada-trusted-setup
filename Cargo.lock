@@ -2816,7 +2816,6 @@ dependencies = [
  "snarkvm-curves 0.7.5 (git+https://github.com/AleoHQ/snarkVM.git?rev=fc997c)",
  "thiserror",
  "time 0.3.9",
- "tokio",
  "tracing",
  "tracing-subscriber",
 ]

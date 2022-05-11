@@ -18,16 +18,15 @@ use phase1_coordinator::{
     testing::coordinator,
     ContributionFileSignature, ContributionState, Coordinator, Participant,
 };
-use rocket::{routes, Error, Ignite, Rocket};
-
-use phase1_cli::requests;
-use reqwest::{Client, Url};
-
-use tokio::{
+use rocket::{routes, Error, tokio::{
+    self,
     sync::RwLock,
     task::JoinHandle,
     time::{self, Duration},
-};
+}};
+
+use phase1_cli::requests;
+use reqwest::{Client, Url};
 
 const COORDINATOR_ADDRESS: &str = "http://127.0.0.1:8000";
 const ROUND_HEIGHT: u64 = 1;
