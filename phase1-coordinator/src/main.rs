@@ -11,10 +11,12 @@ use rocket::{self, routes, tokio::{self, sync::RwLock, time::Duration}};
 use std::sync::Arc;
 use anyhow::Result;
 
+use tracing::{info, error};
+
 #[cfg(debug_assertions)]
-const SLEEP_TIME: Duration = Duration::from_secs(5);
+const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
-const SLEEP_TIME: Duration = Duration::from_secs(30);
+const UPDATE_TIME: Duration = Duration::from_secs(60);
 
 /// Loops forever and updates the [`Coordinator`] periodically
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
@@ -22,7 +24,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
         let mut write_lock = coordinator.clone().write_owned().await;
         tokio::task::spawn_blocking(move || write_lock.update()).await??;
 
-        tokio::time::sleep(SLEEP_TIME).await;
+        tokio::time::sleep(UPDATE_TIME).await;
     }
 }
 
@@ -56,21 +58,36 @@ pub async fn main() {
     let up_coordinator = coordinator.clone();
 
     // Build Rocket REST server
-    let build_rocket = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::get_chunk,
-            rest::get_challenge,
-            rest::post_contribution_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::get_tasks_left,
-            rest::stop_coordinator,
-            rest::verify_chunks,
-        ])
-        .manage(coordinator);
+    #[cfg(debug_assertions)]
+    let routes = routes![
+        rest::join_queue,
+        rest::lock_chunk,
+        rest::get_chunk,
+        rest::get_challenge,
+        rest::post_contribution_chunk,
+        rest::contribute_chunk,
+        rest::update_coordinator,
+        rest::heartbeat,
+        rest::get_tasks_left,
+        rest::stop_coordinator,
+        rest::verify_chunks,
+    ];
+
+    #[cfg(not(debug_assertions))]
+    let routes = routes![
+        rest::join_queue,
+        rest::lock_chunk,
+        rest::get_chunk,
+        rest::get_challenge,
+        rest::post_contribution_chunk,
+        rest::contribute_chunk,
+        rest::heartbeat,
+        rest::get_tasks_left,
+        rest::stop_coordinator,
+        rest::verify_chunks,
+    ];
+
+    let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
 
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
@@ -82,27 +99,29 @@ pub async fn main() {
 
     tokio::select! {
         update_result = update_handle => {
-            match update_result { //FIXME: export to function? Or to macro?
+            match update_result {
                 Ok(inner) => {
                     match inner {
-                        Ok(()) => println!("Update task completed"),
-                        Err(e) => eprintln!("Update of Coordinator failed: {}", e),
+                        Ok(()) => info!("Update task completed"),
+                        Err(e) => error!("Update of Coordinator failed: {}", e),
                     }
                 },
-                Err(e) => eprintln!("Update task panicked! {}", e),
+                Err(e) => error!("Update task panicked! {}", e),
             }
         },
         rocket_result = rocket_handle => {
             match rocket_result {
                 Ok(inner) => match inner {
-                    Ok(()) => println!("Rocket task completed"),
-                    Err(e) => eprintln!("Rocket failed: {}", e)
+                    Ok(()) => info!("Rocket task completed"),
+                    Err(e) => error!("Rocket failed: {}", e)
                 },
-                Err(e) => eprintln!("Rocket task panicked! {}", e),
+                Err(e) => error!("Rocket task panicked! {}", e),
             }
         }
     }   
-    // FIXME: log with tracing
-    // FIXME: let the update enpoint and request only in debug mode (conditional compilation) 
+ 
     // FIXME: resolve all FIXMEs
+    // FIXME: test locally
+    // FIXME: test production
+    // FIXME: clippy + fmt
 }

@@ -115,12 +115,6 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         panic!();
     }
 
-    // Update the coordinator FIXME: remove
-    // if let Err(e) = requests::get_update(&client, coordinator).await {
-    //     // Log this error and continue
-    //     error!("{}", e);
-    // }
-
     // Perform a single contribution
     match do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
         Ok(()) => info!("Contribution completed, thank you!"),

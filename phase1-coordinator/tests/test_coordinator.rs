@@ -29,9 +29,8 @@ use rocket::{
     routes,
     Build,
     Rocket,
+    tokio::sync::RwLock
 };
-
-use tokio::sync::RwLock;
 
 const ROUND_HEIGHT: u64 = 1;
 

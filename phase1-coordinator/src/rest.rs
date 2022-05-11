@@ -242,6 +242,7 @@ pub async fn contribute_chunk(
 }
 
 /// Update the [Coordinator](`crate::Coordinator`) state.
+#[cfg(debug_assertions)]
 #[get("/update")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
     match coordinator.write().await.update() {
