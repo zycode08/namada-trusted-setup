@@ -175,17 +175,19 @@ impl Computation {
             ChaChaRng::from_seed(h[0..32].try_into().unwrap())
         };
 
+        let mut masp_challenge_reader = &challenge_reader[64..];
         //
         // MASP Spend circuit
         //
         trace!("Reading MASP Spend...");
         let mut spend_params =
-            MPCParameters::read(&challenge_reader[64..], false).expect("unable to read MASP Spend params");
+            MPCParameters::read(&mut masp_challenge_reader, false).expect("unable to read MASP Spend params");
 
         trace!("Contributing to MASP Spend...");
         let mut progress_update_interval: u32 = 0;
 
         let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
+        debug!("MASP Spend hash is {}", pretty_hash!(&spend_hash));
         trace!("Contributed to MASP Spend!");
 
         //
@@ -193,12 +195,13 @@ impl Computation {
         //
         trace!("Reading MASP Output...");
         let mut output_params =
-            MPCParameters::read(&challenge_reader[64..], false).expect("unable to read MASP Output params");
+            MPCParameters::read(&mut masp_challenge_reader, false).expect("unable to read MASP Output params");
 
         trace!("Contributing to MASP Output...");
         let mut progress_update_interval: u32 = 0;
 
         let output_hash = output_params.contribute(&mut rng, &progress_update_interval);
+        debug!("MASP Output hash is {}", pretty_hash!(&output_hash));
         trace!("Contributed to MASP Output!");
 
         //
@@ -206,11 +209,12 @@ impl Computation {
         //
         trace!("Reading MASP Convert...");
         let mut convert_params =
-            MPCParameters::read(&challenge_reader[64..], false).expect("unable to read MASP Convert params");
+            MPCParameters::read(&mut masp_challenge_reader, false).expect("unable to read MASP Convert params");
 
         trace!("Contributing to MASP Convert...");
         let mut progress_update_interval: u32 = 0;
         let convert_hash = convert_params.contribute(&mut rng, &progress_update_interval);
+        debug!("MASP Convert hash is {}", pretty_hash!(&convert_hash));
         trace!("Contributed to MASP Convert!");
 
         let mut h = Blake2b512::new();
@@ -218,8 +222,9 @@ impl Computation {
         h.update(&output_hash);
         h.update(&convert_hash);
         let h = h.finalize();
+        debug!("MASP Contribution hash is {}", pretty_hash!(&h));
 
-        debug!("Contribution hash: 0x{:02x}", h.iter().format(""));
+        info!("Contribution hash: 0x{:02x}", h.iter().format(""));
 
         trace!("Writing MASP Spend parameters to file...");
         spend_params

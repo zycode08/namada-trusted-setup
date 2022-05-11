@@ -313,50 +313,57 @@ impl Verification {
 
         Ok(response_hash)
     }
+
     #[inline]
     #[cfg(not(debug_assertions))]
     fn verify_masp(challenge_reader: &[u8], response_reader: &[u8]) {
         trace!("Reading MASP Spend old parameters...");
+        let mut masp_challenge_reader = &challenge_reader[64..];
+        let mut masp_response_reader = &response_reader[64..];
+
         let masp_spend =
-            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Spend params");
+            MPCParameters::read(&mut masp_challenge_reader, false).expect("couldn't deserialize MASP Spend params");
 
         trace!("Reading MASP Output old parameters...");
         let masp_output =
-            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Output params");
+            MPCParameters::read(&mut masp_challenge_reader, false).expect("couldn't deserialize MASP Output params");
 
         trace!("Reading MASP Convert old parameters...");
         let masp_convert =
-            MPCParameters::read(&challenge_reader[64..], false).expect("couldn't deserialize MASP Convert params");
+            MPCParameters::read(&mut masp_challenge_reader, false).expect("couldn't deserialize MASP Convert params");
 
         trace!("Reading MASP Spend new parameters...");
         let new_masp_spend =
-            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Spend new_params");
+            MPCParameters::read(&mut masp_response_reader, true).expect("couldn't deserialize MASP Spend new_params");
 
         trace!("Reading MASP Output new parameters...");
         let new_masp_output =
-            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Output new_params");
+            MPCParameters::read(&mut masp_response_reader, true).expect("couldn't deserialize MASP Output new_params");
 
         trace!("Reading MASP Convert new parameters...");
         let new_masp_convert =
-            MPCParameters::read(&response_reader[64..], true).expect("couldn't deserialize MASP Convert new_params");
+            MPCParameters::read(&mut masp_response_reader, true).expect("couldn't deserialize MASP Convert new_params");
 
         trace!("Verifying MASP Spend...");
         let spend_hash = match verify_contribution(&masp_spend, &new_masp_spend) {
             Ok(hash) => hash,
             Err(_) => panic!("invalid MASP Spend transformation!"),
         };
+        debug!("MASP Spend hash is {}", pretty_hash!(&spend_hash));
 
         trace!("Verifying MASP Output...");
         let output_hash = match verify_contribution(&masp_output, &new_masp_output) {
             Ok(hash) => hash,
             Err(_) => panic!("invalid MASP Output transformation!"),
         };
+        debug!("MASP Output hash is {}", pretty_hash!(&output_hash));
 
         trace!("Verifying MASP Convert...");
         let convert_hash = match verify_contribution(&masp_convert, &new_masp_convert) {
             Ok(hash) => hash,
             Err(_) => panic!("invalid MASP Convert transformation!"),
         };
+        debug!("MASP Convert hash is {}", pretty_hash!(&convert_hash));
 
         let mut h = Blake2b512::new();
         h.update(&spend_hash);
@@ -365,6 +372,7 @@ impl Verification {
         let h = h.finalize();
 
         info!("Verification hash: 0x{:02x}", h.iter().format(""));
+        debug!("MASP Contribution hash is {}", pretty_hash!(&h));
     }
 
     #[inline]
