@@ -20,8 +20,8 @@ struct TestCircuit {
 }
 impl Circuit<Scalar> for TestCircuit {
     fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let mut x_value = self.x;
-        let mut x = cs.alloc(|| "x", || x_value.ok_or(SynthesisError::AssignmentMissing))?;
+        let x_value = self.x;
+        let x = cs.alloc(|| "x", || x_value.ok_or(SynthesisError::AssignmentMissing))?;
 
         cs.enforce(|| "x = x^2", |lc| lc + x, |lc| lc + x, |lc| lc + x);
 
@@ -48,10 +48,7 @@ impl Initialization {
         let start = Instant::now();
 
         // Determine the expected challenge size.
-        // For Anoma Phase 2, the expected challenge size is hardcoded under phase1-coordinator/storage/storage.rs at the const ANOMA_FILE_SIZE
-        // TODO: refactor this parameter to the environment file and find a way to calculate the expected size
-        let expected_challenge_size = Object::contribution_file_size(environment, chunk_id, true);
-        // TODO: implement calculate size macro for our curve
+        let expected_challenge_size = Object::anoma_contribution_file_size(0, 0);
         trace!("Expected challenge file size is {}", expected_challenge_size);
 
         // Initialize and fetch a writer for the contribution locator so the output is saved.
@@ -105,9 +102,11 @@ impl Initialization {
         //
         // NOTE: Add your MPC Parameters initialization function below
         //
-
-        // Self::initialize_masp(&mut writer);
+        #[cfg(debug_assertions)]
         Self::initialize_test_masp(&mut writer);
+
+        #[cfg(not(debug_assertions))]
+        Self::initialize_masp(&mut writer);
 
         trace!("Completed Phase 2 initialization operation");
 
@@ -135,6 +134,7 @@ impl Initialization {
     }
 
     #[inline]
+    #[cfg(not(debug_assertions))]
     fn initialize_masp(mut writer: &mut [u8]) {
         //
         // MASP spend circuit
@@ -207,6 +207,7 @@ impl Initialization {
     }
 
     #[inline]
+    #[cfg(debug_assertions)]
     fn initialize_test_masp(mut writer: &mut [u8]) {
         // MASP Test circuit
         trace!("Creating initial parameters for MASP Test Circuit...");

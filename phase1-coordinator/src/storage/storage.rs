@@ -24,7 +24,16 @@ pub struct ContributionLocator {
     is_verified: bool,
 }
 
-pub const ANOMA_FILE_SIZE: u64 = 4_000;
+// Parameters generated from `masp-mpc` crate have size 84_720_180, to this add the needed 64 bytes for the hash of the contribution that is placed at the head of the contribution file.
+#[cfg(not(debug_assertions))]
+pub const ANOMA_BASE_FILE_SIZE: u64 = 145_449_460; // prod: 84_720_244, testing: 2_332
+#[cfg(debug_assertions)]
+pub const ANOMA_BASE_FILE_SIZE: u64 = 2_332; // prod: 84_720_244, testing: 2_332
+// With `masp-mpc` the contribution file grows by 1632 bytes on each new contribution
+#[cfg(not(debug_assertions))]
+pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 1_632; // prod: 1_632, testing: 544
+#[cfg(debug_assertions)]
+pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 544; // prod: 1_632, testing: 544
 
 impl ContributionLocator {
     pub fn new(round_height: u64, chunk_id: u64, contribution_id: u64, is_verified: bool) -> Self {
@@ -157,7 +166,7 @@ impl Object {
 
         match settings.curve() {
             // TODO: change round_filesize
-            CurveKind::Bls12_381 => ANOMA_FILE_SIZE,
+            CurveKind::Bls12_381 => ANOMA_BASE_FILE_SIZE,
             CurveKind::Bls12_377 => round_filesize!(Bls12_377, settings, compressed),
             CurveKind::BW6 => round_filesize!(BW6_761, settings, compressed),
         }
@@ -177,12 +186,20 @@ impl Object {
 
         match (curve, verified) {
             // TODO: add correct verified_contribution_size
-            (CurveKind::Bls12_381, true) => ANOMA_FILE_SIZE,
-            (CurveKind::Bls12_381, false) => ANOMA_FILE_SIZE,
+            (CurveKind::Bls12_381, true) => ANOMA_BASE_FILE_SIZE,
+            (CurveKind::Bls12_381, false) => ANOMA_BASE_FILE_SIZE,
             (CurveKind::Bls12_377, true) => verified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::Bls12_377, false) => unverified_contribution_size!(Bls12_377, settings, chunk_id, compressed),
             (CurveKind::BW6, true) => verified_contribution_size!(BW6_761, settings, chunk_id, compressed),
             (CurveKind::BW6, false) => unverified_contribution_size!(BW6_761, settings, chunk_id, compressed),
+        }
+    }
+
+    /// Returns dynamically the expected file size of a contribution file.
+    pub fn anoma_contribution_file_size(round_height: u64, contribution_id: u64) -> u64 {
+        match round_height {
+            0 => ANOMA_BASE_FILE_SIZE,
+            _ => ANOMA_BASE_FILE_SIZE + (ANOMA_PER_ROUND_FILE_SIZE_INCREASE * (round_height + contribution_id - 1)),
         }
     }
 

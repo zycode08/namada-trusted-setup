@@ -16,19 +16,16 @@ use phase1_coordinator::{
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{ContributionLocator, ContributionSignatureLocator, ANOMA_FILE_SIZE},
+    storage::{
+        ContributionLocator, ContributionSignatureLocator, ANOMA_BASE_FILE_SIZE, ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
+    },
     testing::coordinator,
-    ContributionFileSignature,
-    ContributionState,
-    Coordinator,
-    Participant,
+    ContributionFileSignature, ContributionState, Coordinator, Participant,
 };
 use rocket::{
     http::{ContentType, Status},
     local::blocking::Client,
-    routes,
-    Build,
-    Rocket,
+    routes, Build, Rocket,
 };
 
 use tokio::sync::RwLock;
@@ -89,19 +86,23 @@ fn build_context() -> TestCtx {
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let rocket = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::get_chunk,
-            rest::get_challenge,
-            rest::post_contribution_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::get_tasks_left,
-            rest::stop_coordinator,
-            rest::verify_chunks
-        ])
+        .mount(
+            "/",
+            routes![
+                rest::join_queue,
+                rest::lock_chunk,
+                rest::get_chunk,
+                rest::get_challenge,
+                rest::post_contribution_chunk,
+                rest::contribute_chunk,
+                rest::update_coordinator,
+                rest::heartbeat,
+                rest::get_tasks_left,
+                rest::stop_coordinator,
+                rest::verify_chunks,
+                rest::get_contributor_queue_status
+            ],
+        )
         .manage(coordinator);
 
     let test_participant1 = TestParticipant {
@@ -110,7 +111,7 @@ fn build_context() -> TestCtx {
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
-    let test_participant2 = TestParticipant {
+    let test_pariticpant2 = TestParticipant {
         _inner: contributor2,
         address: contributor2_ip,
         keypair: keypair2,
@@ -125,7 +126,7 @@ fn build_context() -> TestCtx {
 
     TestCtx {
         rocket,
-        contributors: vec![test_participant1, test_participant2],
+        contributors: vec![test_participant1, test_pariticpant2],
         unknown_participant,
     }
 }
@@ -431,10 +432,11 @@ fn test_contribution() {
 
     let mut contribution: Vec<u8> = Vec::new();
     contribution.write_all(challenge_hash.as_slice()).unwrap();
-    Computation::contribute_test_masp_cli(&challenge, &mut contribution);
+    Computation::contribute_test_masp(&challenge, &mut contribution);
 
-    // Initial contribution size is 2332 but the Coordinator expect ANOMA_FILE_SIZE. Extend to this size with trailing 0s
-    contribution.resize(ANOMA_FILE_SIZE as usize, 0);
+    // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
+    let contrib_size = ANOMA_BASE_FILE_SIZE + ANOMA_PER_ROUND_FILE_SIZE_INCREASE;
+    contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =
         ContributionSignatureLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);

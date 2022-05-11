@@ -5,7 +5,15 @@ use serde::Serialize;
 use std::collections::LinkedList;
 use thiserror::Error;
 
-use crate::{ContributeChunkRequest, ContributionLocator, GetChunkRequest, LockedLocators, PostChunkRequest, Task};
+use crate::{
+    ContributeChunkRequest,
+    ContributionLocator,
+    ContributorStatus,
+    GetChunkRequest,
+    LockedLocators,
+    PostChunkRequest,
+    Task,
+};
 
 /// Error returned from a request. Could be due to a Client or Server error.
 #[derive(Debug, Error)]
@@ -208,4 +216,22 @@ pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url) -
     submit_request::<()>(client, coordinator_address, "/verify", None, &Method::GET).await?;
 
     Ok(())
+}
+
+/// Get Contributor queue status.
+pub async fn get_contributor_queue_status(
+    client: &Client,
+    coordinator_address: &mut Url,
+    request_body: &String,
+) -> Result<ContributorStatus> {
+    let response = submit_request(
+        client,
+        coordinator_address,
+        "contributor/queue_status",
+        Some(request_body),
+        &Method::GET,
+    )
+    .await?;
+
+    Ok(response.json::<ContributorStatus>().await?)
 }
