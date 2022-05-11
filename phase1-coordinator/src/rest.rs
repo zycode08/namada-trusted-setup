@@ -20,7 +20,7 @@ use rocket::{
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
-use std::{collections::LinkedList, io::Cursor, net::SocketAddr, sync::Arc};
+use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc};
 use thiserror::Error;
 
 use tracing::debug;
@@ -276,11 +276,9 @@ pub async fn contribute_chunk(
     }
 }
 
-/// Update the [Coordinator](`crate::Coordinator`) state.
-#[cfg(debug_assertions)]
-#[get("/update")]
-pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
-    let mut write_lock = (*coordinator).clone().write_owned().await;
+/// Performs the update of the [Coordinator](`crate::Coordinator`) 
+pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
+    let mut write_lock = coordinator.clone().write_owned().await;
 
     match task::spawn_blocking(move || write_lock.update())
         .await?
@@ -288,6 +286,13 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> 
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
+}
+
+/// Update the [Coordinator](`crate::Coordinator`) state.
+#[cfg(debug_assertions)]
+#[get("/update")]
+pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
+    perform_coordinator_update(coordinator.deref().to_owned()).await
 }
 
 /// Lets the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
@@ -343,15 +348,13 @@ pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdo
     Ok(())
 }
 
-/// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
-#[cfg(debug_assertions)]
-#[get("/verify")]
-pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
+/// Performs the verification of the pending contributions 
+pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
 
     for (task, _) in pending_verifications {
-        let mut write_lock = (*coordinator).clone().write_owned().await;
+        let mut write_lock = coordinator.clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
         if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task))
@@ -362,6 +365,13 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
+#[cfg(debug_assertions)]
+#[get("/verify")]
+pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
+    perform_verify_chunks(coordinator.deref().to_owned()).await
 }
 
 /// Get the queue status of the contributor.

@@ -199,10 +199,11 @@ async fn close_ceremony(client: &Client, coordinator: &mut Url) {
     }
 }
 
+#[cfg(debug_assertions)]
 async fn verify_contributions(client: &Client, coordinator: &mut Url) {
     match requests::get_verify_chunks(client, coordinator).await {
         Ok(()) => info!("Verification of pending contributions completed"),
-        Err(e) => error!("{}", e), // FIXME: what to do in this case? Stop coordinator?
+        Err(e) => error!("{}", e),
     }
 }
 
@@ -228,6 +229,7 @@ async fn main() {
         ContributorOpt::CloseCeremony(mut url) => {
             close_ceremony(&client, &mut url.coordinator).await;
         }
+        #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
             verify_contributions(&client, &mut url.coordinator).await;
         }

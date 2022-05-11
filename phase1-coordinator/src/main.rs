@@ -18,11 +18,20 @@ const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 const UPDATE_TIME: Duration = Duration::from_secs(60);
 
-/// Loops forever and updates the [`Coordinator`] periodically
+// FIXME: single function or macro
+/// Constantly updates the [`Coordinator`] periodically
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        let mut write_lock = coordinator.clone().write_owned().await;
-        tokio::task::spawn_blocking(move || write_lock.update()).await??;
+        rest::perform_coordinator_update(coordinator.clone()).await?;
+
+        tokio::time::sleep(UPDATE_TIME).await;
+    }
+}
+
+/// Constantly verifies the pending contributions 
+async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+    loop {
+        rest::perform_verify_chunks(coordinator.clone()).await?;
 
         tokio::time::sleep(UPDATE_TIME).await;
     }
@@ -54,6 +63,7 @@ pub async fn main() {
         Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
     let up_coordinator = coordinator.clone();
+    let verify_coordinator = coordinator.clone();
 
     let mut write_lock = coordinator.clone().write_owned().await;
 
@@ -89,17 +99,17 @@ pub async fn main() {
         rest::heartbeat,
         rest::get_tasks_left,
         rest::stop_coordinator,
-        rest::verify_chunks,
         rest::get_contributor_queue_status
     ];
 
     let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
-
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
-    // FIXME: add task for verification
     // Spawn task to update the coordinator periodically
     let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
+
+    // Spawn task to verify the contributions periodically
+    let verify_handle = rocket::tokio::spawn(verify_contributions(verify_coordinator));
 
     // Spawn Rocket server task
     let rocket_handle = rocket::tokio::spawn(ignite_rocket.launch());
@@ -114,6 +124,17 @@ pub async fn main() {
                     }
                 },
                 Err(e) => error!("Update task panicked! {}", e),
+            }
+        },
+        verify_result = verify_handle => {
+            match verify_result { //FIXME: expect
+                Ok(inner) => {
+                    match inner {
+                        Ok(()) => info!("Verify task completed"),
+                        Err(e) => error!("Verify of Coordinator failed: {}", e),
+                    }
+                },
+                Err(e) => error!("Verify task panicked! {}", e),
             }
         },
         rocket_result = rocket_handle => {
