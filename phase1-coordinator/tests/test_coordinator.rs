@@ -17,7 +17,7 @@ use phase1_coordinator::{
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{
-        ContributionLocator, ContributionSignatureLocator, ANOMA_BASE_FILE_SIZE, ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
+        Object, ContributionLocator, ContributionSignatureLocator,
     },
     testing::coordinator,
     ContributionFileSignature, ContributionState, Coordinator, Participant,
@@ -436,7 +436,7 @@ fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = ANOMA_BASE_FILE_SIZE + ANOMA_PER_ROUND_FILE_SIZE_INCREASE;
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
     contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =

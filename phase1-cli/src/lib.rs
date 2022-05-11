@@ -48,6 +48,7 @@ pub enum ContributorOpt {
     CloseCeremony(CoordinatorUrl),
     #[structopt(about = "Verify the pending contributions")]
     VerifyContributions(CoordinatorUrl),
+    #[cfg(debug_assertions)]
     #[structopt(about = "Update manually the coordinator")]
     UpdateCoordinator(CoordinatorUrl),
 }

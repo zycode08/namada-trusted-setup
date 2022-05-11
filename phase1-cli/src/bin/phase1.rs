@@ -44,8 +44,8 @@ macro_rules! pretty_hash {
 }
 
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
-    let mut f = File::open(&filename).expect("no file found");
-    let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
+    let mut f = File::open(filename)?;
+    let metadata = std::fs::metadata(filename)?;
 
     let anoma_file_size: u64 = Object::anoma_contribution_file_size(round_height, contribution_id);
     let mut buffer = vec![0; anoma_file_size as usize];
@@ -80,9 +80,8 @@ fn compute_contribution(
     #[cfg(not(debug_assertions))]
     Computation::contribute_masp(challenge, &mut response_writer);
 
-    let elapsed = Instant::now().duration_since(start);
     debug!("response writer {:?}", response_writer);
-    println!("Completed contribution in {:?}", elapsed);
+    println!("Completed contribution in {:?}", start.elapsed());
 
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
 }
@@ -144,17 +143,17 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
     let keypair = KeyPair::new();
-    debug!("Contributor pubkey {:?}", &keypair.pubkey());
+    debug!("Contributor pubkey {}", keypair.pubkey());
 
-    if let Err(e) = requests::post_join_queue(&client, coordinator, &keypair.pubkey().to_owned()).await {
-        error!("{}", e);
+    if let Err(e) = requests::post_join_queue(&client, coordinator, keypair.pubkey()).await {
+        error!("{}", e); //FIXME: expect
         panic!();
     }
 
     loop {
         // For testing purposes only. this needs to be moved to the operator.
         // Update the coordinator
-        if let Err(e) = requests::get_update(&client, coordinator).await {
+        if let Err(e) = requests::get_update(&client, coordinator).await { //FIXME: remove
             // Log this error and continue
             error!("{}", e);
         }
@@ -162,7 +161,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey().to_owned())
             .await
-            .unwrap();
+            .unwrap(); //FIXME: expect
 
         match queue_status {
             ContributorStatus::Queue(position, size) => println!(
@@ -184,7 +183,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             ContributorStatus::Other => println!("Something went wrong!"),
         }
 
-        // Get status updates each 10 seconds
+        // Get status updates each 10 seconds FIXME: use SLEEP_TIME  from main
         time::sleep(TEN_SECONDS).await;
     }
 }
@@ -203,6 +202,7 @@ async fn verify_contributions(client: &Client, coordinator: &mut Url) {
     }
 }
 
+#[cfg(debug_assertions)]
 async fn update_coordinator(client: &Client, coordinator: &mut Url) {
     match requests::get_update(client, coordinator).await {
         Ok(()) => info!("Coordinator updated"),
@@ -227,6 +227,7 @@ async fn main() {
         ContributorOpt::VerifyContributions(mut url) => {
             verify_contributions(&client, &mut url.coordinator).await;
         }
+        #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
             update_coordinator(&client, &mut url.coordinator).await;
         }

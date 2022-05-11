@@ -93,12 +93,7 @@ pub async fn main() {
 
     let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
 
-    let ignite_rocket = match build_rocket.ignite().await {
-        Ok(v) => v,
-        Err(e) => {
-            panic!("Coordinator server didn't ignite: {}", e);
-        }
-    };
+    let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically
     let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
@@ -108,7 +103,7 @@ pub async fn main() {
 
     tokio::select! {
         update_result = update_handle => {
-            match update_result {
+            match update_result { //FIXME: expect
                 Ok(inner) => {
                     match inner {
                         Ok(()) => info!("Update task completed"),
@@ -121,7 +116,7 @@ pub async fn main() {
         rocket_result = rocket_handle => {
             match rocket_result {
                 Ok(inner) => match inner {
-                    Ok(()) => info!("Rocket task completed"),
+                    Ok(_) => info!("Rocket task completed"),
                     Err(e) => error!("Rocket failed: {}", e)
                 },
                 Err(e) => error!("Rocket task panicked! {}", e),

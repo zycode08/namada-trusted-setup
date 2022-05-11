@@ -13,7 +13,7 @@ use phase1_coordinator::{
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
     storage::{
-        ContributionLocator, ContributionSignatureLocator, ANOMA_BASE_FILE_SIZE, ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
+        Object, ContributionLocator, ContributionSignatureLocator,
     },
     testing::coordinator,
     ContributionFileSignature, ContributionState, Coordinator, Participant,
@@ -23,7 +23,7 @@ use rocket::{routes, Error, tokio::{
     sync::RwLock,
     task::JoinHandle,
     time::{self, Duration},
-}};
+}, Rocket, Ignite};
 
 use phase1_cli::requests;
 use reqwest::{Client, Url};
@@ -172,12 +172,12 @@ async fn test_heartbeat() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey.to_owned()).await;
+    let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey).await;
     assert!(response.is_err());
 
     // Ok
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_heartbeat(&client, &mut url, pubkey.to_owned())
+    requests::post_heartbeat(&client, &mut url, pubkey)
         .await
         .unwrap();
 
@@ -212,12 +212,12 @@ async fn test_get_tasks_left() {
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey.to_owned()).await;
+    let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey).await;
     assert!(response.is_err());
 
     // Ok tasks left
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, pubkey.to_owned())
+    let response = requests::get_tasks_left(&client, &mut url, pubkey)
         .await
         .unwrap();
     assert_eq!(response.len(), 1);
@@ -237,12 +237,12 @@ async fn test_join_queue() {
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_join_queue(&client, &mut url, pubkey.to_owned())
+    requests::post_join_queue(&client, &mut url, pubkey)
         .await
         .unwrap();
 
     // Wrong request, already existing contributor
-    let response = requests::post_join_queue(&client, &mut url, pubkey.to_owned()).await;
+    let response = requests::post_join_queue(&client, &mut url, pubkey).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -311,7 +311,7 @@ async fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = ANOMA_BASE_FILE_SIZE + ANOMA_PER_ROUND_FILE_SIZE_INCREASE;
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
     contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =
