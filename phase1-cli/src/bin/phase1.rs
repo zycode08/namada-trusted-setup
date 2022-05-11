@@ -67,21 +67,24 @@ fn compute_contribution(
     contribution_id: u64,
 ) -> Result<Vec<u8>> {
     // FIXME: pubkey contains special chars that aren't written to the filename. This makes the program fail when it tries to read a filename that doesn't exist.
-    let filename: String = String::from(format!("anoma_contribution_round_{}_public_key_.params", round_height));
+    let filename: String = String::from(format!(
+        "anoma_contribution_round_{}_public_key_here.params",
+        round_height
+    ));
     let mut response_writer = File::create(filename.as_str())?;
-    response_writer.write_all(challenge_hash);
+    response_writer.write_all(&challenge_hash);
 
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
     let start = Instant::now();
 
     #[cfg(debug_assertions)]
-    Computation::contribute_test_masp(challenge, &mut response_writer);
+    Computation::contribute_test_masp(&challenge, &mut response_writer);
 
     #[cfg(not(debug_assertions))]
-    Computation::contribute_masp(challenge, &mut response_writer);
+    Computation::contribute_masp(&challenge, &mut response_writer);
 
     let elapsed = Instant::now().duration_since(start);
-    debug!("response writer {:?}", response_writer);
+    // debug!("response writer {:?}", response_writer);
     println!("Completed contribution in {:?}", elapsed);
 
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
@@ -97,14 +100,15 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
     let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
-    debug!("Challenge is {}", pretty_hash!(&challenge));
+    // debug!("Challenge is {}", pretty_hash!(&challenge));
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
     let mut challenge_writer = File::create(String::from(format!("anoma_challenge_round_{}.params", round_height)))?;
-    challenge_writer.write_all(challenge.as_slice());
+    challenge_writer.write_all(&challenge.as_slice());
 
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
+    debug!("Challenge length {}", challenge.len());
 
     let contribution = compute_contribution(
         pubkey,
@@ -114,6 +118,8 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
         contribution_id,
     )?;
 
+    let contribution_hash = calculate_hash(contribution.as_ref());
+    debug!("Contribution hash is {}", pretty_hash!(&contribution_hash));
     debug!("Contribution length: {}", contribution.len());
 
     let contribution_state = ContributionState::new(
@@ -137,8 +143,6 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     let contribute_chunk_req = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
     let contribution_locator = requests::post_contribute_chunk(client, coordinator, &contribute_chunk_req).await?;
 
-    requests::post_heartbeat(client, coordinator, pubkey).await?;
-
     Ok(())
 }
 
@@ -159,6 +163,11 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             error!("{}", e);
         }
 
+        if let Err(e) = requests::post_heartbeat(client, coordinator, &keypair.pubkey().to_owned()).await {
+            // Log this error and continue
+            error!("{}", e);
+        }
+
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey().to_owned())
             .await
@@ -169,7 +178,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
                 "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
                 position,
                 size,
-                position * 2
+                position * 5
             ),
             ContributorStatus::Round => {
                 if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
