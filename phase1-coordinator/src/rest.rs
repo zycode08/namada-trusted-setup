@@ -384,17 +384,32 @@ pub async fn get_contributor_queue_status(
     contributor_pubkey: Json<String>,
 ) -> Result<Json<ContributorStatus>> {
     let pubkey = contributor_pubkey.into_inner();
-    let contributor = Participant::new_contributor(pubkey.as_str());
+    let contrib = Participant::new_contributor(pubkey.as_str());
+    let contributor = contrib.clone();
 
+    let read_lock = (*coordinator).clone().read_owned().await;
     // Check that the contributor is authorized to lock a chunk in the current round.
-    if coordinator.read().await.is_current_contributor(&contributor) {
+    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
         return Ok(Json(ContributorStatus::Round));
     }
+// FIXME: convert from JoinError to RuntimeError
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let coordinator_state = task::spawn_blocking(move || read_lock.state()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?;
+    
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let contributor = contrib.clone();
 
-    if coordinator.read().await.is_queue_contributor(&contributor) {
-        let queue_size = coordinator.read().await.state().number_of_queue_contributors() as u64;
-        let queue_position = match coordinator.read().await.state().queue_contributor_info(&contributor) {
-            Some((_, Some(round), _, _)) => round - coordinator.read().await.state().current_round_height(),
+    if task::spawn_blocking(move || read_lock.is_queue_contributor(&contributor)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
+        let state = coordinator_state.clone();
+        let queue_size = task::spawn_blocking(move || state.number_of_queue_contributors()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? as u64;
+        let contributor = contrib.clone();
+
+        let state = coordinator_state.clone();
+        let queue_position = match task::spawn_blocking(move || state.queue_contributor_info(&contributor).cloned()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
+            Some((_, Some(round), _, _)) => {
+                let state = coordinator_state.clone();
+                round - task::spawn_blocking(move || state.current_round_height()).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))?
+            },
             Some((_, None, _, _)) => queue_size,
             None => return Ok(Json(ContributorStatus::Other)),
         };
@@ -402,7 +417,9 @@ pub async fn get_contributor_queue_status(
         return Ok(Json(ContributorStatus::Queue(queue_position, queue_size)));
     }
 
-    if coordinator.read().await.is_finished_contributor(&contributor) {
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let contributor = contrib.clone();
+    if task::spawn_blocking(move || read_lock.is_finished_contributor(&contributor)).await.map_err(|e| ResponseError::RuntimeError(format!("{}", e)))? {
         return Ok(Json(ContributorStatus::Finished));
     }
 

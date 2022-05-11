@@ -20,6 +20,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use bs58;
+use base64;
+
 use tokio::time;
 
 use tracing::{debug, error, info};
@@ -66,8 +69,9 @@ fn compute_contribution(
     challenge_hash: &[u8],
     contribution_id: u64,
 ) -> Result<Vec<u8>> {
-    // FIXME: pubkey contains special chars that aren't written to the filename. This makes the program fail when it tries to read a filename that doesn't exist.
-    let filename: String = String::from(format!("anoma_contribution_round_{}_public_key_.params", round_height));
+    // Pubkey contains special chars that aren't written to the filename. Encode it in base58
+    let base58_pubkey = bs58::encode(base64::decode(pubkey)?).into_string();
+    let filename: String = String::from(format!("anoma_contribution_round_{}_public_key_{}.params", round_height, base58_pubkey));
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(challenge_hash);
 
@@ -159,7 +163,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         }
 
         // Check the contributor's position in the queue
-        let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey().to_owned())
+        let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair.pubkey())
             .await
             .unwrap(); //FIXME: expect
 

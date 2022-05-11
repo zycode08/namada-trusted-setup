@@ -13,3 +13,6 @@ tmp_*
 **/*.DS_Store
 
 **/*.env
+
+# Contribution artifacts
+*.params

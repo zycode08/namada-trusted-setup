@@ -75,6 +75,7 @@ pub async fn main() {
         rest::get_tasks_left,
         rest::stop_coordinator,
         rest::verify_chunks,
+        rest::get_contributor_queue_status
     ];
 
     #[cfg(not(debug_assertions))]
@@ -89,12 +90,14 @@ pub async fn main() {
         rest::get_tasks_left,
         rest::stop_coordinator,
         rest::verify_chunks,
+        rest::get_contributor_queue_status
     ];
 
     let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
 
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
+    // FIXME: add task for verification
     // Spawn task to update the coordinator periodically
     let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
 
