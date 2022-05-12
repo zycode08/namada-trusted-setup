@@ -20,10 +20,15 @@ use rocket::{
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
-use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc};
+use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc, time::{Duration, Instant}};
 use thiserror::Error;
 
 use tracing::debug;
+
+#[cfg(debug_assertions)]
+pub const UPDATE_TIME: Duration = Duration::from_secs(5);
+#[cfg(not(debug_assertions))]
+pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
 

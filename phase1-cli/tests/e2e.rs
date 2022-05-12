@@ -162,6 +162,32 @@ async fn test_stop_coordinator() {
 }
 
 #[tokio::test]
+async fn test_get_contributor_queue_status() {
+    let client = Client::new();
+    // Spawn the server and get the test context
+    let (ctx, handle) = test_prelude().await;
+    // Wait for server startup
+    time::sleep(Duration::from_millis(1000)).await;
+
+    // Non-existing contributor key
+    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    let response = requests::get_contributor_queue_status(&client, &mut url, unknown_pubkey).await;
+    match response.unwrap() {
+        rest::ContributorStatus::Other => (),
+        _ => panic!("Wrong ContributorStatus")
+    }
+
+    // Ok
+    let pubkey = ctx.contributors[0].keypair.pubkey();
+    let response = requests::get_contributor_queue_status(&client, &mut url, pubkey).await;
+    match response.unwrap() {
+        rest::ContributorStatus::Round => (),
+        _ => panic!("Wrong ContributorStatus")
+    }
+}
+
+#[tokio::test]
 async fn test_heartbeat() {
     let client = Client::new();
     // Spawn the server and get the test context

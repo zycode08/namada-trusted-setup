@@ -1,4 +1,4 @@
-use phase1_coordinator::{authentication::Production as ProductionSig, environment::Parameters, rest, Coordinator};
+use phase1_coordinator::{authentication::Production as ProductionSig, environment::Parameters, rest::{self, UPDATE_TIME}, Coordinator};
 
 #[cfg(debug_assertions)]
 use phase1_coordinator::environment::Testing;
@@ -6,19 +6,13 @@ use phase1_coordinator::environment::Testing;
 #[cfg(not(debug_assertions))]
 use phase1_coordinator::environment::Production;
 
-use rocket::{self, routes, tokio::{self, sync::RwLock, time::Duration}};
+use rocket::{self, routes, tokio::{self, sync::RwLock}};
 
 use std::sync::Arc;
 use anyhow::Result;
 
 use tracing::{info, error};
 
-#[cfg(debug_assertions)]
-const UPDATE_TIME: Duration = Duration::from_secs(5);
-#[cfg(not(debug_assertions))]
-const UPDATE_TIME: Duration = Duration::from_secs(60);
-
-// FIXME: single function or macro
 /// Constantly updates the [`Coordinator`] periodically
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
@@ -116,40 +110,24 @@ pub async fn main() {
 
     tokio::select! {
         update_result = update_handle => {
-            match update_result { //FIXME: expect
-                Ok(inner) => {
-                    match inner {
-                        Ok(()) => info!("Update task completed"),
-                        Err(e) => error!("Update of Coordinator failed: {}", e),
-                    }
-                },
-                Err(e) => error!("Update task panicked! {}", e),
+            match update_result.expect("Update task panicked") {
+                Ok(()) => info!("Update task completed"),
+                Err(e) => error!("Update of Coordinator failed: {}", e),
             }
         },
         verify_result = verify_handle => {
-            match verify_result { //FIXME: expect
-                Ok(inner) => {
-                    match inner {
-                        Ok(()) => info!("Verify task completed"),
-                        Err(e) => error!("Verify of Coordinator failed: {}", e),
-                    }
-                },
-                Err(e) => error!("Verify task panicked! {}", e),
+            match verify_result.expect("Verify task panicked") {
+                Ok(()) => info!("Verify task completed"),
+                Err(e) => error!("Verify of Coordinator failed: {}", e),
             }
         },
         rocket_result = rocket_handle => {
-            match rocket_result {
-                Ok(inner) => match inner {
-                    Ok(_) => info!("Rocket task completed"),
-                    Err(e) => error!("Rocket failed: {}", e)
-                },
-                Err(e) => error!("Rocket task panicked! {}", e),
+            match rocket_result.expect("Rocket task panicked") {
+                Ok(_) => info!("Rocket task completed"),
+                Err(e) => error!("Rocket failed: {}", e)
             }
         }
     }   
  
-    // FIXME: resolve all FIXMEs
-    // FIXME: test locally
-    // FIXME: test production
     // FIXME: clippy + fmt
 }

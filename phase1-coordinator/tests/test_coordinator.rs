@@ -15,7 +15,7 @@ use phase1_coordinator::{
     commands::Computation,
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
+    rest::{self, ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
     storage::{
         Object, ContributionLocator, ContributionSignatureLocator,
     },
@@ -142,6 +142,41 @@ fn test_stop_coordinator() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
+}
+
+#[test]
+fn test_get_contributor_queue_status() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong request, non-json body
+    let mut req = client
+        .get("/contributor/queue_status")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::BadRequest);
+    assert!(response.body().is_some());
+
+    // Non-existing contributor key
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    req = client.get("/contributor/queue_status").json(&unknown_pubkey);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    match response.into_json::<ContributorStatus>().unwrap() {
+        ContributorStatus::Other => (),
+        _ => panic!("Wrong ContributorStatus")
+    }
+
+    // Ok
+    let pubkey = ctx.contributors[0].keypair.pubkey();
+    req = client.get("/contributor/queue_status").json(&pubkey);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    match response.into_json::<ContributorStatus>().unwrap() {
+        ContributorStatus::Round => (),
+        _ => panic!("Wrong ContributorStatus")
+    }
 }
 
 #[test]

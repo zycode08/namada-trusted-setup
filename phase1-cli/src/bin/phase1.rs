@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
-    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
+    rest::{UPDATE_TIME, ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
     storage::{ContributionLocator, Object},
 };
 
@@ -17,7 +17,7 @@ use structopt::StructOpt;
 use std::{
     fs::File,
     io::{Read, Write},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use bs58;
@@ -26,8 +26,6 @@ use base64;
 use tokio::time;
 
 use tracing::{debug, error, info};
-
-const TEN_SECONDS: Duration = Duration::from_secs(10);
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -149,23 +147,13 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
     let keypair = KeyPair::new();
     debug!("Contributor pubkey {}", keypair.pubkey());
 
-    if let Err(e) = requests::post_join_queue(&client, coordinator, keypair.pubkey()).await {
-        error!("{}", e); //FIXME: expect
-        panic!();
-    }
+    requests::post_join_queue(&client, coordinator, keypair.pubkey()).await.expect("Couldn't join the queue");
 
     loop {
-        // For testing purposes only. this needs to be moved to the operator.
-        // Update the coordinator
-        if let Err(e) = requests::get_update(&client, coordinator).await { //FIXME: remove
-            // Log this error and continue
-            error!("{}", e);
-        }
-
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair.pubkey())
             .await
-            .unwrap(); //FIXME: expect
+            .expect("Couldn't get the status of contributor");
 
         match queue_status {
             ContributorStatus::Queue(position, size) => println!(
@@ -187,8 +175,8 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             ContributorStatus::Other => println!("Something went wrong!"),
         }
 
-        // Get status updates each 10 seconds FIXME: use SLEEP_TIME  from main
-        time::sleep(TEN_SECONDS).await;
+        // Get status updates
+        time::sleep(UPDATE_TIME).await;
     }
 }
 
