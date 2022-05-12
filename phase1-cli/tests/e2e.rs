@@ -12,18 +12,25 @@ use phase1_coordinator::{
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{
-        Object, ContributionLocator, ContributionSignatureLocator,
-    },
+    storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
-    ContributionFileSignature, ContributionState, Coordinator, Participant,
+    ContributionFileSignature,
+    ContributionState,
+    Coordinator,
+    Participant,
 };
-use rocket::{routes, Error, tokio::{
-    self,
-    sync::RwLock,
-    task::JoinHandle,
-    time::{self, Duration},
-}, Rocket, Ignite};
+use rocket::{
+    routes,
+    tokio::{
+        self,
+        sync::RwLock,
+        task::JoinHandle,
+        time::{self, Duration},
+    },
+    Error,
+    Ignite,
+    Rocket,
+};
 
 use phase1_cli::requests;
 use reqwest::{Client, Url};
@@ -84,23 +91,20 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let build = rocket::build()
-        .mount(
-            "/",
-            routes![
-                rest::join_queue,
-                rest::lock_chunk,
-                rest::get_chunk,
-                rest::get_challenge,
-                rest::post_contribution_chunk,
-                rest::contribute_chunk,
-                rest::update_coordinator,
-                rest::heartbeat,
-                rest::get_tasks_left,
-                rest::stop_coordinator,
-                rest::verify_chunks,
-                rest::get_contributor_queue_status
-            ],
-        )
+        .mount("/", routes![
+            rest::join_queue,
+            rest::lock_chunk,
+            rest::get_chunk,
+            rest::get_challenge,
+            rest::post_contribution_chunk,
+            rest::contribute_chunk,
+            rest::update_coordinator,
+            rest::heartbeat,
+            rest::get_tasks_left,
+            rest::stop_coordinator,
+            rest::verify_chunks,
+            rest::get_contributor_queue_status
+        ])
         .manage(coordinator);
 
     let ignite = build.ignite().await.unwrap();
@@ -175,7 +179,7 @@ async fn test_get_contributor_queue_status() {
     let response = requests::get_contributor_queue_status(&client, &mut url, unknown_pubkey).await;
     match response.unwrap() {
         rest::ContributorStatus::Other => (),
-        _ => panic!("Wrong ContributorStatus")
+        _ => panic!("Wrong ContributorStatus"),
     }
 
     // Ok
@@ -183,7 +187,7 @@ async fn test_get_contributor_queue_status() {
     let response = requests::get_contributor_queue_status(&client, &mut url, pubkey).await;
     match response.unwrap() {
         rest::ContributorStatus::Round => (),
-        _ => panic!("Wrong ContributorStatus")
+        _ => panic!("Wrong ContributorStatus"),
     }
 }
 
@@ -203,9 +207,7 @@ async fn test_heartbeat() {
 
     // Ok
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_heartbeat(&client, &mut url, pubkey)
-        .await
-        .unwrap();
+    requests::post_heartbeat(&client, &mut url, pubkey).await.unwrap();
 
     // Drop the server
     handle.abort();
@@ -243,9 +245,7 @@ async fn test_get_tasks_left() {
 
     // Ok tasks left
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, pubkey)
-        .await
-        .unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, pubkey).await.unwrap();
     assert_eq!(response.len(), 1);
 
     // Drop the server
@@ -263,9 +263,7 @@ async fn test_join_queue() {
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
     let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_join_queue(&client, &mut url, pubkey)
-        .await
-        .unwrap();
+    requests::post_join_queue(&client, &mut url, pubkey).await.unwrap();
 
     // Wrong request, already existing contributor
     let response = requests::post_join_queue(&client, &mut url, pubkey).await;

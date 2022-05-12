@@ -16,19 +16,20 @@ use phase1_coordinator::{
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
     rest::{self, ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
-    storage::{
-        Object, ContributionLocator, ContributionSignatureLocator,
-    },
+    storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
-    ContributionFileSignature, ContributionState, Coordinator, Participant,
+    ContributionFileSignature,
+    ContributionState,
+    Coordinator,
+    Participant,
 };
 use rocket::{
     http::{ContentType, Status},
     local::blocking::Client,
     routes,
+    tokio::sync::RwLock,
     Build,
     Rocket,
-    tokio::sync::RwLock
 };
 
 const ROUND_HEIGHT: u64 = 1;
@@ -87,23 +88,20 @@ fn build_context() -> TestCtx {
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let rocket = rocket::build()
-        .mount(
-            "/",
-            routes![
-                rest::join_queue,
-                rest::lock_chunk,
-                rest::get_chunk,
-                rest::get_challenge,
-                rest::post_contribution_chunk,
-                rest::contribute_chunk,
-                rest::update_coordinator,
-                rest::heartbeat,
-                rest::get_tasks_left,
-                rest::stop_coordinator,
-                rest::verify_chunks,
-                rest::get_contributor_queue_status
-            ],
-        )
+        .mount("/", routes![
+            rest::join_queue,
+            rest::lock_chunk,
+            rest::get_chunk,
+            rest::get_challenge,
+            rest::post_contribution_chunk,
+            rest::contribute_chunk,
+            rest::update_coordinator,
+            rest::heartbeat,
+            rest::get_tasks_left,
+            rest::stop_coordinator,
+            rest::verify_chunks,
+            rest::get_contributor_queue_status
+        ])
         .manage(coordinator);
 
     let test_participant1 = TestParticipant {
@@ -165,7 +163,7 @@ fn test_get_contributor_queue_status() {
     assert_eq!(response.status(), Status::Ok);
     match response.into_json::<ContributorStatus>().unwrap() {
         ContributorStatus::Other => (),
-        _ => panic!("Wrong ContributorStatus")
+        _ => panic!("Wrong ContributorStatus"),
     }
 
     // Ok
@@ -175,7 +173,7 @@ fn test_get_contributor_queue_status() {
     assert_eq!(response.status(), Status::Ok);
     match response.into_json::<ContributorStatus>().unwrap() {
         ContributorStatus::Round => (),
-        _ => panic!("Wrong ContributorStatus")
+        _ => panic!("Wrong ContributorStatus"),
     }
 }
 

@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
-    rest::{UPDATE_TIME, ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
+    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest, UPDATE_TIME},
     storage::{ContributionLocator, Object},
 };
 
@@ -20,8 +20,8 @@ use std::{
     time::Instant,
 };
 
-use bs58;
 use base64;
+use bs58;
 
 use tokio::time;
 
@@ -69,7 +69,10 @@ fn compute_contribution(
 ) -> Result<Vec<u8>> {
     // Pubkey contains special chars that aren't written to the filename. Encode it in base58
     let base58_pubkey = bs58::encode(base64::decode(pubkey)?).into_string();
-    let filename: String = String::from(format!("anoma_contribution_round_{}_public_key_{}.params", round_height, base58_pubkey));
+    let filename: String = String::from(format!(
+        "anoma_contribution_round_{}_public_key_{}.params",
+        round_height, base58_pubkey
+    ));
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(challenge_hash);
 
@@ -147,7 +150,9 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
     let keypair = KeyPair::new();
     debug!("Contributor pubkey {}", keypair.pubkey());
 
-    requests::post_join_queue(&client, coordinator, keypair.pubkey()).await.expect("Couldn't join the queue");
+    requests::post_join_queue(&client, coordinator, keypair.pubkey())
+        .await
+        .expect("Couldn't join the queue");
 
     loop {
         // Check the contributor's position in the queue

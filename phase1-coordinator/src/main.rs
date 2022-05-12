@@ -1,4 +1,9 @@
-use phase1_coordinator::{authentication::Production as ProductionSig, environment::Parameters, rest::{self, UPDATE_TIME}, Coordinator};
+use phase1_coordinator::{
+    authentication::Production as ProductionSig,
+    environment::Parameters,
+    rest::{self, UPDATE_TIME},
+    Coordinator,
+};
 
 #[cfg(debug_assertions)]
 use phase1_coordinator::environment::Testing;
@@ -6,12 +11,16 @@ use phase1_coordinator::environment::Testing;
 #[cfg(not(debug_assertions))]
 use phase1_coordinator::environment::Production;
 
-use rocket::{self, routes, tokio::{self, sync::RwLock}};
+use rocket::{
+    self,
+    routes,
+    tokio::{self, sync::RwLock},
+};
 
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// Constantly updates the [`Coordinator`] periodically
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
@@ -22,7 +31,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
     }
 }
 
-/// Constantly verifies the pending contributions 
+/// Constantly verifies the pending contributions
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
         rest::perform_verify_chunks(coordinator.clone()).await?;
@@ -127,7 +136,5 @@ pub async fn main() {
                 Err(e) => error!("Rocket failed: {}", e)
             }
         }
-    }   
- 
-    // FIXME: clippy + fmt
+    }
 }

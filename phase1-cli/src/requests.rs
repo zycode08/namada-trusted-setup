@@ -226,7 +226,8 @@ pub async fn get_contributor_queue_status<T>(
     request_body: T,
 ) -> Result<ContributorStatus>
 where
-    T: Into<String>, {
+    T: Into<String>,
+{
     let response = submit_request(
         client,
         coordinator_address,

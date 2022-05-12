@@ -12,15 +12,22 @@ use rocket::{
     post,
     response::{Responder, Response},
     serde::{json::Json, Deserialize, Serialize},
+    tokio::{sync::RwLock, task},
     Request,
     Shutdown,
     State,
-    tokio::{sync::RwLock, task},
 };
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
-use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc, time::{Duration, Instant}};
+use std::{
+    collections::LinkedList,
+    io::Cursor,
+    net::SocketAddr,
+    ops::Deref,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use thiserror::Error;
 
 use tracing::debug;
@@ -141,9 +148,7 @@ pub async fn join_queue(
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.add_to_queue(contributor, Some(contributor_ip.ip()), 10))
-        .await?
-    {
+    match task::spawn_blocking(move || write_lock.add_to_queue(contributor, Some(contributor_ip.ip()), 10)).await? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -160,9 +165,7 @@ pub async fn lock_chunk(
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.try_lock(&contributor))
-        .await?
-    {
+    match task::spawn_blocking(move || write_lock.try_lock(&contributor)).await? {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -184,9 +187,7 @@ pub async fn get_chunk(
 
     let read_lock = (*coordinator).clone().read_owned().await;
 
-    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned())
-        .await?
-    {
+    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await? {
         Some(info) => {
             if !info.pending_tasks().contains(&task) {
                 return Err(ResponseError::UnknownTask(task));
@@ -218,9 +219,7 @@ pub async fn get_challenge(
 
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
-    match task::spawn_blocking(move || write_lock.get_challenge(round_height, chunk_id, 0, true))
-        .await?
-    {
+    match task::spawn_blocking(move || write_lock.get_challenge(round_height, chunk_id, 0, true)).await? {
         Ok(challenge_hash) => Ok(Json(challenge_hash)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -273,21 +272,17 @@ pub async fn contribute_chunk(
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.try_contribute(&contributor, request.chunk_id))
-        .await?
-    {
+    match task::spawn_blocking(move || write_lock.try_contribute(&contributor, request.chunk_id)).await? {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
 
-/// Performs the update of the [Coordinator](`crate::Coordinator`) 
+/// Performs the update of the [Coordinator](`crate::Coordinator`)
 pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
     let mut write_lock = coordinator.clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.update())
-        .await?
-    {
+    match task::spawn_blocking(move || write_lock.update()).await? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -308,9 +303,7 @@ pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_pubkey: Jso
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.heartbeat(&contributor))
-        .await?
-    {
+    match task::spawn_blocking(move || write_lock.heartbeat(&contributor)).await? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -327,9 +320,7 @@ pub async fn get_tasks_left(
 
     let read_lock = (*coordinator).clone().read_owned().await;
 
-    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned())
-        .await?
-    {
+    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await? {
         Some(info) => Ok(Json(info.pending_tasks().to_owned())),
         None => Err(ResponseError::UnknownContributor(pubkey)),
     }
@@ -340,8 +331,7 @@ pub async fn get_tasks_left(
 pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    let result = task::spawn_blocking(move || write_lock.shutdown())
-        .await?;
+    let result = task::spawn_blocking(move || write_lock.shutdown()).await?;
 
     if let Err(e) = result {
         return Err(ResponseError::ShutdownError(format!("{}", e)));
@@ -353,7 +343,7 @@ pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdo
     Ok(())
 }
 
-/// Performs the verification of the pending contributions 
+/// Performs the verification of the pending contributions
 pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
@@ -362,9 +352,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
         let mut write_lock = coordinator.clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
-        if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task))
-            .await?
-        {
+        if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
             return Err(ResponseError::VerificationError(format!("{}", e)));
         }
     }
@@ -397,7 +385,7 @@ pub async fn get_contributor_queue_status(
 
     let read_lock = (*coordinator).clone().read_owned().await;
     let coordinator_state = task::spawn_blocking(move || read_lock.state()).await?;
-    
+
     let read_lock = (*coordinator).clone().read_owned().await;
     let contributor = contrib.clone();
 
@@ -407,14 +395,15 @@ pub async fn get_contributor_queue_status(
         let contributor = contrib.clone();
 
         let state = coordinator_state.clone();
-        let queue_position = match task::spawn_blocking(move || state.queue_contributor_info(&contributor).cloned()).await? {
-            Some((_, Some(round), _, _)) => {
-                let state = coordinator_state.clone();
-                round - task::spawn_blocking(move || state.current_round_height()).await?
-            },
-            Some((_, None, _, _)) => queue_size,
-            None => return Ok(Json(ContributorStatus::Other)),
-        };
+        let queue_position =
+            match task::spawn_blocking(move || state.queue_contributor_info(&contributor).cloned()).await? {
+                Some((_, Some(round), _, _)) => {
+                    let state = coordinator_state.clone();
+                    round - task::spawn_blocking(move || state.current_round_height()).await?
+                }
+                Some((_, None, _, _)) => queue_size,
+                None => return Ok(Json(ContributorStatus::Other)),
+            };
 
         return Ok(Json(ContributorStatus::Queue(queue_position, queue_size)));
     }
