@@ -111,7 +111,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
     debug!("Challenge length {}", challenge.len());
 
-    let contribution = compute_contribution(
+    let contribution = compute_contribution( //FIXME: spawn_blocking? Try to measure the speed
         pubkey,
         round_height,
         &challenge,
@@ -238,3 +238,6 @@ async fn main() {
         }
     }
 }
+
+// FIXME: fix call to requests
+// FIXME: fix tests

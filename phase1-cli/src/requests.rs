@@ -1,5 +1,6 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
+use phase1_coordinator::rest::SignedRequest;
 use reqwest::{Client, Method, Response, Url};
 use serde::Serialize;
 use std::collections::LinkedList;
@@ -30,11 +31,12 @@ async fn submit_request<T>(
     client: &Client,
     coordinator_address: &mut Url,
     endpoint: &str,
-    request_body: Option<&T>,
+    pubkey: String,
+    request_body: Option<T>,
     request: &Method,
 ) -> Result<Response>
 where
-    T: Serialize + ?Sized,
+    T: Serialize,
 {
     coordinator_address.set_path(endpoint);
 
@@ -44,12 +46,26 @@ where
         _ => panic!("Invalid request type"),
     };
 
-    let req = match request_body {
-        Some(body) => req.json(body),
-        None => req,
+    // Sign the request
+    let body = match request_body {
+        Some(body) => {
+            SignedRequest {
+                request: body,
+                signature: SignedRequest::sign(&body, pubkey.as_str())?,
+                pubkey
+            }
+        }, 
+        None => {
+            // If the request has no body use the pubkey as body to sign
+            SignedRequest {
+                request: pubkey,
+                signature: SignedRequest::sign(pubkey.as_str(), pubkey.as_str())?,
+                pubkey
+            }
+        },
     };
 
-    let response = req.send().await?;
+    let response = req.json(&body).send().await?;
 
     if response.status().is_success() {
         Ok(response)
@@ -58,8 +74,10 @@ where
     }
 }
 
+// FIXME: fix requests with pubkey. When there's no body pass None
+
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to join the queue of contributors.
-pub async fn post_join_queue<T>(client: &Client, coordinator_address: &mut Url, request_body: T) -> Result<()>
+pub async fn post_join_queue<T>(client: &Client, coordinator_address: &mut Url, pubkey: T) -> Result<()>
 where
     T: Into<String>,
 {
@@ -67,7 +85,8 @@ where
         client,
         coordinator_address,
         "contributor/join_queue",
-        Some(&request_body.into()),
+        pubkey.into(),
+        None,
         &Method::POST,
     )
     .await?;
@@ -79,7 +98,7 @@ where
 pub async fn post_lock_chunk<T>(
     client: &Client,
     coordinator_address: &mut Url,
-    request_body: T,
+    pubkey: T,
 ) -> Result<LockedLocators>
 where
     T: Into<String>,
@@ -88,7 +107,8 @@ where
         client,
         coordinator_address,
         "contributor/lock_chunk",
-        Some(&request_body.into()),
+        pubkey.into(),
+        None,
         &Method::POST,
     )
     .await?;
@@ -96,8 +116,9 @@ where
     Ok(response.json::<LockedLocators>().await?)
 }
 
+// FIXME: restart from here
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_body: &GetChunkRequest) -> Result<Task> {
+pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_body: &LockedLocators) -> Result<Task> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -110,6 +131,7 @@ pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_b
     Ok(response.json::<Task>().await?)
 }
 
+/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge.
 pub async fn get_challenge(
     client: &Client,
     coordinator_address: &mut Url,

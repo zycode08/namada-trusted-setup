@@ -1,6 +1,7 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
 use crate::{
+    authentication::{Production, Signature},
     objects::Task,
     storage::{ContributionLocator, ContributionSignatureLocator},
     ContributionFileSignature,
@@ -11,7 +12,7 @@ use rocket::{
     http::{ContentType, Status},
     post,
     response::{Responder, Response},
-    serde::{json::Json, Deserialize, Serialize},
+    serde::{json::{self, Json}, Deserialize, Serialize},
     tokio::{sync::RwLock, task},
     Request,
     Shutdown,
@@ -44,8 +45,12 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
+    #[error("Request's signature is invalid")]
+    InvalidSignature,
     #[error("Thread panicked: {0}")]
     RuntimeError(#[from] task::JoinError),
+    #[error("Error while signing the request: {0}")]
+    SigningError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
     #[error("Could not find contributor with public key {0}")]
@@ -68,6 +73,43 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 }
 
 type Result<T> = std::result::Result<T, ResponseError>;
+
+// FIXME: remove unused struct and also their imports around
+
+/// A signed incoming request. Contains the pubkey to check the signature.
+/// Signature must be computed on the Json encoding of request and relies on
+/// the [`Production`] signature scheme  
+#[derive(Deserialize, Serialize)]
+pub struct SignedRequest<T>
+where T: Serialize
+{
+    pub request: T,
+    pub signature: String,
+    pub pubkey: String,
+}
+
+impl<T: Serialize> SignedRequest<T> {
+    fn verify(&self) -> Result<()> {
+        let request = json::to_string(&self.request).unwrap(); //FIXME: manage error
+        let sig_scheme = Production;
+        
+        if sig_scheme.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
+            Ok(())
+        } else {
+            Err(ResponseError::InvalidSignature)
+        }
+    }
+
+    pub fn sign(request: &T, pubkey: &str) -> Result<String> {
+        let request = json::to_string(request).unwrap(); //FIXME: manage error
+        let sig_scheme = Production;
+
+        match sig_scheme.sign(pubkey, request.as_str()) {
+            Ok(sig) => Ok(sig),
+            Err(e) => Err(ResponseError::SigningError(format!("{}", e)))
+        }
+    }
+}
 
 /// The status of the contributor related to the current round.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -136,6 +178,9 @@ impl PostChunkRequest {
 // -- REST API ENDPOINTS --
 //
 
+// FIXME: enpoint should be public only for crate
+// FIXME: fix endpoints to handle SignedRequest
+
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<contributor_pubkey>")]
 pub async fn join_queue(
@@ -175,12 +220,17 @@ pub async fn lock_chunk(
 #[get("/download/chunk", format = "json", data = "<get_chunk_request>")]
 pub async fn get_chunk(
     coordinator: &State<Coordinator>,
-    get_chunk_request: Json<GetChunkRequest>,
+    get_chunk_request: Json<SignedRequest<LockedLocators>>,
 ) -> Result<Json<Task>> {
-    let request = get_chunk_request.into_inner();
-    let contributor = Participant::new_contributor(request.pubkey.as_ref());
+    let signed_request = get_chunk_request.into_inner();
 
-    let next_contribution = request.locked_locators.next_contribution();
+    // Check signature FIXME: this first part, into and sig verification could be done with a macro, or at least in a separate function
+    signed_request.verify()?;
+
+    let locked_locators = signed_request.request;
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_ref());
+
+    let next_contribution = locked_locators.next_contribution();
 
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
@@ -194,7 +244,7 @@ pub async fn get_chunk(
             }
             Ok(Json(task))
         }
-        None => Err(ResponseError::UnknownContributor(request.pubkey)),
+        None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
     }
 }
 
@@ -295,7 +345,7 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> 
     perform_coordinator_update(coordinator.deref().to_owned()).await
 }
 
-/// Lets the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
+/// Let the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
 #[post("/contributor/heartbeat", format = "json", data = "<contributor_pubkey>")]
 pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_pubkey: Json<String>) -> Result<()> {
     let pubkey = contributor_pubkey.into_inner();
