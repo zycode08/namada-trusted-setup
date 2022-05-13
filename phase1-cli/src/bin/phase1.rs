@@ -74,16 +74,16 @@ fn compute_contribution(
         round_height, base58_pubkey
     ));
     let mut response_writer = File::create(filename.as_str())?;
-    response_writer.write_all(challenge_hash);
+    response_writer.write_all(&challenge_hash);
 
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
     let start = Instant::now();
 
     #[cfg(debug_assertions)]
-    Computation::contribute_test_masp(challenge, &mut response_writer);
+    Computation::contribute_test_masp(&challenge, &mut response_writer);
 
     #[cfg(not(debug_assertions))]
-    Computation::contribute_masp(challenge, &mut response_writer);
+    Computation::contribute_masp(&challenge, &mut response_writer);
 
     debug!("response writer {:?}", response_writer);
     println!("Completed contribution in {:?}", start.elapsed());
@@ -101,14 +101,15 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
 
     let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
-    debug!("Challenge is {}", pretty_hash!(&challenge));
+    // debug!("Challenge is {}", pretty_hash!(&challenge));
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
     let mut challenge_writer = File::create(String::from(format!("anoma_challenge_round_{}.params", round_height)))?;
-    challenge_writer.write_all(challenge.as_slice());
+    challenge_writer.write_all(&challenge.as_slice());
 
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
+    debug!("Challenge length {}", challenge.len());
 
     let contribution = compute_contribution(
         pubkey,
@@ -118,6 +119,8 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
         contribution_id,
     )?;
 
+    let contribution_hash = calculate_hash(contribution.as_ref());
+    debug!("Contribution hash is {}", pretty_hash!(&contribution_hash));
     debug!("Contribution length: {}", contribution.len());
 
     let contribution_state = ContributionState::new(
@@ -141,8 +144,6 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     let contribute_chunk_req = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
     let contribution_locator = requests::post_contribute_chunk(client, coordinator, &contribute_chunk_req).await?;
 
-    requests::post_heartbeat(client, coordinator, pubkey).await?;
-
     Ok(())
 }
 
@@ -155,6 +156,11 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
         .expect("Couldn't join the queue");
 
     loop {
+        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair.pubkey()).await {
+            // Log this error and continue
+            error!("{}", e);
+        }
+
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair.pubkey())
             .await
@@ -165,7 +171,7 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
                 "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
                 position,
                 size,
-                position * 2
+                position * 5
             ),
             ContributorStatus::Round => {
                 if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
