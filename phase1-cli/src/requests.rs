@@ -198,6 +198,7 @@ where
 }
 
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
+#[cfg(debug_assertions)]
 pub async fn get_update(client: &Client, coordinator_address: &mut Url) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/update", None, &Method::GET).await?;
 
@@ -219,16 +220,19 @@ pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url) -
 }
 
 /// Get Contributor queue status.
-pub async fn get_contributor_queue_status(
+pub async fn get_contributor_queue_status<T>(
     client: &Client,
     coordinator_address: &mut Url,
-    request_body: &String,
-) -> Result<ContributorStatus> {
+    request_body: T,
+) -> Result<ContributorStatus>
+where
+    T: Into<String>,
+{
     let response = submit_request(
         client,
         coordinator_address,
         "contributor/queue_status",
-        Some(request_body),
+        Some(&request_body.into()),
         &Method::GET,
     )
     .await?;

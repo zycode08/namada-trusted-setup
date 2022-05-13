@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
-    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
+    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest, UPDATE_TIME},
     storage::{ContributionLocator, Object},
 };
 
@@ -17,14 +17,15 @@ use structopt::StructOpt;
 use std::{
     fs::File,
     io::{Read, Write},
-    time::{Duration, Instant},
+    time::Instant,
 };
+
+use base64;
+use bs58;
 
 use tokio::time;
 
 use tracing::{debug, error, info};
-
-const TEN_SECONDS: Duration = Duration::from_secs(10);
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -44,8 +45,8 @@ macro_rules! pretty_hash {
 }
 
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
-    let mut f = File::open(&filename).expect("no file found");
-    let metadata = std::fs::metadata(&filename).expect("unable to read metadata");
+    let mut f = File::open(filename)?;
+    let metadata = std::fs::metadata(filename)?;
 
     let anoma_file_size: u64 = Object::anoma_contribution_file_size(round_height, contribution_id);
     let mut buffer = vec![0; anoma_file_size as usize];
@@ -66,10 +67,11 @@ fn compute_contribution(
     challenge_hash: &[u8],
     contribution_id: u64,
 ) -> Result<Vec<u8>> {
-    // FIXME: pubkey contains special chars that aren't written to the filename. This makes the program fail when it tries to read a filename that doesn't exist.
+    // Pubkey contains special chars that aren't written to the filename. Encode it in base58
+    let base58_pubkey = bs58::encode(base64::decode(pubkey)?).into_string();
     let filename: String = String::from(format!(
-        "anoma_contribution_round_{}_public_key_here.params",
-        round_height
+        "anoma_contribution_round_{}_public_key_{}.params",
+        round_height, base58_pubkey
     ));
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(&challenge_hash);
@@ -83,9 +85,8 @@ fn compute_contribution(
     #[cfg(not(debug_assertions))]
     Computation::contribute_masp(&challenge, &mut response_writer);
 
-    let elapsed = Instant::now().duration_since(start);
-    // debug!("response writer {:?}", response_writer);
-    println!("Completed contribution in {:?}", elapsed);
+    debug!("response writer {:?}", response_writer);
+    println!("Completed contribution in {:?}", start.elapsed());
 
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
 }
@@ -148,30 +149,22 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
 
 async fn contribute(client: &Client, coordinator: &mut Url) {
     let keypair = KeyPair::new();
-    debug!("Contributor pubkey {:?}", &keypair.pubkey());
+    debug!("Contributor pubkey {}", keypair.pubkey());
 
-    if let Err(e) = requests::post_join_queue(&client, coordinator, &keypair.pubkey().to_owned()).await {
-        error!("{}", e);
-        panic!();
-    }
+    requests::post_join_queue(&client, coordinator, keypair.pubkey())
+        .await
+        .expect("Couldn't join the queue");
 
     loop {
-        // For testing purposes only. this needs to be moved to the operator.
-        // Update the coordinator
-        if let Err(e) = requests::get_update(&client, coordinator).await {
-            // Log this error and continue
-            error!("{}", e);
-        }
-
-        if let Err(e) = requests::post_heartbeat(client, coordinator, &keypair.pubkey().to_owned()).await {
+        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair.pubkey()).await {
             // Log this error and continue
             error!("{}", e);
         }
 
         // Check the contributor's position in the queue
-        let queue_status = requests::get_contributor_queue_status(&client, coordinator, &keypair.pubkey().to_owned())
+        let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair.pubkey())
             .await
-            .unwrap();
+            .expect("Couldn't get the status of contributor");
 
         match queue_status {
             ContributorStatus::Queue(position, size) => println!(
@@ -193,8 +186,8 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
             ContributorStatus::Other => println!("Something went wrong!"),
         }
 
-        // Get status updates each 10 seconds
-        time::sleep(TEN_SECONDS).await;
+        // Get status updates
+        time::sleep(UPDATE_TIME).await;
     }
 }
 
@@ -205,13 +198,15 @@ async fn close_ceremony(client: &Client, coordinator: &mut Url) {
     }
 }
 
+#[cfg(debug_assertions)]
 async fn verify_contributions(client: &Client, coordinator: &mut Url) {
     match requests::get_verify_chunks(client, coordinator).await {
         Ok(()) => info!("Verification of pending contributions completed"),
-        Err(e) => error!("{}", e), // FIXME: what to do in this case? Stop coordinator?
+        Err(e) => error!("{}", e),
     }
 }
 
+#[cfg(debug_assertions)]
 async fn update_coordinator(client: &Client, coordinator: &mut Url) {
     match requests::get_update(client, coordinator).await {
         Ok(()) => info!("Coordinator updated"),
@@ -233,9 +228,11 @@ async fn main() {
         ContributorOpt::CloseCeremony(mut url) => {
             close_ceremony(&client, &mut url.coordinator).await;
         }
+        #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
             verify_contributions(&client, &mut url.coordinator).await;
         }
+        #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
             update_coordinator(&client, &mut url.coordinator).await;
         }

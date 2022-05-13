@@ -599,11 +599,9 @@ impl std::default::Default for Testing {
 
                 minimum_contributors_per_round: 1,
                 maximum_contributors_per_round: 1,
-                // maximum_contributors_per_round: 5,
                 minimum_verifiers_per_round: 1,
                 maximum_verifiers_per_round: 5,
                 contributor_lock_chunk_limit: 1,
-                // contributor_lock_chunk_limit: 5,
                 verifier_lock_chunk_limit: 5,
                 contributor_seen_timeout: time::Duration::minutes(5),
                 verifier_seen_timeout: time::Duration::minutes(15),
@@ -615,7 +613,7 @@ impl std::default::Default for Testing {
                 queue_wait_time: 0,
 
                 coordinator_contributors: vec![Participant::new_contributor("testing-coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
                 default_verifier_signing_key: keypair.sigkey().to_owned(),
 
                 software_version: 1,
@@ -721,11 +719,9 @@ impl std::default::Default for Development {
 
                 minimum_contributors_per_round: 1,
                 maximum_contributors_per_round: 1,
-                // maximum_contributors_per_round: 5,
                 minimum_verifiers_per_round: 1,
                 maximum_verifiers_per_round: 5,
                 contributor_lock_chunk_limit: 1,
-                // contributor_lock_chunk_limit: 5,
                 verifier_lock_chunk_limit: 5,
                 contributor_seen_timeout: time::Duration::minutes(1),
                 verifier_seen_timeout: time::Duration::minutes(15),
@@ -737,7 +733,7 @@ impl std::default::Default for Development {
                 queue_wait_time: 60,
 
                 coordinator_contributors: vec![Participant::new_contributor("development-coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
                 default_verifier_signing_key: keypair.sigkey().to_owned(),
 
                 software_version: 1,
@@ -842,11 +838,9 @@ impl std::default::Default for Production {
 
                 minimum_contributors_per_round: 1,
                 maximum_contributors_per_round: 1,
-                // maximum_contributors_per_round: 5,
                 minimum_verifiers_per_round: 1,
                 maximum_verifiers_per_round: 5,
                 contributor_lock_chunk_limit: 1,
-                // contributor_lock_chunk_limit: 5,
                 verifier_lock_chunk_limit: 5,
                 contributor_seen_timeout: time::Duration::minutes(2),
                 verifier_seen_timeout: time::Duration::days(7),
@@ -858,7 +852,7 @@ impl std::default::Default for Production {
                 queue_wait_time: 10,
 
                 coordinator_contributors: vec![Participant::new_contributor("coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey().as_ref())],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
                 default_verifier_signing_key: keypair.sigkey().to_owned(),
 
                 software_version: 1,

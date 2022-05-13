@@ -15,20 +15,22 @@ use phase1_coordinator::{
     commands::Computation,
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
-    storage::{
-        ContributionLocator, ContributionSignatureLocator, ANOMA_BASE_FILE_SIZE, ANOMA_PER_ROUND_FILE_SIZE_INCREASE,
-    },
+    rest::{self, ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
+    storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
-    ContributionFileSignature, ContributionState, Coordinator, Participant,
+    ContributionFileSignature,
+    ContributionState,
+    Coordinator,
+    Participant,
 };
 use rocket::{
     http::{ContentType, Status},
     local::blocking::Client,
-    routes, Build, Rocket,
+    routes,
+    tokio::sync::RwLock,
+    Build,
+    Rocket,
 };
-
-use tokio::sync::RwLock;
 
 const ROUND_HEIGHT: u64 = 1;
 
@@ -86,23 +88,20 @@ fn build_context() -> TestCtx {
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let rocket = rocket::build()
-        .mount(
-            "/",
-            routes![
-                rest::join_queue,
-                rest::lock_chunk,
-                rest::get_chunk,
-                rest::get_challenge,
-                rest::post_contribution_chunk,
-                rest::contribute_chunk,
-                rest::update_coordinator,
-                rest::heartbeat,
-                rest::get_tasks_left,
-                rest::stop_coordinator,
-                rest::verify_chunks,
-                rest::get_contributor_queue_status
-            ],
-        )
+        .mount("/", routes![
+            rest::join_queue,
+            rest::lock_chunk,
+            rest::get_chunk,
+            rest::get_challenge,
+            rest::post_contribution_chunk,
+            rest::contribute_chunk,
+            rest::update_coordinator,
+            rest::heartbeat,
+            rest::get_tasks_left,
+            rest::stop_coordinator,
+            rest::verify_chunks,
+            rest::get_contributor_queue_status
+        ])
         .manage(coordinator);
 
     let test_participant1 = TestParticipant {
@@ -141,6 +140,41 @@ fn test_stop_coordinator() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
+}
+
+#[test]
+fn test_get_contributor_queue_status() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong request, non-json body
+    let mut req = client
+        .get("/contributor/queue_status")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::BadRequest);
+    assert!(response.body().is_some());
+
+    // Non-existing contributor key
+    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
+    req = client.get("/contributor/queue_status").json(&unknown_pubkey);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    match response.into_json::<ContributorStatus>().unwrap() {
+        ContributorStatus::Other => (),
+        _ => panic!("Wrong ContributorStatus"),
+    }
+
+    // Ok
+    let pubkey = ctx.contributors[0].keypair.pubkey();
+    req = client.get("/contributor/queue_status").json(&pubkey);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    match response.into_json::<ContributorStatus>().unwrap() {
+        ContributorStatus::Round => (),
+        _ => panic!("Wrong ContributorStatus"),
+    }
 }
 
 #[test]
@@ -435,7 +469,7 @@ fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = ANOMA_BASE_FILE_SIZE + ANOMA_PER_ROUND_FILE_SIZE_INCREASE;
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
     contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =
