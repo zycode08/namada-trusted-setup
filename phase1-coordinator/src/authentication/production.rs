@@ -3,8 +3,10 @@ use base64;
 use ed25519_compact::{KeyPair as EdKeyPair, Noise, PublicKey, SecretKey, Signature};
 use hex;
 use std::ops::Deref;
+use serde::{Deserialize, Serialize};
 
 /// A private/public key couple encoded in [`base64`]
+#[derive(Deserialize, Serialize)]
 pub struct KeyPair {
     pubkey: String,
     sigkey: String,

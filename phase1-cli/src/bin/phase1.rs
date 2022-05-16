@@ -1,4 +1,5 @@
 use phase1_coordinator::{
+    KEYPAIR_FILE,
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
@@ -13,6 +14,7 @@ use anyhow::Result;
 use phase1_cli::{requests, ContributorOpt};
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
+use serde_json;
 
 use std::{
     fs::File,
@@ -42,6 +44,30 @@ macro_rules! pretty_hash {
         }
         output
     }};
+}
+
+/// Retrieve [`KeyPair`] from file if exists, otherwise generate new keypair and store
+/// its json encoding to file
+fn get_keypair() -> Result<KeyPair> {
+    match File::open(KEYPAIR_FILE) {
+        Ok(f) => {
+            let keypair_str: String;
+            f.read_to_string(&mut keypair_str)?;
+
+            Ok(serde_json::from_str(keypair_str.as_str())?)
+        },
+        Err(_) => {
+            info!("Missing keypair file, generating new one");
+            let keypair = KeyPair::new();
+            debug!("Contributor pubkey {}", keypair.pubkey());
+
+            // Store key to file
+            let mut f = File::create(KEYPAIR_FILE)?;
+            f.write_all(&serde_json::to_vec(&keypair)?)?;
+
+            Ok(keypair)
+        },
+    }
 }
 
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
@@ -147,10 +173,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     Ok(())
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url) {
-    let keypair = KeyPair::new();
-    debug!("Contributor pubkey {}", keypair.pubkey());
-
+async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) { //FIXME: fix keypair here
     requests::post_join_queue(&client, coordinator, keypair.pubkey())
         .await
         .expect("Couldn't join the queue");
@@ -191,24 +214,24 @@ async fn contribute(client: &Client, coordinator: &mut Url) {
     }
 }
 
-async fn close_ceremony(client: &Client, coordinator: &mut Url) {
-    match requests::get_stop_coordinator(client, coordinator).await {
+async fn close_ceremony(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+    match requests::get_stop_coordinator(client, coordinator, keypair).await {
         Ok(()) => info!("Ceremony completed!"),
         Err(e) => error!("{}", e),
     }
 }
 
 #[cfg(debug_assertions)]
-async fn verify_contributions(client: &Client, coordinator: &mut Url) {
-    match requests::get_verify_chunks(client, coordinator).await {
+async fn verify_contributions(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+    match requests::get_verify_chunks(client, coordinator, keypair).await {
         Ok(()) => info!("Verification of pending contributions completed"),
         Err(e) => error!("{}", e),
     }
 }
 
 #[cfg(debug_assertions)]
-async fn update_coordinator(client: &Client, coordinator: &mut Url) {
-    match requests::get_update(client, coordinator).await {
+async fn update_coordinator(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+    match requests::get_update(client, coordinator, keypair).await {
         Ok(()) => info!("Coordinator updated"),
         Err(e) => error!("{}", e),
     }
@@ -221,23 +244,26 @@ async fn main() {
     let opt = ContributorOpt::from_args();
     let client = Client::new();
 
+    let keypair = get_keypair().expect("Failed to retrieve keypair");
+
     match opt {
         ContributorOpt::Contribute(mut url) => {
-            contribute(&client, &mut url.coordinator).await;
+            contribute(&client, &mut url.coordinator, &keypair).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
-            close_ceremony(&client, &mut url.coordinator).await;
+            close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
-            verify_contributions(&client, &mut url.coordinator).await;
+            verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
-            update_coordinator(&client, &mut url.coordinator).await;
+            update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
     }
 }
+
 
 // FIXME: fix call to requests
 // FIXME: fix tests

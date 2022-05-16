@@ -1,16 +1,14 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
-use phase1_coordinator::rest::SignedRequest;
+use phase1_coordinator::{rest::SignedRequest, authentication::KeyPair};
 use reqwest::{Client, Method, Response, Url};
 use serde::Serialize;
 use std::collections::LinkedList;
 use thiserror::Error;
 
 use crate::{
-    ContributeChunkRequest,
     ContributionLocator,
     ContributorStatus,
-    GetChunkRequest,
     LockedLocators,
     PostChunkRequest,
     Task,
@@ -31,7 +29,7 @@ async fn submit_request<T>(
     client: &Client,
     coordinator_address: &mut Url,
     endpoint: &str,
-    pubkey: String,
+    keypair: &KeyPair,
     request_body: Option<T>,
     request: &Method,
 ) -> Result<Response>
@@ -49,18 +47,20 @@ where
     // Sign the request
     let body = match request_body {
         Some(body) => {
+            let signature = SignedRequest::sign(keypair, Some(&body)).map_err(|e| RequestError::Server(format!("{}", e)))?;
+
             SignedRequest {
-                request: body,
-                signature: SignedRequest::sign(&body, pubkey.as_str())?,
-                pubkey
+                request: Some(body),
+                signature,
+                pubkey: keypair.pubkey().to_owned()
             }
         }, 
         None => {
             // If the request has no body use the pubkey as body to sign
             SignedRequest {
-                request: pubkey,
-                signature: SignedRequest::sign(pubkey.as_str(), pubkey.as_str())?,
-                pubkey
+                request: None,
+                signature: SignedRequest::<()>::sign(keypair, None).map_err(|e| RequestError::Server(format!("{}", e)))?,
+                pubkey: keypair.pubkey().to_owned()
             }
         },
     };
@@ -74,18 +74,14 @@ where
     }
 }
 
-// FIXME: fix requests with pubkey. When there's no body pass None
-
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to join the queue of contributors.
-pub async fn post_join_queue<T>(client: &Client, coordinator_address: &mut Url, pubkey: T) -> Result<()>
-where
-    T: Into<String>,
+pub async fn post_join_queue(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
 {
     submit_request::<String>(
         client,
         coordinator_address,
         "contributor/join_queue",
-        pubkey.into(),
+        keypair,
         None,
         &Method::POST,
     )
@@ -95,19 +91,17 @@ where
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to lock the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn post_lock_chunk<T>(
+pub async fn post_lock_chunk(
     client: &Client,
     coordinator_address: &mut Url,
-    pubkey: T,
+    keypair: &KeyPair,
 ) -> Result<LockedLocators>
-where
-    T: Into<String>,
 {
     let response = submit_request::<String>(
         client,
         coordinator_address,
         "contributor/lock_chunk",
-        pubkey.into(),
+        keypair,
         None,
         &Method::POST,
     )
@@ -116,13 +110,14 @@ where
     Ok(response.json::<LockedLocators>().await?)
 }
 
-// FIXME: restart from here
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_body: &LockedLocators) -> Result<Task> {
+pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair, request_body: &LockedLocators) -> Result<Task>
+{
     let response = submit_request(
         client,
         coordinator_address,
         "download/chunk",
+        keypair,
         Some(request_body),
         &Method::GET,
     )
@@ -135,12 +130,15 @@ pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, request_b
 pub async fn get_challenge(
     client: &Client,
     coordinator_address: &mut Url,
+    keypair: &KeyPair,
     request_body: &LockedLocators,
-) -> Result<Vec<u8>> {
+) -> Result<Vec<u8>>
+{
     let response = submit_request(
         client,
         coordinator_address,
         "contributor/challenge",
+        keypair,
         Some(request_body),
         &Method::GET,
     )
@@ -150,11 +148,13 @@ pub async fn get_challenge(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to upload a contribution.
-pub async fn post_chunk(client: &Client, coordinator_address: &mut Url, request_body: &PostChunkRequest) -> Result<()> {
+pub async fn post_chunk(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair, request_body: &PostChunkRequest) -> Result<()>
+{
     submit_request(
         client,
         coordinator_address,
         "upload/chunk",
+        keypair,
         Some(request_body),
         &Method::POST,
     )
@@ -167,12 +167,15 @@ pub async fn post_chunk(client: &Client, coordinator_address: &mut Url, request_
 pub async fn post_contribute_chunk(
     client: &Client,
     coordinator_address: &mut Url,
-    request_body: &ContributeChunkRequest,
-) -> Result<ContributionLocator> {
+    keypair: &KeyPair,
+    request_body: u64,
+) -> Result<ContributionLocator>
+{
     let response = submit_request(
         client,
         coordinator_address,
         "contributor/contribute_chunk",
+        keypair,
         Some(request_body),
         &Method::POST,
     )
@@ -182,15 +185,14 @@ pub async fn post_contribute_chunk(
 }
 
 /// Let the [Coordinator](`phase1-coordinator::Coordinator`) know that the contributor is still alive.
-pub async fn post_heartbeat<T>(client: &Client, coordinator_address: &mut Url, request_body: T) -> Result<()>
-where
-    T: Into<String>,
+pub async fn post_heartbeat(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
 {
     submit_request::<String>(
         client,
         coordinator_address,
         "contributor/heartbeat",
-        Some(&request_body.into()),
+        keypair,
+        None,
         &Method::POST,
     )
     .await?;
@@ -199,19 +201,18 @@ where
 }
 
 /// Get pending tasks of the contributor.
-pub async fn get_tasks_left<T>(
+pub async fn get_tasks_left(
     client: &Client,
     coordinator_address: &mut Url,
-    request_body: T,
+    keypair: &KeyPair
 ) -> Result<LinkedList<Task>>
-where
-    T: Into<String>,
 {
     let response = submit_request::<String>(
         client,
         coordinator_address,
         "contributor/get_tasks_left",
-        Some(&request_body.into()),
+        keypair,
+        None,
         &Method::GET,
     )
     .await?;
@@ -221,40 +222,43 @@ where
 
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
 #[cfg(debug_assertions)]
-pub async fn get_update(client: &Client, coordinator_address: &mut Url) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/update", None, &Method::GET).await?;
+pub async fn get_update(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> 
+{
+    submit_request::<()>(client, coordinator_address, "/update", keypair, None, &Method::GET).await?;
 
     Ok(())
 }
 
 /// Stop the [Coordinator](`phase1-coordinator::Coordinator`).
-pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/stop", None, &Method::GET).await?;
+pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
+{
+    submit_request::<()>(client, coordinator_address, "/stop", keypair, None, &Method::GET).await?;
 
     Ok(())
 }
 
 /// Verify the pending contributions.
-pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/verify", None, &Method::GET).await?;
+#[cfg(debug_assertions)]
+pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
+{
+    submit_request::<()>(client, coordinator_address, "/verify", keypair, None, &Method::GET).await?;
 
     Ok(())
 }
 
 /// Get Contributor queue status.
-pub async fn get_contributor_queue_status<T>(
+pub async fn get_contributor_queue_status(
     client: &Client,
     coordinator_address: &mut Url,
-    request_body: T,
+    keypair: &KeyPair,
 ) -> Result<ContributorStatus>
-where
-    T: Into<String>,
 {
-    let response = submit_request(
+    let response = submit_request::<()>(
         client,
         coordinator_address,
         "contributor/queue_status",
-        Some(&request_body.into()),
+        keypair,
+        None,
         &Method::GET,
     )
     .await?;

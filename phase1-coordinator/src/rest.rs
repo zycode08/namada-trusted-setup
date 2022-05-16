@@ -1,7 +1,7 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
 use crate::{
-    authentication::{Production, Signature},
+    authentication::{KeyPair, Production, Signature},
     objects::Task,
     storage::{ContributionLocator, ContributionSignatureLocator},
     ContributionFileSignature,
@@ -49,10 +49,14 @@ pub enum ResponseError {
     InvalidSignature,
     #[error("Thread panicked: {0}")]
     RuntimeError(#[from] task::JoinError),
+    #[error("Error with Serde: {0}")]
+    SerdeError(#[from] serde_json::error::Error),
     #[error("Error while signing the request: {0}")]
     SigningError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
+    #[error("The participant {0} is not allowed to access endpoint {1}")]
+    UnauthorizedParticipant(Participant, String),
     #[error("Could not find contributor with public key {0}")]
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
@@ -74,23 +78,37 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 
 type Result<T> = std::result::Result<T, ResponseError>;
 
-// FIXME: remove unused struct and also their imports around
-
-/// A signed incoming request. Contains the pubkey to check the signature.
+/// A signed incoming request. Contains the pubkey to check the signature. If the
+/// request is None the signature is computed on the pubkey itself.
 /// Signature must be computed on the Json encoding of request and relies on
 /// the [`Production`] signature scheme  
 #[derive(Deserialize, Serialize)]
 pub struct SignedRequest<T>
 where T: Serialize
 {
-    pub request: T,
+    pub request: Option<T>,
     pub signature: String,
     pub pubkey: String,
 }
 
+impl<T: Serialize> Deref for SignedRequest<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match &self.request {
+            Some(t) => t,
+            None => panic!("Expected Some not None")
+        }
+    }
+}
+
 impl<T: Serialize> SignedRequest<T> {
     fn verify(&self) -> Result<()> {
-        let request = json::to_string(&self.request).unwrap(); //FIXME: manage error
+        let request = match &self.request {
+            Some(r) => json::to_string(r)?,
+            None => json::to_string(&self.pubkey)?,
+        };
+
         let sig_scheme = Production;
         
         if sig_scheme.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
@@ -100,11 +118,14 @@ impl<T: Serialize> SignedRequest<T> {
         }
     }
 
-    pub fn sign(request: &T, pubkey: &str) -> Result<String> {
-        let request = json::to_string(request).unwrap(); //FIXME: manage error
+    pub fn sign(keypair: &KeyPair, request: Option<&T>) -> Result<String> {
+        let request = match request {
+            Some(r) => json::to_string(r)?,
+            None => json::to_string(&keypair.pubkey().to_owned())?
+        };
         let sig_scheme = Production;
 
-        match sig_scheme.sign(pubkey, request.as_str()) {
+        match sig_scheme.sign(keypair.sigkey(), request.as_str()) {
             Ok(sig) => Ok(sig),
             Err(e) => Err(ResponseError::SigningError(format!("{}", e)))
         }
@@ -118,35 +139,6 @@ pub enum ContributorStatus {
     Round,
     Finished,
     Other,
-}
-
-/// Request to get a [Chunk](`crate::objects::Chunk`).
-#[derive(Deserialize, Serialize)]
-pub struct GetChunkRequest {
-    pubkey: String,
-    locked_locators: LockedLocators,
-}
-
-impl GetChunkRequest {
-    pub fn new(pubkey: String, locked_locators: LockedLocators) -> Self {
-        GetChunkRequest {
-            pubkey,
-            locked_locators,
-        }
-    }
-}
-
-/// Contribution of a [Chunk](`crate::objects::Chunk`).
-#[derive(Deserialize, Serialize)]
-pub struct ContributeChunkRequest {
-    pubkey: String,
-    chunk_id: u64,
-}
-
-impl ContributeChunkRequest {
-    pub fn new(pubkey: String, chunk_id: u64) -> Self {
-        Self { pubkey, chunk_id }
-    }
 }
 
 /// Request to post a [Chunk](`crate::objects::Chunk`).
@@ -174,22 +166,36 @@ impl PostChunkRequest {
     }
 }
 
+/// Check the signature of the request and also that the request comes from the
+/// [Coordinator](`crate::Coordinator`) itself.
+async fn check_coordinator_request<T>(coordinator: &Coordinator, signed_request: &SignedRequest<T>) -> Result<()>
+where T: Serialize {
+    // Check pubkey is the one of the coordinator's verifier
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_ref());
+    if contributor != coordinator.read().await.environment().coordinator_verifiers()[0] {
+        return Err(ResponseError::UnauthorizedParticipant(contributor, String::from("/update")));
+    }
+    // Check signature
+    signed_request.verify()
+}
+
 //
 // -- REST API ENDPOINTS --
 //
 
-// FIXME: enpoint should be public only for crate
-// FIXME: fix endpoints to handle SignedRequest
-
 /// Add the incoming contributor to the queue of contributors.
-#[post("/contributor/join_queue", format = "json", data = "<contributor_pubkey>")]
+#[post("/contributor/join_queue", format = "json", data = "<request>")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
-    contributor_pubkey: Json<String>,
+    request: Json<SignedRequest<()>>,
     contributor_ip: SocketAddr,
 ) -> Result<()> {
-    let pubkey = contributor_pubkey.into_inner();
-    let contributor = Participant::new_contributor(pubkey.as_str());
+    let signed_request = request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -200,13 +206,17 @@ pub async fn join_queue(
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
-#[post("/contributor/lock_chunk", format = "json", data = "<contributor_pubkey>")]
+#[post("/contributor/lock_chunk", format = "json", data = "<request>")]
 pub async fn lock_chunk(
     coordinator: &State<Coordinator>,
-    contributor_pubkey: Json<String>,
+    request: Json<SignedRequest<()>>,
 ) -> Result<Json<LockedLocators>> {
-    let pubkey = contributor_pubkey.into_inner();
-    let contributor = Participant::new_contributor(pubkey.as_str());
+    let signed_request = request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -224,13 +234,11 @@ pub async fn get_chunk(
 ) -> Result<Json<Task>> {
     let signed_request = get_chunk_request.into_inner();
 
-    // Check signature FIXME: this first part, into and sig verification could be done with a macro, or at least in a separate function
+    // Check signature
     signed_request.verify()?;
 
-    let locked_locators = signed_request.request;
     let contributor = Participant::new_contributor(signed_request.pubkey.as_ref());
-
-    let next_contribution = locked_locators.next_contribution();
+    let next_contribution = signed_request.next_contribution();
 
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
@@ -252,11 +260,14 @@ pub async fn get_chunk(
 #[get("/contributor/challenge", format = "json", data = "<locked_locators>")]
 pub async fn get_challenge(
     coordinator: &State<Coordinator>,
-    locked_locators: Json<LockedLocators>,
+    locked_locators: Json<SignedRequest<LockedLocators>>,
 ) -> Result<Json<Vec<u8>>> {
-    let request = locked_locators.into_inner();
+    let signed_request = locked_locators.into_inner();
 
-    let challenge_locator = request.current_contribution();
+    // Check signature
+    signed_request.verify()?;
+
+    let challenge_locator = signed_request.current_contribution();
     let round_height = challenge_locator.round_height();
     let chunk_id = challenge_locator.chunk_id();
 
@@ -280,9 +291,14 @@ pub async fn get_challenge(
 #[post("/upload/chunk", format = "json", data = "<post_chunk_request>")]
 pub async fn post_contribution_chunk(
     coordinator: &State<Coordinator>,
-    post_chunk_request: Json<PostChunkRequest>,
+    post_chunk_request: Json<SignedRequest<PostChunkRequest>>,
 ) -> Result<()> {
-    let request = post_chunk_request.into_inner();
+    let signed_request = post_chunk_request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    let request = signed_request.request.unwrap();
     let request_clone = request.clone();
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -315,14 +331,19 @@ pub async fn post_contribution_chunk(
 )]
 pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
-    contribute_chunk_request: Json<ContributeChunkRequest>,
+    contribute_chunk_request: Json<SignedRequest<u64>>,
 ) -> Result<Json<ContributionLocator>> {
-    let request = contribute_chunk_request.into_inner();
-    let contributor = Participant::new_contributor(request.pubkey.as_ref());
+    let signed_request = contribute_chunk_request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    let chunk_id = signed_request.request.unwrap();
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_ref());
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.try_contribute(&contributor, request.chunk_id)).await? {
+    match task::spawn_blocking(move || write_lock.try_contribute(&contributor, chunk_id)).await? {
         Ok(contribution_locator) => Ok(Json(contribution_locator)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -338,19 +359,28 @@ pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> 
     }
 }
 
-/// Update the [Coordinator](`crate::Coordinator`) state.
+/// Update the [Coordinator](`crate::Coordinator`) state. This endpoint should be accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
-#[get("/update")]
-pub async fn update_coordinator(coordinator: &State<Coordinator>) -> Result<()> {
+#[get("/update", format = "json",
+data = "<request>")]
+pub async fn update_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
+    let signed_request = request.into_inner();
+
+    // Verify request
+    check_coordinator_request(coordinator, &signed_request).await?;
+
     perform_coordinator_update(coordinator.deref().to_owned()).await
 }
 
 /// Let the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
-#[post("/contributor/heartbeat", format = "json", data = "<contributor_pubkey>")]
-pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_pubkey: Json<String>) -> Result<()> {
-    let pubkey = contributor_pubkey.into_inner();
-    let contributor = Participant::new_contributor(pubkey.as_str());
+#[post("/contributor/heartbeat", format = "json", data = "<request>")]
+pub async fn heartbeat(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
+    let signed_request = request.into_inner();
 
+    // Check signature
+    signed_request.verify()?;
+
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     match task::spawn_blocking(move || write_lock.heartbeat(&contributor)).await? {
@@ -360,25 +390,34 @@ pub async fn heartbeat(coordinator: &State<Coordinator>, contributor_pubkey: Jso
 }
 
 /// Get the pending tasks of contributor.
-#[get("/contributor/get_tasks_left", format = "json", data = "<contributor_pubkey>")]
+#[get("/contributor/get_tasks_left", format = "json", data = "<request>")]
 pub async fn get_tasks_left(
     coordinator: &State<Coordinator>,
-    contributor_pubkey: Json<String>,
+    request: Json<SignedRequest<()>>,
 ) -> Result<Json<LinkedList<Task>>> {
-    let pubkey = contributor_pubkey.into_inner();
-    let contributor = Participant::new_contributor(pubkey.as_str());
+    let signed_request = request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
 
     let read_lock = (*coordinator).clone().read_owned().await;
 
     match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await? {
         Some(info) => Ok(Json(info.pending_tasks().to_owned())),
-        None => Err(ResponseError::UnknownContributor(pubkey)),
+        None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
     }
 }
 
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
-#[get("/stop")]
-pub async fn stop_coordinator(coordinator: &State<Coordinator>, shutdown: Shutdown) -> Result<()> {
+#[get("/stop", format = "json", data = "<request>")]
+pub async fn stop_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>, shutdown: Shutdown) -> Result<()> {
+    let signed_request = request.into_inner();
+
+    // Verify request
+    check_coordinator_request(coordinator, &signed_request).await?;
+
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     let result = task::spawn_blocking(move || write_lock.shutdown()).await?;
@@ -412,19 +451,28 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 
 /// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
-#[get("/verify")]
-pub async fn verify_chunks(coordinator: &State<Coordinator>) -> Result<()> {
+#[get("/verify", format = "json", data = "<request>")]
+pub async fn verify_chunks(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
+    let signed_request = request.into_inner();
+
+    // Verify request
+    check_coordinator_request(coordinator, &signed_request).await?;
+
     perform_verify_chunks(coordinator.deref().to_owned()).await
 }
 
 /// Get the queue status of the contributor.
-#[get("/contributor/queue_status", format = "json", data = "<contributor_pubkey>")]
+#[get("/contributor/queue_status", format = "json", data = "<request>")]
 pub async fn get_contributor_queue_status(
     coordinator: &State<Coordinator>,
-    contributor_pubkey: Json<String>,
+    request: Json<SignedRequest<()>>,
 ) -> Result<Json<ContributorStatus>> {
-    let pubkey = contributor_pubkey.into_inner();
-    let contrib = Participant::new_contributor(pubkey.as_str());
+    let signed_request = request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    let contrib = Participant::new_contributor(signed_request.pubkey.as_str());
     let contributor = contrib.clone();
 
     let read_lock = (*coordinator).clone().read_owned().await;
