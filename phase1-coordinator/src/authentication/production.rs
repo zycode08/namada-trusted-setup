@@ -23,6 +23,15 @@ impl KeyPair {
         }
     }
 
+    /// Custom keypair available only in test
+    #[cfg(debug_assertions)]
+    pub fn custom_new(sigkey: String, pubkey: String) -> Self {
+        KeyPair {
+            pubkey,
+            sigkey
+        }
+    }
+
     /// Get a reference to the key pair's pubkey.
     #[must_use]
     pub fn pubkey(&self) -> &str {

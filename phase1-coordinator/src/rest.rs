@@ -91,6 +91,8 @@ where T: Serialize
     pubkey: String,
 }
 
+// FIXME: make SignedRequest a trait and implement two structs: SignedRequest, CoordinatorSignedRequest. Hot to solve the Option<T> problem?
+
 impl<T: Serialize> Deref for SignedRequest<T> {
     type Target = T;
 
@@ -102,7 +104,7 @@ impl<T: Serialize> Deref for SignedRequest<T> {
     }
 }
 
-impl<T: Serialize> SignedRequest<T> {
+impl<T: Serialize> SignedRequest<T> { //FIXME: add unittesting for sign + verify
     fn verify(&self) -> Result<()> {
         let request = match &self.request {
             Some(r) => json::to_string(r)?,
@@ -170,13 +172,13 @@ impl PostChunkRequest {
 
 /// Check the signature of the request and also that the request comes from the
 /// [Coordinator](`crate::Coordinator`) itself.
-async fn check_coordinator_request<T>(coordinator: &Coordinator, signed_request: &SignedRequest<T>) -> Result<()>
+async fn check_coordinator_request<T>(coordinator: &Coordinator, signed_request: &SignedRequest<T>, endpoint: &str) -> Result<()>
 where T: Serialize {
     // Check pubkey is the one of the coordinator's verifier
     let contributor = Participant::new_verifier(signed_request.pubkey.as_ref());
 
     if contributor != coordinator.read().await.environment().coordinator_verifiers()[0] {
-        return Err(ResponseError::UnauthorizedParticipant(contributor, String::from("/update")));
+        return Err(ResponseError::UnauthorizedParticipant(contributor, endpoint.to_string()));
     }
     // Check signature
     signed_request.verify()
@@ -370,7 +372,7 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>, request: Json<
     let signed_request = request.into_inner();
 
     // Verify request
-    check_coordinator_request(coordinator, &signed_request).await?;
+    check_coordinator_request(coordinator, &signed_request, "/update").await?;
 
     perform_coordinator_update(coordinator.deref().to_owned()).await
 }
@@ -419,7 +421,7 @@ pub async fn stop_coordinator(coordinator: &State<Coordinator>, request: Json<Si
     let signed_request = request.into_inner();
 
     // Verify request
-    check_coordinator_request(coordinator, &signed_request).await?;
+    check_coordinator_request(coordinator, &signed_request, "/stop").await?;
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -459,7 +461,7 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, request: Json<Signe
     let signed_request = request.into_inner();
 
     // Verify request
-    check_coordinator_request(coordinator, &signed_request).await?;
+    check_coordinator_request(coordinator, &signed_request, "/verify").await?;
 
     perform_verify_chunks(coordinator.deref().to_owned()).await
 }

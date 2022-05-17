@@ -15,7 +15,7 @@ use phase1_coordinator::{
     commands::Computation,
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
+    rest::{self, ContributorStatus, PostChunkRequest, SignedRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -45,6 +45,7 @@ struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
+    coordinator: TestParticipant
 }
 
 /// Build the rocket server for testing with the proper configuration.
@@ -69,11 +70,20 @@ fn build_context() -> TestCtx {
     let contributor2 = Participant::new_contributor(keypair2.pubkey());
     let unknown_contributor = Participant::new_contributor(keypair3.pubkey());
 
+    let coordinator_ip = IpAddr::V4("0.0.0.0".parse().unwrap());
     let contributor1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
     coordinator.initialize().unwrap();
+    let coordinator_keypair = KeyPair::custom_new(coordinator.environment().default_verifier_signing_key(), coordinator.environment().coordinator_verifiers()[0].address());
+
+    let coord_verifier = TestParticipant{
+        _inner: coordinator.environment().coordinator_verifiers()[0].clone(),
+        address: coordinator_ip,
+        keypair: coordinator_keypair,
+        locked_locators: None
+    };
 
     coordinator
         .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
@@ -127,6 +137,7 @@ fn build_context() -> TestCtx {
         rocket,
         contributors: vec![test_participant1, test_pariticpant2],
         unknown_participant,
+        coordinator: coord_verifier
     }
 }
 
@@ -136,7 +147,8 @@ fn test_stop_coordinator() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Shut the server down
-    let req = client.get("/stop");
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.coordinator.keypair, None).unwrap();
+    let req = client.get("/stop").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -157,8 +169,8 @@ fn test_get_contributor_queue_status() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    req = client.get("/contributor/queue_status").json(&unknown_pubkey);
+    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
+    req = client.get("/contributor/queue_status").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     match response.into_json::<ContributorStatus>().unwrap() {
@@ -167,8 +179,8 @@ fn test_get_contributor_queue_status() {
     }
 
     // Ok
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    req = client.get("/contributor/queue_status").json(&pubkey);
+    sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    req = client.get("/contributor/queue_status").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     match response.into_json::<ContributorStatus>().unwrap() {
@@ -198,15 +210,15 @@ fn test_heartbeat() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    req = client.post("/contributor/heartbeat").json(&unknown_pubkey);
+    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
+    req = client.post("/contributor/heartbeat").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    req = client.post("/contributor/heartbeat").json(&pubkey);
+    sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    req = client.post("/contributor/heartbeat").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -217,14 +229,16 @@ fn test_update_coordinator() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Non-empty body, Ok ignore the body
-    let mut req = client.get("/update").json(&String::from("unexpected body"));
+    // Wrong, request comes from normal contributor
+    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    let mut req = client.get("/update").json(&sig_req);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
 
-    // Ok
-    req = client.get("/update");
+    // Ok, request comes from coordinator itself
+    sig_req = SignedRequest::try_sign(&ctx.coordinator.keypair, None).unwrap();
+    req = client.get("/update").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -253,15 +267,15 @@ fn test_get_tasks_left() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    req = client.get("/contributor/get_tasks_left").json(&unknown_pubkey);
+    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
+    req = client.get("/contributor/get_tasks_left").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok tasks left
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    req = client.get("/contributor/get_tasks_left").json(&pubkey);
+    sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    req = client.get("/contributor/get_tasks_left").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -293,10 +307,10 @@ fn test_join_queue() {
     assert!(response.body().is_some());
 
     // Ok request
-    let pubkey = ctx.unknown_participant.keypair.pubkey();
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
-        .json(&pubkey)
+        .json(&sig_req)
         .remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -305,7 +319,7 @@ fn test_join_queue() {
     // Wrong request, already existing contributor
     req = client
         .post("/contributor/join_queue")
-        .json(&pubkey)
+        .json(&sig_req)
         .remote(socket_address);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -418,9 +432,8 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
-    req = client.post("/contributor/contribute_chunk").json(&contribute_request);
+    let sig_req = SignedRequest::try_sign(&ctx.unknown_participant.keypair, Some(0)).unwrap();
+    req = client.post("/contributor/contribute_chunk").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
@@ -442,9 +455,8 @@ fn test_contribution() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Download chunk
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    let chunk_request = GetChunkRequest::new(pubkey.to_owned(), ctx.contributors[0].locked_locators.clone().unwrap());
-    let mut req = client.get("/download/chunk").json(&chunk_request);
+    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(ctx.contributors[0].locked_locators.clone().unwrap())).unwrap();
+    let mut req = client.get("/download/chunk").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -453,7 +465,7 @@ fn test_contribution() {
     // Get challenge
     req = client
         .get("/contributor/challenge")
-        .json(ctx.contributors[0].locked_locators.as_ref().unwrap());
+        .json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -493,21 +505,22 @@ fn test_contribution() {
         contribution_file_signature,
     );
 
-    req = client.post("/upload/chunk").json(&post_chunk);
+    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(post_chunk)).unwrap();
+    req = client.post("/upload/chunk").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
-
-    req = client.post("/contributor/contribute_chunk").json(&contribute_request);
+    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(task.chunk_id())).unwrap();
+    req = client.post("/contributor/contribute_chunk").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
 
     // Verify chunk
-    req = client.get("/verify");
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.coordinator.keypair, None).unwrap();
+    req = client.get("/verify").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
