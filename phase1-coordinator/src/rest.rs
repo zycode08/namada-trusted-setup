@@ -86,9 +86,9 @@ type Result<T> = std::result::Result<T, ResponseError>;
 pub struct SignedRequest<T>
 where T: Serialize
 {
-    pub request: Option<T>,
-    pub signature: String,
-    pub pubkey: String,
+    request: Option<T>,
+    signature: String,
+    pubkey: String,
 }
 
 impl<T: Serialize> Deref for SignedRequest<T> {
@@ -185,8 +185,6 @@ where T: Serialize {
 //
 // -- REST API ENDPOINTS --
 //
-
-// FIXME: request guards for signature?
 
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<request>")]
