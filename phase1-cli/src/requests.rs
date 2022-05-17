@@ -45,26 +45,7 @@ where
     };
 
     // Sign the request
-    let body = match request_body {
-        Some(body) => {
-            let signature = SignedRequest::sign(keypair, Some(&body)).map_err(|e| RequestError::Server(format!("{}", e)))?;
-
-            SignedRequest {
-                request: Some(body),
-                signature,
-                pubkey: keypair.pubkey().to_owned()
-            }
-        }, 
-        None => {
-            // If the request has no body use the pubkey as body to sign
-            SignedRequest {
-                request: None,
-                signature: SignedRequest::<()>::sign(keypair, None).map_err(|e| RequestError::Server(format!("{}", e)))?,
-                pubkey: keypair.pubkey().to_owned()
-            }
-        },
-    };
-
+    let body = SignedRequest::try_sign(keypair, request_body).map_err(|e| RequestError::Server(format!("{}", e)))?;
     let response = req.json(&body).send().await?;
 
     if response.status().is_success() {

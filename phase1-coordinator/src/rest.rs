@@ -55,7 +55,7 @@ pub enum ResponseError {
     SigningError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
-    #[error("The participant {0} is not allowed to access endpoint {1}")]
+    #[error("The participant {0} is not allowed to access the endpoint {1}")]
     UnauthorizedParticipant(Participant, String),
     #[error("Could not find contributor with public key {0}")]
     UnknownContributor(String),
@@ -108,25 +108,27 @@ impl<T: Serialize> SignedRequest<T> {
             Some(r) => json::to_string(r)?,
             None => json::to_string(&self.pubkey)?,
         };
-
-        let sig_scheme = Production;
         
-        if sig_scheme.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
+        if Production.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
             Ok(())
         } else {
             Err(ResponseError::InvalidSignature)
         }
     }
 
-    pub fn sign(keypair: &KeyPair, request: Option<&T>) -> Result<String> {
-        let request = match request {
-            Some(r) => json::to_string(r)?,
+    /// Returns a signed request
+    pub fn try_sign(keypair: &KeyPair, request: Option<T>) -> Result<Self> {
+        let request_str = match request {
+            Some(ref r) => json::to_string(r)?,
             None => json::to_string(&keypair.pubkey().to_owned())?
         };
-        let sig_scheme = Production;
 
-        match sig_scheme.sign(keypair.sigkey(), request.as_str()) {
-            Ok(sig) => Ok(sig),
+        match Production.sign(keypair.sigkey(), request_str.as_str()) {
+            Ok(signature) => Ok(SignedRequest {
+                    request,
+                    signature,
+                    pubkey: keypair.pubkey().to_owned()
+                }),
             Err(e) => Err(ResponseError::SigningError(format!("{}", e)))
         }
     }
@@ -171,7 +173,8 @@ impl PostChunkRequest {
 async fn check_coordinator_request<T>(coordinator: &Coordinator, signed_request: &SignedRequest<T>) -> Result<()>
 where T: Serialize {
     // Check pubkey is the one of the coordinator's verifier
-    let contributor = Participant::new_contributor(signed_request.pubkey.as_ref());
+    let contributor = Participant::new_verifier(signed_request.pubkey.as_ref());
+
     if contributor != coordinator.read().await.environment().coordinator_verifiers()[0] {
         return Err(ResponseError::UnauthorizedParticipant(contributor, String::from("/update")));
     }
@@ -182,6 +185,8 @@ where T: Serialize {
 //
 // -- REST API ENDPOINTS --
 //
+
+// FIXME: request guards for signature?
 
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<request>")]

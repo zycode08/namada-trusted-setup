@@ -3,7 +3,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
-    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest, UPDATE_TIME},
+    rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
     storage::{ContributionLocator, Object},
 };
 
@@ -46,12 +46,13 @@ macro_rules! pretty_hash {
     }};
 }
 
-/// Retrieve [`KeyPair`] from file if exists, otherwise generate new keypair and store
-/// its json encoding to file
+/// Retrieve [`KeyPair`] from file if it exists, otherwise generates a new keypair
+/// and store its json encoding into a file
 fn get_keypair() -> Result<KeyPair> {
     match File::open(KEYPAIR_FILE) {
-        Ok(f) => {
-            let keypair_str: String;
+        Ok(mut f) => {
+            info!("Found keypair file, retrieving key");
+            let mut keypair_str = String::new();
             f.read_to_string(&mut keypair_str)?;
 
             Ok(serde_json::from_str(keypair_str.as_str())?)
@@ -117,16 +118,15 @@ fn compute_contribution(
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
 }
 
-async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pubkey: &str) -> Result<()> {
-    let locked_locators = requests::post_lock_chunk(client, coordinator, pubkey).await?;
+async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) -> Result<()> {
+    let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     let contribution_id = response_locator.contribution_id();
 
-    let get_chunk_req = GetChunkRequest::new(pubkey.to_owned(), locked_locators.clone());
-    let task = requests::get_chunk(client, coordinator, &get_chunk_req).await?;
+    let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
 
-    let challenge = requests::get_challenge(client, coordinator, &locked_locators).await?;
+    let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
     // debug!("Challenge is {}", pretty_hash!(&challenge));
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
@@ -138,7 +138,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
     debug!("Challenge length {}", challenge.len());
 
     let contribution = compute_contribution( //FIXME: spawn_blocking? Try to measure the speed
-        pubkey,
+        keypair.pubkey(),
         round_height,
         &challenge,
         challenge_hash.to_vec().as_ref(),
@@ -155,7 +155,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
         None,
     )?;
 
-    let signature = Production.sign(sigkey, &contribution_state.signature_message()?)?;
+    let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
@@ -165,27 +165,26 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, sigkey: &str, pub
         locked_locators.next_contribution_file_signature(),
         contribution_file_signature,
     );
-    requests::post_chunk(client, coordinator, &post_chunk_req).await?;
+    requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
 
-    let contribute_chunk_req = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
-    let contribution_locator = requests::post_contribute_chunk(client, coordinator, &contribute_chunk_req).await?;
+    let contribution_locator = requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
 
     Ok(())
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) { //FIXME: fix keypair here
-    requests::post_join_queue(&client, coordinator, keypair.pubkey())
+async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+    requests::post_join_queue(&client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
 
     loop {
-        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair.pubkey()).await {
+        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair).await {
             // Log this error and continue
             error!("{}", e);
         }
 
         // Check the contributor's position in the queue
-        let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair.pubkey())
+        let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair)
             .await
             .expect("Couldn't get the status of contributor");
 
@@ -197,7 +196,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                 position * 5
             ),
             ContributorStatus::Round => {
-                if let Err(e) = do_contribute(&client, coordinator, keypair.sigkey(), keypair.pubkey()).await {
+                if let Err(e) = do_contribute(&client, coordinator, keypair).await {
                     eprintln!("{}", e);
                     panic!();
                 }
@@ -265,5 +264,4 @@ async fn main() {
 }
 
 
-// FIXME: fix call to requests
 // FIXME: fix tests
