@@ -2229,6 +2229,7 @@ impl Coordinator {
                 )?;
 
                 // Assign a replacement contributor to the dropped tasks for the current round.
+                // FIXME: add next contributor from the queue instead of the replacement_contributor from the coordinator, that doesn't make any action.
                 round.add_replacement_contributor_unsafe(replace_action.replacement_contributor.clone())?;
                 warn!(
                     "Added a replacement contributor {}",

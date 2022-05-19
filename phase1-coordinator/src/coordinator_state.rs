@@ -2403,20 +2403,14 @@ impl CoordinatorState {
         bucket_id: u64,
         time: &dyn TimeSource,
     ) -> Result<Participant, CoordinatorError> {
-        // Fetch a coordinator contributor with the least load.
-        let coordinator_contributor =
-            self.environment
-                .coordinator_contributors()
-                .iter()
-                .min_by_key(|c| match self.current_contributors.get(c) {
-                    Some(participant_info) => {
-                        participant_info.pending_tasks.len() + participant_info.assigned_tasks.len()
-                    }
-                    None => 0,
-                });
+        // Gets first contributor in queue
+        let (next_contributor, contributor_info) = self.queue_contributors().first().ok_or(CoordinatorError::QueueIsEmpty)?;
+
+        // Remove participant from queue         
+        //FIXME: need to call update_queue?
+        self.remove_from_queue(next_contributor)?;
 
         // Assign the replacement contributor to the dropped tasks.
-        let contributor = coordinator_contributor.ok_or(CoordinatorError::CoordinatorContributorMissing)?;
         let number_of_contributors = self
             .current_metrics
             .clone()
@@ -2428,12 +2422,12 @@ impl CoordinatorState {
 
         let tasks = initialize_tasks(bucket_id, self.environment.number_of_chunks(), number_of_contributors)?;
         let mut participant_info =
-            ParticipantInfo::new(contributor.clone(), self.current_round_height(), 10, bucket_id, time);
+            ParticipantInfo::new(next_contributor.to_owned(), self.current_round_height(), contributor_info.0, bucket_id, time);
         participant_info.start(tasks, time)?;
         trace!("{:?}", participant_info);
-        self.current_contributors.insert(contributor.clone(), participant_info);
+        self.current_contributors.insert(next_contributor.to_owned(), participant_info);
 
-        Ok(contributor.clone())
+        Ok(next_contributor.to_owned())
     }
 
     ///
