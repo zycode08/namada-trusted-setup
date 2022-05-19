@@ -120,7 +120,7 @@ fn build_context() -> TestCtx {
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
-    let test_pariticpant2 = TestParticipant {
+    let test_participant2 = TestParticipant {
         _inner: contributor2,
         address: contributor2_ip,
         keypair: keypair2,
@@ -135,7 +135,7 @@ fn build_context() -> TestCtx {
 
     TestCtx {
         rocket,
-        contributors: vec![test_participant1, test_pariticpant2],
+        contributors: vec![test_participant1, test_participant2],
         unknown_participant,
         coordinator: coord_verifier
     }
@@ -145,6 +145,13 @@ fn build_context() -> TestCtx {
 fn test_stop_coordinator() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong, request from non-coordinator participant
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    let req = client.get("/stop").json(&sig_req);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
 
     // Shut the server down
     let sig_req = SignedRequest::<()>::try_sign(&ctx.coordinator.keypair, None).unwrap();
@@ -434,6 +441,19 @@ fn test_wrong_contribute_chunk() {
     // Non-existing contributor key
     let sig_req = SignedRequest::try_sign(&ctx.unknown_participant.keypair, Some(0)).unwrap();
     req = client.post("/contributor/contribute_chunk").json(&sig_req);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+}
+
+#[test]
+fn test_wrong_verify() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong, request from non-coordinator participant
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    let req = client.get("/verify").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());

@@ -11,7 +11,7 @@ use phase1_coordinator::{
     commands::Computation,
     environment::{Parameters, Testing},
     objects::{LockedLocators, Task},
-    rest::{self, ContributeChunkRequest, GetChunkRequest, PostChunkRequest},
+    rest::{self, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -48,6 +48,7 @@ struct TestParticipant {
 struct TestCtx {
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
+    coordinator: TestParticipant
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
@@ -72,11 +73,20 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let contributor2 = Participant::new_contributor(keypair2.pubkey().as_ref());
     let unknown_contributor = Participant::new_contributor(keypair3.pubkey().as_ref());
 
+    let coordinator_ip = IpAddr::V4("0.0.0.0".parse().unwrap());
     let contributor1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
     coordinator.initialize().unwrap();
+    let coordinator_keypair = KeyPair::custom_new(coordinator.environment().default_verifier_signing_key(), coordinator.environment().coordinator_verifiers()[0].address());
+
+    let coord_verifier = TestParticipant{
+        _inner: coordinator.environment().coordinator_verifiers()[0].clone(),
+        _address: coordinator_ip,
+        keypair: coordinator_keypair,
+        locked_locators: None
+    };
 
     coordinator
         .add_to_queue(contributor1.clone(), Some(contributor1_ip), 10)
@@ -116,7 +126,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         keypair: keypair1,
         locked_locators: Some(locked_locators),
     };
-    let test_pariticpant2 = TestParticipant {
+    let test_participant2 = TestParticipant {
         _inner: contributor2,
         _address: contributor2_ip,
         keypair: keypair2,
@@ -130,8 +140,9 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     };
 
     let ctx = TestCtx {
-        contributors: vec![test_participant1, test_pariticpant2],
+        contributors: vec![test_participant1, test_participant2],
         unknown_participant,
+        coordinator: coord_verifier
     };
 
     (ctx, handle)
@@ -141,17 +152,22 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
 async fn test_stop_coordinator() {
     let client = Client::new();
     // Spawn the server and get the test context
-    let (_ctx, handle) = test_prelude().await;
+    let (ctx, handle) = test_prelude().await;
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 
+    // Wrong, request from non-coordinator participant
+    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let response = requests::get_stop_coordinator(&client, &mut url, &ctx.contributors[0].keypair).await;
+    assert!(response.is_err());
+
     // Shut the server down
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let response = requests::get_stop_coordinator(&client, &mut url).await;
+    let response = requests::get_stop_coordinator(&client, &mut url, &ctx.coordinator.keypair).await;
     assert!(response.is_ok());
 
     // Try sending another request (server should be unreachable)
-    let response = requests::get_stop_coordinator(&client, &mut url).await;
+    let response = requests::get_stop_coordinator(&client, &mut url, &ctx.coordinator.keypair).await;
 
     match response {
         Ok(_) => panic!("Expected error"),
@@ -175,20 +191,21 @@ async fn test_get_contributor_queue_status() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::get_contributor_queue_status(&client, &mut url, unknown_pubkey).await;
+    let response = requests::get_contributor_queue_status(&client, &mut url, &ctx.unknown_participant.keypair).await;
     match response.unwrap() {
         rest::ContributorStatus::Other => (),
         _ => panic!("Wrong ContributorStatus"),
     }
 
     // Ok
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_contributor_queue_status(&client, &mut url, pubkey).await;
+    let response = requests::get_contributor_queue_status(&client, &mut url, &ctx.contributors[0].keypair).await;
     match response.unwrap() {
         rest::ContributorStatus::Round => (),
         _ => panic!("Wrong ContributorStatus"),
     }
+
+    // Drop the server
+    handle.abort()
 }
 
 #[tokio::test]
@@ -201,13 +218,11 @@ async fn test_heartbeat() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::post_heartbeat(&client, &mut url, unknown_pubkey).await;
+    let response = requests::post_heartbeat(&client, &mut url, &ctx.unknown_participant.keypair).await;
     assert!(response.is_err());
 
     // Ok
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_heartbeat(&client, &mut url, pubkey).await.unwrap();
+    requests::post_heartbeat(&client, &mut url, &ctx.contributors[0].keypair).await.unwrap();
 
     // Drop the server
     handle.abort();
@@ -217,13 +232,16 @@ async fn test_heartbeat() {
 async fn test_update_coordinator() {
     let client = Client::new();
     // Spawn the server and get the test context
-    let (_ctx, handle) = test_prelude().await;
+    let (ctx, handle) = test_prelude().await;
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 
-    // Ok
+    // Wrong, request from non-coordinator
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    requests::get_update(&client, &mut url).await.unwrap();
+    assert!(requests::get_update(&client, &mut url, &ctx.contributors[0].keypair).await.is_err());
+
+    // Ok
+    requests::get_update(&client, &mut url, &ctx.coordinator.keypair).await.unwrap();
 
     // Drop the server
     handle.abort()
@@ -239,13 +257,11 @@ async fn test_get_tasks_left() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, unknown_pubkey).await;
+    let response = requests::get_tasks_left(&client, &mut url, &ctx.unknown_participant.keypair).await;
     assert!(response.is_err());
 
     // Ok tasks left
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    let response = requests::get_tasks_left(&client, &mut url, pubkey).await.unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, &ctx.contributors[0].keypair).await.unwrap();
     assert_eq!(response.len(), 1);
 
     // Drop the server
@@ -262,11 +278,10 @@ async fn test_join_queue() {
 
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    requests::post_join_queue(&client, &mut url, pubkey).await.unwrap();
+    requests::post_join_queue(&client, &mut url, &ctx.contributors[0].keypair).await.unwrap();
 
     // Wrong request, already existing contributor
-    let response = requests::post_join_queue(&client, &mut url, pubkey).await;
+    let response = requests::post_join_queue(&client, &mut url, &ctx.contributors[0].keypair).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -284,10 +299,8 @@ async fn test_wrong_contribute_chunk() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let unknown_pubkey = ctx.unknown_participant.keypair.pubkey();
-    let contribute_request = ContributeChunkRequest::new(unknown_pubkey.to_owned(), 0);
 
-    let response = requests::post_contribute_chunk(&client, &mut url, &contribute_request).await;
+    let response = requests::post_contribute_chunk(&client, &mut url, &ctx.unknown_participant.keypair, 0).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -314,14 +327,12 @@ async fn test_contribution() {
 
     // Download chunk
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let pubkey = ctx.contributors[0].keypair.pubkey();
-    let chunk_request = GetChunkRequest::new(pubkey.to_owned(), ctx.contributors[0].locked_locators.clone().unwrap());
 
-    let response = requests::get_chunk(&client, &mut url, &chunk_request).await;
+    let response = requests::get_chunk(&client, &mut url, &ctx.contributors[0].keypair, ctx.contributors[0].locked_locators.as_ref().unwrap()).await;
     let task: Task = response.unwrap();
 
     // Get challenge
-    let challenge = requests::get_challenge(&client, &mut url, ctx.contributors[0].locked_locators.as_ref().unwrap())
+    let challenge = requests::get_challenge(&client, &mut url, &ctx.contributors[0].keypair, ctx.contributors[0].locked_locators.as_ref().unwrap())
         .await
         .unwrap();
 
@@ -359,17 +370,15 @@ async fn test_contribution() {
         contribution_file_signature,
     );
 
-    requests::post_chunk(&client, &mut url, &post_chunk).await.unwrap();
+    requests::post_chunk(&client, &mut url, &ctx.contributors[0].keypair, &post_chunk).await.unwrap();
 
     // Contribute
-    let contribute_request = ContributeChunkRequest::new(pubkey.to_owned(), task.chunk_id());
-
-    requests::post_contribute_chunk(&client, &mut url, &contribute_request)
+    requests::post_contribute_chunk(&client, &mut url, &ctx.contributors[0].keypair, task.chunk_id())
         .await
         .unwrap();
 
     // Verify chunk
-    requests::get_verify_chunks(&client, &mut url).await.unwrap();
+    requests::get_verify_chunks(&client, &mut url, &ctx.coordinator.keypair).await.unwrap();
 
     // Drop the server
     handle.abort()

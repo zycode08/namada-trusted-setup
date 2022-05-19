@@ -16,4 +16,4 @@ tmp_*
 
 # Contribution artifacts
 *.params
-keypair
+*keypair

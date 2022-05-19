@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use std::{fs::File, io::Write};
 
-pub const KEYPAIR_FILE: &str = "keypair";
+pub const COORDINATOR_KEYPAIR_FILE: &str = "coordinator.keypair";
 
 type BatchSize = usize;
 type ChunkSize = usize;
@@ -593,7 +593,7 @@ impl std::default::Default for Testing {
     fn default() -> Self {
         // Generate default verifier of coordinator and writes it to file FIXME: export to function
         let keypair = KeyPair::new();
-        let mut f = File::create(KEYPAIR_FILE).expect("Error while creating keypair file");
+        let mut f = File::create(COORDINATOR_KEYPAIR_FILE).expect("Error while creating keypair file");
         f.write_all(&serde_json::to_vec(&keypair).expect("Serialization failed")).expect("Error while writing keypair to file");
 
         Self {
@@ -715,7 +715,7 @@ impl std::default::Default for Development {
     fn default() -> Self {
         // Generate default verifier of coordinator and writes it to file
         let keypair = KeyPair::new();
-        let mut f = File::create(KEYPAIR_FILE).expect("Error while creating keypair file");
+        let mut f = File::create(COORDINATOR_KEYPAIR_FILE).expect("Error while creating keypair file");
         f.write_all(&serde_json::to_vec(&keypair).expect("Serialization failed")).expect("Error while writing keypair to file");
 
         Self {
@@ -836,7 +836,7 @@ impl std::default::Default for Production {
     fn default() -> Self {
         // Generate default verifier of coordinator and writes it to file
         let keypair = KeyPair::new();
-        let mut f = File::create(KEYPAIR_FILE).expect("Error while creating keypair file");
+        let mut f = File::create(COORDINATOR_KEYPAIR_FILE).expect("Error while creating keypair file");
         f.write_all(&serde_json::to_vec(&keypair).expect("Serialization failed")).expect("Error while writing keypair to file");
 
         Self {
