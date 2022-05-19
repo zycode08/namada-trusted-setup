@@ -1,5 +1,5 @@
 use phase1_coordinator::{
-    KEYPAIR_FILE,
+    COORDINATOR_KEYPAIR_FILE,
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
@@ -29,6 +29,8 @@ use tokio::time;
 
 use tracing::{debug, error, info};
 
+const CONTRIBUTOR_KEYPAIR_FILE: &str = "contributor.keypair";
+
 macro_rules! pretty_hash {
     ($hash:expr) => {{
         let mut output = format!("\n\n");
@@ -47,9 +49,17 @@ macro_rules! pretty_hash {
 }
 
 /// Retrieve [`KeyPair`] from file if it exists, otherwise generates a new keypair
-/// and store its json encoding into a file
-fn get_keypair() -> Result<KeyPair> {
-    match File::open(KEYPAIR_FILE) {
+/// and store its json encoding into a file. The coordinator argument tells
+/// whether the keypair of a coordinator or a contributor is requested (this
+/// depends on the specific endpoint intended to be queried)
+fn get_keypair(coordinator: bool) -> Result<KeyPair> {
+    let path = if coordinator {
+        COORDINATOR_KEYPAIR_FILE
+    } else {
+        CONTRIBUTOR_KEYPAIR_FILE
+    };
+
+    match File::open(path) {
         Ok(mut f) => {
             info!("Found keypair file, retrieving key");
             let mut keypair_str = String::new();
@@ -60,10 +70,10 @@ fn get_keypair() -> Result<KeyPair> {
         Err(_) => {
             info!("Missing keypair file, generating new one");
             let keypair = KeyPair::new();
-            debug!("Contributor pubkey {}", keypair.pubkey());
+            debug!("Generated pubkey {}", keypair.pubkey());
 
             // Store key to file
-            let mut f = File::create(KEYPAIR_FILE)?;
+            let mut f = File::create(path)?;
             f.write_all(&serde_json::to_vec(&keypair)?)?;
 
             Ok(keypair)
@@ -137,7 +147,8 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
     debug!("Challenge length {}", challenge.len());
 
-    let contribution = compute_contribution( //FIXME: spawn_blocking? Try to measure the speed
+    // NOTE: tried also with spawn_blocking, doesn't improve performance
+    let contribution = compute_contribution(
         keypair.pubkey(),
         round_height,
         &challenge,
@@ -243,25 +254,26 @@ async fn main() {
     let opt = ContributorOpt::from_args();
     let client = Client::new();
 
-    let keypair = get_keypair().expect("Failed to retrieve keypair");
-
     match opt {
         ContributorOpt::Contribute(mut url) => {
+            let keypair = get_keypair(false).expect("Failed to retrieve keypair");
             contribute(&client, &mut url.coordinator, &keypair).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
+            let keypair = get_keypair(true).expect("Failed to retrieve keypair");
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
+            let keypair = get_keypair(true).expect("Failed to retrieve keypair");
             verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
+            let keypair = get_keypair(true).expect("Failed to retrieve keypair");
             update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
     }
 }
 
-
-// FIXME: fix tests
+// FIXME: clippy + fmt
