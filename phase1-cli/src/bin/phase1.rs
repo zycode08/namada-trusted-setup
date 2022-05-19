@@ -1,10 +1,10 @@
 use phase1_coordinator::{
-    COORDINATOR_KEYPAIR_FILE,
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
     rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
     storage::{ContributionLocator, Object},
+    COORDINATOR_KEYPAIR_FILE,
 };
 
 use reqwest::{Client, Url};
@@ -12,9 +12,9 @@ use reqwest::{Client, Url};
 use crate::requests::RequestError;
 use anyhow::Result;
 use phase1_cli::{requests, ContributorOpt};
+use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
-use serde_json;
 
 use std::{
     fs::File,
@@ -66,7 +66,7 @@ fn get_keypair(coordinator: bool) -> Result<KeyPair> {
             f.read_to_string(&mut keypair_str)?;
 
             Ok(serde_json::from_str(keypair_str.as_str())?)
-        },
+        }
         Err(_) => {
             info!("Missing keypair file, generating new one");
             let keypair = KeyPair::new();
@@ -77,7 +77,7 @@ fn get_keypair(coordinator: bool) -> Result<KeyPair> {
             f.write_all(&serde_json::to_vec(&keypair)?)?;
 
             Ok(keypair)
-        },
+        }
     }
 }
 

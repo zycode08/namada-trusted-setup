@@ -45,7 +45,7 @@ struct TestCtx {
     rocket: Rocket<Build>,
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
-    coordinator: TestParticipant
+    coordinator: TestParticipant,
 }
 
 /// Build the rocket server for testing with the proper configuration.
@@ -76,13 +76,16 @@ fn build_context() -> TestCtx {
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
     coordinator.initialize().unwrap();
-    let coordinator_keypair = KeyPair::custom_new(coordinator.environment().default_verifier_signing_key(), coordinator.environment().coordinator_verifiers()[0].address());
+    let coordinator_keypair = KeyPair::custom_new(
+        coordinator.environment().default_verifier_signing_key(),
+        coordinator.environment().coordinator_verifiers()[0].address(),
+    );
 
-    let coord_verifier = TestParticipant{
+    let coord_verifier = TestParticipant {
         _inner: coordinator.environment().coordinator_verifiers()[0].clone(),
         address: coordinator_ip,
         keypair: coordinator_keypair,
-        locked_locators: None
+        locked_locators: None,
     };
 
     coordinator
@@ -137,7 +140,7 @@ fn build_context() -> TestCtx {
         rocket,
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
-        coordinator: coord_verifier
+        coordinator: coord_verifier,
     }
 }
 
@@ -475,7 +478,11 @@ fn test_contribution() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Download chunk
-    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(ctx.contributors[0].locked_locators.clone().unwrap())).unwrap();
+    let sig_req = SignedRequest::try_sign(
+        &ctx.contributors[0].keypair,
+        Some(ctx.contributors[0].locked_locators.clone().unwrap()),
+    )
+    .unwrap();
     let mut req = client.get("/download/chunk").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -483,9 +490,7 @@ fn test_contribution() {
     let task: Task = response.into_json().unwrap();
 
     // Get challenge
-    req = client
-        .get("/contributor/challenge")
-        .json(&sig_req);
+    req = client.get("/contributor/challenge").json(&sig_req);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());

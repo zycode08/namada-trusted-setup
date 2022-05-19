@@ -12,7 +12,11 @@ use rocket::{
     http::{ContentType, Status},
     post,
     response::{Responder, Response},
-    serde::{json::{self, Json}, Deserialize, Serialize},
+    serde::{
+        json::{self, Json},
+        Deserialize,
+        Serialize,
+    },
     tokio::{sync::RwLock, task},
     Request,
     Shutdown,
@@ -84,7 +88,8 @@ type Result<T> = std::result::Result<T, ResponseError>;
 /// the [`Production`] signature scheme  
 #[derive(Deserialize, Serialize)]
 pub struct SignedRequest<T>
-where T: Serialize
+where
+    T: Serialize,
 {
     request: Option<T>,
     signature: String,
@@ -97,7 +102,7 @@ impl<T: Serialize> Deref for SignedRequest<T> {
     fn deref(&self) -> &Self::Target {
         match &self.request {
             Some(t) => t,
-            None => panic!("Expected Some not None")
+            None => panic!("Expected Some not None"),
         }
     }
 }
@@ -108,7 +113,7 @@ impl<T: Serialize> SignedRequest<T> {
             Some(r) => json::to_string(r)?,
             None => json::to_string(&self.pubkey)?,
         };
-        
+
         if Production.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
             Ok(())
         } else {
@@ -119,7 +124,9 @@ impl<T: Serialize> SignedRequest<T> {
     /// Check the signature of the request and also that the request comes from the
     /// [Coordinator](`crate::Coordinator`) itself.
     async fn check_coordinator_request(&self, coordinator: &Coordinator, endpoint: &str) -> Result<()>
-    where T: Serialize {
+    where
+        T: Serialize,
+    {
         // Check pubkey is the one of the coordinator's verifier
         let verifier = Participant::new_verifier(self.pubkey.as_ref());
 
@@ -134,16 +141,16 @@ impl<T: Serialize> SignedRequest<T> {
     pub fn try_sign(keypair: &KeyPair, request: Option<T>) -> Result<Self> {
         let request_str = match request {
             Some(ref r) => json::to_string(r)?,
-            None => json::to_string(&keypair.pubkey().to_owned())?
+            None => json::to_string(&keypair.pubkey().to_owned())?,
         };
 
         match Production.sign(keypair.sigkey(), request_str.as_str()) {
             Ok(signature) => Ok(SignedRequest {
-                    request,
-                    signature,
-                    pubkey: keypair.pubkey().to_owned()
-                }),
-            Err(e) => Err(ResponseError::SigningError(format!("{}", e)))
+                request,
+                signature,
+                pubkey: keypair.pubkey().to_owned(),
+            }),
+            Err(e) => Err(ResponseError::SigningError(format!("{}", e))),
         }
     }
 }
@@ -366,8 +373,7 @@ pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> 
 
 /// Update the [Coordinator](`crate::Coordinator`) state. This endpoint should be accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
-#[get("/update", format = "json",
-data = "<request>")]
+#[get("/update", format = "json", data = "<request>")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
     let signed_request = request.into_inner();
 
@@ -417,7 +423,11 @@ pub async fn get_tasks_left(
 
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
 #[get("/stop", format = "json", data = "<request>")]
-pub async fn stop_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>, shutdown: Shutdown) -> Result<()> {
+pub async fn stop_coordinator(
+    coordinator: &State<Coordinator>,
+    request: Json<SignedRequest<()>>,
+    shutdown: Shutdown,
+) -> Result<()> {
     let signed_request = request.into_inner();
 
     // Verify request
@@ -523,9 +533,9 @@ pub async fn get_contributor_queue_status(
 
 #[cfg(test)]
 mod tests_signed_request {
-    use crate::authentication::KeyPair;
     use super::SignedRequest;
-    
+    use crate::authentication::KeyPair;
+
     #[test]
     fn sign_and_verify() {
         let keypair = KeyPair::new();

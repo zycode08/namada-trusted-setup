@@ -1,18 +1,12 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
-use phase1_coordinator::{rest::SignedRequest, authentication::KeyPair};
+use phase1_coordinator::{authentication::KeyPair, rest::SignedRequest};
 use reqwest::{Client, Method, Response, Url};
 use serde::Serialize;
 use std::collections::LinkedList;
 use thiserror::Error;
 
-use crate::{
-    ContributionLocator,
-    ContributorStatus,
-    LockedLocators,
-    PostChunkRequest,
-    Task,
-};
+use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkRequest, Task};
 
 /// Error returned from a request. Could be due to a Client or Server error.
 #[derive(Debug, Error)]
@@ -56,8 +50,7 @@ where
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to join the queue of contributors.
-pub async fn post_join_queue(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
-{
+pub async fn post_join_queue(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
     submit_request::<String>(
         client,
         coordinator_address,
@@ -76,8 +69,7 @@ pub async fn post_lock_chunk(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
-) -> Result<LockedLocators>
-{
+) -> Result<LockedLocators> {
     let response = submit_request::<String>(
         client,
         coordinator_address,
@@ -92,8 +84,12 @@ pub async fn post_lock_chunk(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_chunk(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair, request_body: &LockedLocators) -> Result<Task>
-{
+pub async fn get_chunk(
+    client: &Client,
+    coordinator_address: &mut Url,
+    keypair: &KeyPair,
+    request_body: &LockedLocators,
+) -> Result<Task> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -113,8 +109,7 @@ pub async fn get_challenge(
     coordinator_address: &mut Url,
     keypair: &KeyPair,
     request_body: &LockedLocators,
-) -> Result<Vec<u8>>
-{
+) -> Result<Vec<u8>> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -129,8 +124,12 @@ pub async fn get_challenge(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to upload a contribution.
-pub async fn post_chunk(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair, request_body: &PostChunkRequest) -> Result<()>
-{
+pub async fn post_chunk(
+    client: &Client,
+    coordinator_address: &mut Url,
+    keypair: &KeyPair,
+    request_body: &PostChunkRequest,
+) -> Result<()> {
     submit_request(
         client,
         coordinator_address,
@@ -150,8 +149,7 @@ pub async fn post_contribute_chunk(
     coordinator_address: &mut Url,
     keypair: &KeyPair,
     request_body: u64,
-) -> Result<ContributionLocator>
-{
+) -> Result<ContributionLocator> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -166,8 +164,7 @@ pub async fn post_contribute_chunk(
 }
 
 /// Let the [Coordinator](`phase1-coordinator::Coordinator`) know that the contributor is still alive.
-pub async fn post_heartbeat(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
-{
+pub async fn post_heartbeat(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
     submit_request::<String>(
         client,
         coordinator_address,
@@ -185,9 +182,8 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &mut Url, keyp
 pub async fn get_tasks_left(
     client: &Client,
     coordinator_address: &mut Url,
-    keypair: &KeyPair
-) -> Result<LinkedList<Task>>
-{
+    keypair: &KeyPair,
+) -> Result<LinkedList<Task>> {
     let response = submit_request::<String>(
         client,
         coordinator_address,
@@ -203,16 +199,14 @@ pub async fn get_tasks_left(
 
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
 #[cfg(debug_assertions)]
-pub async fn get_update(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> 
-{
+pub async fn get_update(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/update", keypair, None, &Method::GET).await?;
 
     Ok(())
 }
 
 /// Stop the [Coordinator](`phase1-coordinator::Coordinator`).
-pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
-{
+pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/stop", keypair, None, &Method::GET).await?;
 
     Ok(())
@@ -220,8 +214,7 @@ pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url
 
 /// Verify the pending contributions.
 #[cfg(debug_assertions)]
-pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()>
-{
+pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/verify", keypair, None, &Method::GET).await?;
 
     Ok(())
@@ -232,8 +225,7 @@ pub async fn get_contributor_queue_status(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
-) -> Result<ContributorStatus>
-{
+) -> Result<ContributorStatus> {
     let response = submit_request::<()>(
         client,
         coordinator_address,

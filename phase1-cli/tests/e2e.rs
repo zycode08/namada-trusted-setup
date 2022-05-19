@@ -48,7 +48,7 @@ struct TestParticipant {
 struct TestCtx {
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
-    coordinator: TestParticipant
+    coordinator: TestParticipant,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
@@ -79,13 +79,16 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
     coordinator.initialize().unwrap();
-    let coordinator_keypair = KeyPair::custom_new(coordinator.environment().default_verifier_signing_key(), coordinator.environment().coordinator_verifiers()[0].address());
+    let coordinator_keypair = KeyPair::custom_new(
+        coordinator.environment().default_verifier_signing_key(),
+        coordinator.environment().coordinator_verifiers()[0].address(),
+    );
 
-    let coord_verifier = TestParticipant{
+    let coord_verifier = TestParticipant {
         _inner: coordinator.environment().coordinator_verifiers()[0].clone(),
         _address: coordinator_ip,
         keypair: coordinator_keypair,
-        locked_locators: None
+        locked_locators: None,
     };
 
     coordinator
@@ -142,7 +145,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let ctx = TestCtx {
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
-        coordinator: coord_verifier
+        coordinator: coord_verifier,
     };
 
     (ctx, handle)
@@ -222,7 +225,9 @@ async fn test_heartbeat() {
     assert!(response.is_err());
 
     // Ok
-    requests::post_heartbeat(&client, &mut url, &ctx.contributors[0].keypair).await.unwrap();
+    requests::post_heartbeat(&client, &mut url, &ctx.contributors[0].keypair)
+        .await
+        .unwrap();
 
     // Drop the server
     handle.abort();
@@ -238,10 +243,16 @@ async fn test_update_coordinator() {
 
     // Wrong, request from non-coordinator
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    assert!(requests::get_update(&client, &mut url, &ctx.contributors[0].keypair).await.is_err());
+    assert!(
+        requests::get_update(&client, &mut url, &ctx.contributors[0].keypair)
+            .await
+            .is_err()
+    );
 
     // Ok
-    requests::get_update(&client, &mut url, &ctx.coordinator.keypair).await.unwrap();
+    requests::get_update(&client, &mut url, &ctx.coordinator.keypair)
+        .await
+        .unwrap();
 
     // Drop the server
     handle.abort()
@@ -261,7 +272,9 @@ async fn test_get_tasks_left() {
     assert!(response.is_err());
 
     // Ok tasks left
-    let response = requests::get_tasks_left(&client, &mut url, &ctx.contributors[0].keypair).await.unwrap();
+    let response = requests::get_tasks_left(&client, &mut url, &ctx.contributors[0].keypair)
+        .await
+        .unwrap();
     assert_eq!(response.len(), 1);
 
     // Drop the server
@@ -278,7 +291,9 @@ async fn test_join_queue() {
 
     // Ok request
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    requests::post_join_queue(&client, &mut url, &ctx.contributors[0].keypair).await.unwrap();
+    requests::post_join_queue(&client, &mut url, &ctx.contributors[0].keypair)
+        .await
+        .unwrap();
 
     // Wrong request, already existing contributor
     let response = requests::post_join_queue(&client, &mut url, &ctx.contributors[0].keypair).await;
@@ -328,13 +343,24 @@ async fn test_contribution() {
     // Download chunk
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
 
-    let response = requests::get_chunk(&client, &mut url, &ctx.contributors[0].keypair, ctx.contributors[0].locked_locators.as_ref().unwrap()).await;
+    let response = requests::get_chunk(
+        &client,
+        &mut url,
+        &ctx.contributors[0].keypair,
+        ctx.contributors[0].locked_locators.as_ref().unwrap(),
+    )
+    .await;
     let task: Task = response.unwrap();
 
     // Get challenge
-    let challenge = requests::get_challenge(&client, &mut url, &ctx.contributors[0].keypair, ctx.contributors[0].locked_locators.as_ref().unwrap())
-        .await
-        .unwrap();
+    let challenge = requests::get_challenge(
+        &client,
+        &mut url,
+        &ctx.contributors[0].keypair,
+        ctx.contributors[0].locked_locators.as_ref().unwrap(),
+    )
+    .await
+    .unwrap();
 
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
@@ -370,7 +396,9 @@ async fn test_contribution() {
         contribution_file_signature,
     );
 
-    requests::post_chunk(&client, &mut url, &ctx.contributors[0].keypair, &post_chunk).await.unwrap();
+    requests::post_chunk(&client, &mut url, &ctx.contributors[0].keypair, &post_chunk)
+        .await
+        .unwrap();
 
     // Contribute
     requests::post_contribute_chunk(&client, &mut url, &ctx.contributors[0].keypair, task.chunk_id())
@@ -378,7 +406,9 @@ async fn test_contribution() {
         .unwrap();
 
     // Verify chunk
-    requests::get_verify_chunks(&client, &mut url, &ctx.coordinator.keypair).await.unwrap();
+    requests::get_verify_chunks(&client, &mut url, &ctx.coordinator.keypair)
+        .await
+        .unwrap();
 
     // Drop the server
     handle.abort()
