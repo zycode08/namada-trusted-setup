@@ -31,7 +31,7 @@ use std::{
     net::SocketAddr,
     ops::Deref,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use thiserror::Error;
 

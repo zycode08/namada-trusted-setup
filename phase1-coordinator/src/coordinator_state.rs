@@ -2292,29 +2292,29 @@ impl CoordinatorState {
                 // Add the participant info to the dropped participants.
                 self.dropped.push(dropped_info);
 
-                let action = if self.environment.coordinator_contributors().is_empty() {
-                    tracing::info!("No replacement contributors available, the round will be restarted.");
-                    // There are no replacement contributors so the only option is to restart the round.
-                    CeremonyStorageAction::ResetCurrentRound(ResetCurrentRoundStorageAction {
-                        remove_participants: vec![participant.clone()],
-                        rollback: false,
-                    })
-                } else {
-                    // TODO: handle the situation where all replacement contributors are currently engaged.
-                    tracing::info!(
-                        "Found a replacement contributor for the dropped contributor. \
-                        Assigning replacement contributor to the dropped contributor's tasks."
-                    );
-                    // Assign the replacement contributor to the dropped tasks.
-                    let replacement_contributor = self.add_replacement_contributor_unsafe(bucket_id, time)?;
-
-                    CeremonyStorageAction::ReplaceContributor(ReplaceContributorStorageAction {
-                        dropped_contributor: participant.clone(),
-                        bucket_id,
-                        locked_chunks,
-                        tasks,
-                        replacement_contributor,
-                    })
+                let action = match self.add_replacement_contributor_unsafe(bucket_id, time) {
+                    Ok(replacement_contributor) => {
+                        tracing::info!(
+                            "Found a replacement contributor for the dropped contributor. \
+                            Assigning replacement contributor to the dropped contributor's tasks."
+                        );
+                        CeremonyStorageAction::ReplaceContributor(ReplaceContributorStorageAction {
+                            dropped_contributor: participant.clone(),
+                            bucket_id,
+                            locked_chunks,
+                            tasks,
+                            replacement_contributor,
+                        })
+                    },
+                    Err(CoordinatorError::QueueIsEmpty) => {
+                        tracing::info!("No replacement contributors available, the round will be restarted.");
+                        // There are no replacement contributors so the only option is to restart the round.
+                        CeremonyStorageAction::ResetCurrentRound(ResetCurrentRoundStorageAction {
+                            remove_participants: vec![participant.clone()],
+                            rollback: false,
+                        })
+                    },
+                    Err(e) => return Err(e)
                 };
 
                 warn!("Dropped {} from the ceremony", participant);
@@ -2404,11 +2404,10 @@ impl CoordinatorState {
         time: &dyn TimeSource,
     ) -> Result<Participant, CoordinatorError> {
         // Gets first contributor in queue
-        let (next_contributor, contributor_info) = self.queue_contributors().first().ok_or(CoordinatorError::QueueIsEmpty)?;
+        let (next_contributor, contributor_info) = self.queue_contributors().first().cloned().ok_or(CoordinatorError::QueueIsEmpty)?;
 
         // Remove participant from queue         
-        //FIXME: need to call update_queue?
-        self.remove_from_queue(next_contributor)?;
+        self.remove_from_queue(&next_contributor)?;
 
         // Assign the replacement contributor to the dropped tasks.
         let number_of_contributors = self
@@ -2422,12 +2421,12 @@ impl CoordinatorState {
 
         let tasks = initialize_tasks(bucket_id, self.environment.number_of_chunks(), number_of_contributors)?;
         let mut participant_info =
-            ParticipantInfo::new(next_contributor.to_owned(), self.current_round_height(), contributor_info.0, bucket_id, time);
+            ParticipantInfo::new(next_contributor.clone(), self.current_round_height(), contributor_info.0, bucket_id, time);
         participant_info.start(tasks, time)?;
         trace!("{:?}", participant_info);
-        self.current_contributors.insert(next_contributor.to_owned(), participant_info);
+        self.current_contributors.insert(next_contributor.clone(), participant_info);
 
-        Ok(next_contributor.to_owned())
+        Ok(next_contributor)
     }
 
     ///

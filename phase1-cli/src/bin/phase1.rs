@@ -1,15 +1,14 @@
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
-    objects::{round::LockedLocators, ContributionFileSignature, ContributionState, Task},
+    objects::{ContributionFileSignature, ContributionState},
     rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
-    storage::{ContributionLocator, Object},
+    storage::Object,
     COORDINATOR_KEYPAIR_FILE,
 };
 
 use reqwest::{Client, Url};
 
-use crate::requests::RequestError;
 use anyhow::Result;
 use phase1_cli::{requests, ContributorOpt};
 use serde_json;
@@ -17,7 +16,7 @@ use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{Read, Write},
     time::Instant,
 };
@@ -30,6 +29,7 @@ use tokio::time;
 use tracing::{debug, error, info};
 
 const CONTRIBUTOR_KEYPAIR_FILE: &str = "contributor.keypair";
+const KEYPAIR_ERROR: &str = "Failed to retrieve keypair";
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -59,23 +59,17 @@ fn get_keypair(coordinator: bool) -> Result<KeyPair> {
         CONTRIBUTOR_KEYPAIR_FILE
     };
 
-    match File::open(path) {
-        Ok(mut f) => {
+    match fs::read(path) {
+        Ok(keypair_str) => {
             info!("Found keypair file, retrieving key");
-            let mut keypair_str = String::new();
-            f.read_to_string(&mut keypair_str)?;
-
             Ok(serde_json::from_str(keypair_str.as_str())?)
-        }
+        },
         Err(_) => {
             info!("Missing keypair file, generating new one");
             let keypair = KeyPair::new();
             debug!("Generated pubkey {}", keypair.pubkey());
 
-            // Store key to file
-            let mut f = File::create(path)?;
-            f.write_all(&serde_json::to_vec(&keypair)?)?;
-
+            fs::write(path, &keypair)?;
             Ok(keypair)
         }
     }
@@ -111,7 +105,7 @@ fn compute_contribution(
         round_height, base58_pubkey
     ));
     let mut response_writer = File::create(filename.as_str())?;
-    response_writer.write_all(&challenge_hash);
+    response_writer.write_all(&challenge_hash)?;
 
     // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
     let start = Instant::now();
@@ -141,7 +135,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
     let mut challenge_writer = File::create(String::from(format!("anoma_challenge_round_{}.params", round_height)))?;
-    challenge_writer.write_all(&challenge.as_slice());
+    challenge_writer.write_all(&challenge.as_slice())?;
 
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
@@ -178,9 +172,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     );
     requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
 
-    let contribution_locator = requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
-
-    Ok(())
+    requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
@@ -256,21 +248,21 @@ async fn main() {
 
     match opt {
         ContributorOpt::Contribute(mut url) => {
-            let keypair = get_keypair(false).expect("Failed to retrieve keypair");
+            let keypair = get_keypair(false).expect(KEYPAIR_ERROR);
             contribute(&client, &mut url.coordinator, &keypair).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
-            let keypair = get_keypair(true).expect("Failed to retrieve keypair");
+            let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
-            let keypair = get_keypair(true).expect("Failed to retrieve keypair");
+            let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
             verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
-            let keypair = get_keypair(true).expect("Failed to retrieve keypair");
+            let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
             update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
     }
