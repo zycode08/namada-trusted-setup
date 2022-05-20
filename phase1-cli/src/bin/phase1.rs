@@ -63,7 +63,7 @@ fn get_keypair(coordinator: bool) -> Result<KeyPair> {
         Ok(keypair_str) => {
             info!("Found keypair file, retrieving key");
             Ok(serde_json::from_str(keypair_str.as_str())?)
-        },
+        }
         Err(_) => {
             info!("Missing keypair file, generating new one");
             let keypair = KeyPair::new();
@@ -267,5 +267,3 @@ async fn main() {
         }
     }
 }
-
-// FIXME: clippy + fmt

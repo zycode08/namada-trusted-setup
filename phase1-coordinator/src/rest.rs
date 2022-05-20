@@ -25,14 +25,7 @@ use rocket::{
 
 use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
-use std::{
-    collections::LinkedList,
-    io::Cursor,
-    net::SocketAddr,
-    ops::Deref,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
 use tracing::debug;
