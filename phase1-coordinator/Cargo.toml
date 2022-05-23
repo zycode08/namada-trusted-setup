@@ -57,10 +57,7 @@ itertools = "0.10.3"
 rand = {version = "0.8.5", default-features = false, features = ["getrandom"]}
 rand_chacha = "0.3.1"
 sha2 = "0.10.2"
-bls12_381 = "0.6"
-
-# FIXME: add the correct github link before launching to production
-# masp-phase2 = {path = "../../masp-phase2"}
+bls12_381 = "0.6.1"
 
 [dependencies.rocket]
 features = ["json"]
@@ -72,8 +69,6 @@ git = "https://github.com/heliaxdev/masp-phase2"
 
 [dependencies.masp_proofs]
 git = "https://github.com/heliaxdev/masp"
-#rev = "b64af55d955a1bd0a77389f0b9c66f180815e73b"
-# optional = true
 
 [dependencies.hex-literal]
 optional = true
@@ -81,11 +76,9 @@ version = "0.3.4"
 
 [dev-dependencies]
 serial_test = {version = "0.5"}
-# tracing-subscriber = {version = "0.3"}
 
 [features]
 default = []
-fast-deserialize = ["masp-phase2/fast-deserialize"]
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []
