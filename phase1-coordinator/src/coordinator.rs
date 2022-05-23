@@ -2228,7 +2228,7 @@ impl Coordinator {
                     &replace_action.tasks,
                 )?;
 
-                // Assign a replacement contributor to the dropped tasks for the current round.
+                // Assign a replacement contributor from the queue to the dropped tasks for the current round.
                 round.add_replacement_contributor_unsafe(replace_action.replacement_contributor.clone())?;
                 warn!(
                     "Added a replacement contributor {}",

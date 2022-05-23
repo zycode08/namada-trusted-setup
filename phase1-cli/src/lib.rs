@@ -20,7 +20,7 @@ pub use transform_ratios::transform_ratios;
 
 use phase1_coordinator::{
     objects::{round::LockedLocators, Task},
-    rest::{ContributeChunkRequest, ContributorStatus, GetChunkRequest, PostChunkRequest},
+    rest::{ContributorStatus, PostChunkRequest},
     storage::ContributionLocator,
 };
 

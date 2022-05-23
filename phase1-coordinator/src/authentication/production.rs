@@ -2,9 +2,11 @@ use crate::authentication::Signature as SigTrait;
 use base64;
 use ed25519_compact::{KeyPair as EdKeyPair, Noise, PublicKey, SecretKey, Signature};
 use hex;
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
 /// A private/public key couple encoded in [`base64`]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct KeyPair {
     pubkey: String,
     sigkey: String,
@@ -19,6 +21,12 @@ impl KeyPair {
             pubkey: base64::encode(keypair.pk.deref()),
             sigkey: base64::encode(keypair.sk.deref()),
         }
+    }
+
+    /// Custom keypair available only in test
+    #[cfg(debug_assertions)]
+    pub fn custom_new(sigkey: String, pubkey: String) -> Self {
+        KeyPair { pubkey, sigkey }
     }
 
     /// Get a reference to the key pair's pubkey.

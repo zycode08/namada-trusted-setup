@@ -6,7 +6,7 @@ build:
 	$(CARGO) build
 
 check:
-	$(CARGO) check
+	$(CARGO) check --all-targets
 
 contribution: # Run contributor against a local coordinator (127.0.0.1:8000)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute
@@ -42,6 +42,6 @@ update:
 	$(CARGO) update
 
 clean:
-	$(CARGO) clean
+	$(CARGO) clean --release
 
 .PHONY : build check clean clippy close-ceremony contribution fmt contributor run-coordinator test-coordinator test-e2e update

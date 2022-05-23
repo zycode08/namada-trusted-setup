@@ -5,7 +5,8 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError, TimeSource,
+    CoordinatorError,
+    TimeSource,
 };
 // use phase1::ProvingSystem;
 
@@ -2292,29 +2293,29 @@ impl CoordinatorState {
                 // Add the participant info to the dropped participants.
                 self.dropped.push(dropped_info);
 
-                let action = if self.environment.coordinator_contributors().is_empty() {
-                    tracing::info!("No replacement contributors available, the round will be restarted.");
-                    // There are no replacement contributors so the only option is to restart the round.
-                    CeremonyStorageAction::ResetCurrentRound(ResetCurrentRoundStorageAction {
-                        remove_participants: vec![participant.clone()],
-                        rollback: false,
-                    })
-                } else {
-                    // TODO: handle the situation where all replacement contributors are currently engaged.
-                    tracing::info!(
-                        "Found a replacement contributor for the dropped contributor. \
-                        Assigning replacement contributor to the dropped contributor's tasks."
-                    );
-                    // Assign the replacement contributor to the dropped tasks.
-                    let replacement_contributor = self.add_replacement_contributor_unsafe(bucket_id, time)?;
-
-                    CeremonyStorageAction::ReplaceContributor(ReplaceContributorStorageAction {
-                        dropped_contributor: participant.clone(),
-                        bucket_id,
-                        locked_chunks,
-                        tasks,
-                        replacement_contributor,
-                    })
+                let action = match self.add_replacement_contributor_unsafe(bucket_id, time) {
+                    Ok(replacement_contributor) => {
+                        tracing::info!(
+                            "Found a replacement contributor for the dropped contributor. \
+                            Assigning replacement contributor to the dropped contributor's tasks."
+                        );
+                        CeremonyStorageAction::ReplaceContributor(ReplaceContributorStorageAction {
+                            dropped_contributor: participant.clone(),
+                            bucket_id,
+                            locked_chunks,
+                            tasks,
+                            replacement_contributor,
+                        })
+                    }
+                    Err(CoordinatorError::QueueIsEmpty) => {
+                        tracing::info!("No replacement contributors available, the round will be restarted.");
+                        // There are no replacement contributors so the only option is to restart the round.
+                        CeremonyStorageAction::ResetCurrentRound(ResetCurrentRoundStorageAction {
+                            remove_participants: vec![participant.clone()],
+                            rollback: false,
+                        })
+                    }
+                    Err(e) => return Err(e),
                 };
 
                 warn!("Dropped {} from the ceremony", participant);
@@ -2403,20 +2404,17 @@ impl CoordinatorState {
         bucket_id: u64,
         time: &dyn TimeSource,
     ) -> Result<Participant, CoordinatorError> {
-        // Fetch a coordinator contributor with the least load.
-        let coordinator_contributor =
-            self.environment
-                .coordinator_contributors()
-                .iter()
-                .min_by_key(|c| match self.current_contributors.get(c) {
-                    Some(participant_info) => {
-                        participant_info.pending_tasks.len() + participant_info.assigned_tasks.len()
-                    }
-                    None => 0,
-                });
+        // Gets first contributor in queue
+        let (next_contributor, contributor_info) = self
+            .queue_contributors()
+            .first()
+            .cloned()
+            .ok_or(CoordinatorError::QueueIsEmpty)?;
+
+        // Remove participant from queue
+        self.remove_from_queue(&next_contributor)?;
 
         // Assign the replacement contributor to the dropped tasks.
-        let contributor = coordinator_contributor.ok_or(CoordinatorError::CoordinatorContributorMissing)?;
         let number_of_contributors = self
             .current_metrics
             .clone()
@@ -2427,13 +2425,19 @@ impl CoordinatorState {
         // TODO (raychu86): Add tasks to the replacement contributor if it already has pending tasks.
 
         let tasks = initialize_tasks(bucket_id, self.environment.number_of_chunks(), number_of_contributors)?;
-        let mut participant_info =
-            ParticipantInfo::new(contributor.clone(), self.current_round_height(), 10, bucket_id, time);
+        let mut participant_info = ParticipantInfo::new(
+            next_contributor.clone(),
+            self.current_round_height(),
+            contributor_info.0,
+            bucket_id,
+            time,
+        );
         participant_info.start(tasks, time)?;
         trace!("{:?}", participant_info);
-        self.current_contributors.insert(contributor.clone(), participant_info);
+        self.current_contributors
+            .insert(next_contributor.clone(), participant_info);
 
-        Ok(contributor.clone())
+        Ok(next_contributor)
     }
 
     ///
@@ -3358,7 +3362,9 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState, MockTimeSource, SystemTimeSource,
+        CoordinatorState,
+        MockTimeSource,
+        SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

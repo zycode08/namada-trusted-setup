@@ -1,9 +1,13 @@
-use crate::{objects::Participant, storage::Disk, authentication::KeyPair};
+use crate::{authentication::KeyPair, objects::Participant, storage::Disk};
 pub use phase1::{helpers::CurveKind, ContributionMode, ProvingSystem};
 use setup_utils::{CheckForCorrectness, UseCompression};
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
+
+use std::fs;
+
+pub const COORDINATOR_KEYPAIR_FILE: &str = "coordinator.keypair";
 
 type BatchSize = usize;
 type ChunkSize = usize;
@@ -504,6 +508,14 @@ impl From<Production> for Environment {
     }
 }
 
+/// Generate keypair for the default verifier of coordinator and writes it to file
+fn generate_keypair() -> anyhow::Result<KeyPair> {
+    let keypair = KeyPair::new();
+    fs::write(COORDINATOR_KEYPAIR_FILE, serde_json::to_vec(&keypair)?)?;
+
+    Ok(keypair)
+}
+
 // TODO (howardwu): Convert the implementation to a procedural macro.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Testing {
@@ -587,8 +599,7 @@ impl std::ops::Deref for Testing {
 
 impl std::default::Default for Testing {
     fn default() -> Self {
-        // Generate default verifier of coordinator
-        let keypair = KeyPair::new();
+        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
 
         Self {
             environment: Environment {
@@ -707,8 +718,7 @@ impl std::ops::DerefMut for Development {
 
 impl std::default::Default for Development {
     fn default() -> Self {
-        // Generate default verifier of coordinator
-        let keypair = KeyPair::new();
+        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
 
         Self {
             environment: Environment {
@@ -826,8 +836,7 @@ impl std::ops::Deref for Production {
 
 impl std::default::Default for Production {
     fn default() -> Self {
-        // Generate default verifier of coordinator
-        let keypair = KeyPair::new();
+        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
 
         Self {
             environment: Environment {
