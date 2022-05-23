@@ -508,18 +508,6 @@ checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "bls12_381"
-version = "0.6.0"
-source = "git+https://github.com/joebebel/bls12_381?branch=joe/fast_subgroup_check#44aa224a83dbb68cb9f747a95d5e65fbc40e61c2"
-dependencies = [
- "ff",
- "group",
- "pairing 0.21.0",
- "rand_core 0.6.3",
- "subtle",
-]
-
-[[package]]
-name = "bls12_381"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a829c821999c06be34de314eaeb7dd1b42be38661178bc26ad47a4eacebdb0f9"
@@ -2072,7 +2060,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2e7baec19d4e83f9145d4891178101a604565edff9645770fc979804138b04c"
 dependencies = [
  "bitvec",
- "bls12_381 0.6.1",
+ "bls12_381",
  "ff",
  "group",
  "rand_core 0.6.3",
@@ -2172,8 +2160,7 @@ source = "git+https://github.com/heliaxdev/masp-phase2?branch=main#763bc36bd0336
 dependencies = [
  "bellman 0.11.2",
  "blake2 0.10.4",
- "bls12_381 0.6.0",
- "bls12_381 0.6.1",
+ "bls12_381",
  "byteorder",
  "crossbeam 0.8.1",
  "ff",
@@ -2183,7 +2170,6 @@ dependencies = [
  "pairing 0.21.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rayon",
 ]
 
 [[package]]
@@ -2196,7 +2182,7 @@ dependencies = [
  "bitvec",
  "blake2b_simd",
  "blake2s_simd 1.0.0",
- "bls12_381 0.6.1",
+ "bls12_381",
  "byteorder",
  "chacha20poly1305",
  "ff",
@@ -2220,7 +2206,7 @@ source = "git+https://github.com/heliaxdev/masp#86de5181e36a30e9456fc0fc251f1c80
 dependencies = [
  "bellman 0.11.2",
  "blake2b_simd",
- "bls12_381 0.6.1",
+ "bls12_381",
  "byteorder",
  "directories",
  "ff",
@@ -2790,7 +2776,7 @@ dependencies = [
  "bellman 0.11.2",
  "blake2 0.10.4",
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "bls12_381 0.6.1",
+ "bls12_381",
  "byteorder",
  "ed25519-compact",
  "exitcode",
@@ -5395,7 +5381,7 @@ dependencies = [
  "bitvec",
  "blake2b_simd",
  "blake2s_simd 1.0.0",
- "bls12_381 0.6.1",
+ "bls12_381",
  "byteorder",
  "chacha20poly1305",
  "equihash",
@@ -5424,7 +5410,7 @@ source = "git+https://github.com/zcash/librustzcash?rev=43c18d0#43c18d000fcbe453
 dependencies = [
  "bellman 0.11.2",
  "blake2b_simd",
- "bls12_381 0.6.1",
+ "bls12_381",
  "byteorder",
  "directories",
  "ff",
