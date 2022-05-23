@@ -183,11 +183,6 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
         .expect("Couldn't join the queue");
 
     loop {
-        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair).await {
-            // Log this error and continue
-            error!("{}", e);
-        }
-
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair)
             .await
@@ -211,6 +206,11 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                 break;
             }
             ContributorStatus::Other => println!("Something went wrong!"),
+        }
+
+        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair).await {
+            // Log this error and continue
+            error!("{}", e);
         }
 
         // Get status updates
