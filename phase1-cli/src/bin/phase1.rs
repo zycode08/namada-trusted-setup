@@ -62,14 +62,14 @@ fn get_keypair(coordinator: bool) -> Result<KeyPair> {
     match fs::read(path) {
         Ok(keypair_str) => {
             info!("Found keypair file, retrieving key");
-            Ok(serde_json::from_str(keypair_str.as_str())?)
+            Ok(serde_json::from_slice(&keypair_str)?)
         }
         Err(_) => {
             info!("Missing keypair file, generating new one");
             let keypair = KeyPair::new();
             debug!("Generated pubkey {}", keypair.pubkey());
 
-            fs::write(path, &keypair)?;
+            fs::write(path, &serde_json::to_vec(&keypair)?)?;
             Ok(keypair)
         }
     }
@@ -172,7 +172,9 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     );
     requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
 
-    requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await
+    requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
+
+    Ok(())
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
