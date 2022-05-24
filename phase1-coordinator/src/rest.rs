@@ -102,10 +102,11 @@ impl<T: Serialize> Deref for SignedRequest<T> {
 
 impl<T: Serialize> SignedRequest<T> {
     fn verify(&self) -> Result<()> {
-        let request = match &self.request {
-            Some(r) => json::to_string(r)?,
-            None => json::to_string(&self.pubkey)?,
-        };
+        let mut request = json::to_string(&self.pubkey)?;
+
+        if let Some(ref r) = self.request {
+            request.push_str(json::to_string(r)?.as_str());
+        }
 
         if Production.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
             Ok(())
@@ -132,12 +133,14 @@ impl<T: Serialize> SignedRequest<T> {
 
     /// Returns a signed request
     pub fn try_sign(keypair: &KeyPair, request: Option<T>) -> Result<Self> {
-        let request_str = match request {
-            Some(ref r) => json::to_string(r)?,
-            None => json::to_string(&keypair.pubkey().to_owned())?,
-        };
+        let mut message = json::to_string(&keypair.pubkey().to_owned())?;
 
-        match Production.sign(keypair.sigkey(), request_str.as_str()) {
+        // If body is non-empty add it to the message to be signed
+        if let Some(ref r) = request {
+            message.push_str(json::to_string(r)?.as_str());
+        }
+
+        match Production.sign(keypair.sigkey(), message.as_str()) {
             Ok(signature) => Ok(SignedRequest {
                 request,
                 signature,
@@ -185,8 +188,6 @@ impl PostChunkRequest {
 //
 // -- REST API ENDPOINTS --
 //
-
-// FIXME: check wich spawn_blocking are necesessary
 
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<request>")]
