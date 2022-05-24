@@ -18,16 +18,15 @@ use structopt::StructOpt;
 use std::{
     fs::{self, File},
     io::{Read, Write},
-    sync::Arc,
     time::Instant,
 };
 
 use base64;
 use bs58;
 
-use tokio::{sync::RwLock, time};
+use tokio::time;
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 const CONTRIBUTOR_KEYPAIR_FILE: &str = "contributor.keypair";
 const KEYPAIR_ERROR: &str = "Failed to retrieve keypair";
@@ -228,11 +227,15 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
 
                 tokio::select! {
                     heartbeat_result = heartbeat_handle => {
-                        heartbeat_result.expect("Heartbeat task panicked");
+                        if let Err(e) = heartbeat_result.expect("Heartbeat task panicked") {
+                            error!("Heartbeat failed: {}", e);
+                        }
                     },
                     contribute_result = contribute_handle => {
-                        contribute_result.expect("Contribute task panicked");
-                        info!("Contribution task completed");
+                        match contribute_result.expect("Contribute task panicked") {
+                            Ok(()) => info!("Contribution task completed"),
+                            Err(e) => error!("Contribution failed: {}", e),
+                        }
                     }
                 }
             }
