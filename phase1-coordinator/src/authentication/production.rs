@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
 /// A private/public key couple encoded in [`base64`]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct KeyPair {
     pubkey: String,
     sigkey: String,

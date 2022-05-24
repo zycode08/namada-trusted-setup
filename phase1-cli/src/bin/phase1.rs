@@ -18,15 +18,15 @@ use structopt::StructOpt;
 use std::{
     fs::{self, File},
     io::{Read, Write},
-    time::Instant,
+    time::Instant, sync::Arc,
 };
 
 use base64;
 use bs58;
 
-use tokio::time;
+use tokio::{time, sync::RwLock};
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 const CONTRIBUTOR_KEYPAIR_FILE: &str = "contributor.keypair";
 const KEYPAIR_ERROR: &str = "Failed to retrieve keypair";
@@ -141,14 +141,14 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
     debug!("Challenge length {}", challenge.len());
 
-    // NOTE: tried also with spawn_blocking, doesn't improve performance
-    let contribution = compute_contribution(
-        keypair.pubkey(),
+    let keypair_owned = keypair.to_owned();
+    let contribution = tokio::task::spawn_blocking(move || compute_contribution(
+        keypair_owned.pubkey(),
         round_height,
         &challenge,
         challenge_hash.to_vec().as_ref(),
         contribution_id,
-    )?;
+    )).await??;
 
     let contribution_hash = calculate_hash(contribution.as_ref());
     debug!("Contribution hash is {}", pretty_hash!(&contribution_hash));
@@ -208,13 +208,25 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
             ContributorStatus::Other => println!("Something went wrong!"),
         }
 
-        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair).await {
-            // Log this error and continue
-            error!("{}", e);
-        }
-
         // Get status updates
         time::sleep(UPDATE_TIME).await;
+    }
+}
+
+/// Periodically send an heartbeat signal to the Coordinator to prevent it from
+/// droppping the contributor out of the ceremony in the middle of a contribution.
+/// Heartbeat is checked by the Coordinator every 120 seconds.
+async fn heartbeat(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+    loop {
+        time::sleep(UPDATE_TIME).await;
+
+        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair).await {
+            // NOTE: heartbeat may fail shortly before completing the contribution when the coordinator starts to aggregate
+            //  the round beacause, at that moment, the contributor has already been moved out of the queue and therefore
+            //  cannot heartbeat anymore. If we raise an error here, the select! statement in the main function will stop the contribution
+            //  process: the solution is to simply log a warn and continue the contribution.
+            warn!("Heartbeat failed: {} => Coninuing with contribution...", e);
+        }
     }
 }
 
@@ -251,7 +263,25 @@ async fn main() {
     match opt {
         ContributorOpt::Contribute(mut url) => {
             let keypair = get_keypair(false).expect(KEYPAIR_ERROR);
-            contribute(&client, &mut url.coordinator, &keypair).await;
+
+            // Spawn heartbeat task 
+            let client_copy = Client::new();
+            let mut coordinator_copy = url.coordinator.clone();
+            let keypair_copy = keypair.clone();
+            let heartbeat_handle = tokio::task::spawn(async move {heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await});
+
+            // Spawn contribute task
+            let contribute_handle = tokio::task::spawn(async move {contribute(&client, &mut url.coordinator, &keypair).await});
+
+            tokio::select! {
+                heartbeat_result = heartbeat_handle => {
+                    heartbeat_result.expect("Heartbeat task panicked");
+                },
+                contribute_result = contribute_handle => {
+                    contribute_result.expect("Contribute task panicked");
+                    info!("Contribution task completed");
+                }
+            }
         }
         ContributorOpt::CloseCeremony(mut url) => {
             let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
