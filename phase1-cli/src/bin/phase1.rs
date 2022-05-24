@@ -18,13 +18,14 @@ use structopt::StructOpt;
 use std::{
     fs::{self, File},
     io::{Read, Write},
-    time::Instant, sync::Arc,
+    sync::Arc,
+    time::Instant,
 };
 
 use base64;
 use bs58;
 
-use tokio::{time, sync::RwLock};
+use tokio::{sync::RwLock, time};
 
 use tracing::{debug, error, info, warn};
 
@@ -142,13 +143,16 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     debug!("Challenge length {}", challenge.len());
 
     let keypair_owned = keypair.to_owned();
-    let contribution = tokio::task::spawn_blocking(move || compute_contribution(
-        keypair_owned.pubkey(),
-        round_height,
-        &challenge,
-        challenge_hash.to_vec().as_ref(),
-        contribution_id,
-    )).await??;
+    let contribution = tokio::task::spawn_blocking(move || {
+        compute_contribution(
+            keypair_owned.pubkey(),
+            round_height,
+            &challenge,
+            challenge_hash.to_vec().as_ref(),
+            contribution_id,
+        )
+    })
+    .await??;
 
     let contribution_hash = calculate_hash(contribution.as_ref());
     debug!("Contribution hash is {}", pretty_hash!(&contribution_hash));
@@ -178,7 +182,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
-     // NOTE: heartbeat may fail shortly before completing the contribution when the coordinator starts to aggregate
+    // NOTE: heartbeat may fail shortly before completing the contribution when the coordinator starts to aggregate
     //  the round beacause, at that moment, the contributor has already been moved out of the queue and therefore
     //  cannot heartbeat anymore. This would case the select! statement to stop the contribution
     //  process. To address this, different calls to [`requests::post_heartbeat`] have been placed around to send the
@@ -203,19 +207,24 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                 );
                 // Send heartbeat
                 requests::post_heartbeat(client, coordinator, keypair).await;
-            },
+            }
             ContributorStatus::Round => {
                 // Spawn heartbeat task
                 let client_copy = client.clone();
                 let mut coordinator_copy = coordinator.clone();
                 let keypair_copy = keypair.clone();
-                let heartbeat_handle = tokio::task::spawn(async move {heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await});
+                let heartbeat_handle =
+                    tokio::task::spawn(
+                        async move { heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await },
+                    );
 
                 // Spawn contribute task
                 let client_copy = client.clone();
                 let mut coordinator_copy = coordinator.clone();
                 let keypair_copy = keypair.clone();
-                let contribute_handle = tokio::task::spawn(async move {do_contribute(&client_copy, &mut coordinator_copy, &keypair_copy).await});
+                let contribute_handle = tokio::task::spawn(async move {
+                    do_contribute(&client_copy, &mut coordinator_copy, &keypair_copy).await
+                });
 
                 tokio::select! {
                     heartbeat_result = heartbeat_handle => {
