@@ -182,8 +182,8 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
     // NOTE: heartbeat may fail shortly before completing the contribution when the coordinator starts to aggregate
-    //  the round beacause, at that moment, the contributor has already been moved out of the queue and therefore
-    //  cannot heartbeat anymore. This would case the select! statement to stop the contribution
+    //  the round beacause, at that moment, the contributor has already been moved out of the list of current contributors
+    //  and therefore cannot heartbeat anymore. This would case the select! statement to stop the contribution
     //  process. To address this, different calls to [`requests::post_heartbeat`] have been placed around to send the
     //  heartbeat signal only when appropriate.
     requests::post_join_queue(client, coordinator, keypair)
@@ -205,7 +205,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                     position * 5
                 );
                 // Send heartbeat
-                requests::post_heartbeat(client, coordinator, keypair).await;
+                requests::post_heartbeat(client, coordinator, keypair).await.expect("Couldn't heartbeat");
             }
             ContributorStatus::Round => {
                 // Spawn heartbeat task
@@ -225,12 +225,12 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                     do_contribute(&client_copy, &mut coordinator_copy, &keypair_copy).await
                 });
 
-                tokio::select! {
-                    heartbeat_result = heartbeat_handle => {
-                        if let Err(e) = heartbeat_result.expect("Heartbeat task panicked") {
-                            error!("Heartbeat failed: {}", e);
-                        }
-                    },
+                tokio::select! { //FIXME: handle this select
+                    // heartbeat_result = heartbeat_handle => {
+                    //     if let Err(e) = heartbeat_result.expect("Heartbeat task panicked") {
+                    //         error!("Heartbeat failed: {}", e);
+                    //     }
+                    // },
                     contribute_result = contribute_handle => {
                         match contribute_result.expect("Contribute task panicked") {
                             Ok(()) => info!("Contribution task completed"),
@@ -238,6 +238,11 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                         }
                     }
                 }
+                // NOTE: need to manually cancel the task becasue, by default, async runtimes use detach on drop strategy
+                //  (see here https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
+                //  only gets detached from the main execution unit but keeps running in the background until the main
+                //  function returns
+                heartbeat_handle.abort(); //FIXME:
             }
             ContributorStatus::Finished => {
                 println!("Contribution done!");
@@ -246,7 +251,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
             ContributorStatus::Other => {
                 println!("Something went wrong!");
                 // Send heartbeat
-                requests::post_heartbeat(client, coordinator, keypair).await;
+                requests::post_heartbeat(client, coordinator, keypair).await.expect("Couldn't heartbeat");
             }
         }
 
@@ -260,7 +265,9 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
 /// Heartbeat is checked by the Coordinator every 120 seconds.
 async fn heartbeat(client: &Client, coordinator: &mut Url, keypair: &KeyPair) -> Result<()> {
     loop {
+        info!("About to post heartbeat"); //FIXME: remove
         requests::post_heartbeat(client, coordinator, keypair).await?;
+        info!("Posted heartbeat"); //FIXME: change to debug
 
         time::sleep(UPDATE_TIME).await;
     }
