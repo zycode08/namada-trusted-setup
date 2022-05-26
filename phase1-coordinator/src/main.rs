@@ -28,7 +28,6 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
         tokio::time::sleep(UPDATE_TIME).await;
 
         rest::perform_coordinator_update(coordinator.clone()).await?;
-        debug!("Coordinator updated");
     }
 }
 
@@ -38,7 +37,6 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
         tokio::time::sleep(UPDATE_TIME).await;
 
         rest::perform_verify_chunks(coordinator.clone()).await?;
-        debug!("Verified pending contributions");
     }
 }
 
@@ -119,7 +117,7 @@ pub async fn main() {
     // Spawn Rocket server task
     let rocket_handle = rocket::tokio::spawn(ignite_rocket.launch());
 
-    tokio::select! { //FIXME: handle this select?
+    tokio::select! {
         update_result = update_handle => {
             match update_result.expect("Update task panicked") {
                 Ok(()) => info!("Update task completed"),
