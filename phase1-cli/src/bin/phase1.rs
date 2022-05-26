@@ -180,7 +180,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     Ok(())
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: JoinHandle<Result<()>>) {
+async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: &JoinHandle<Result<()>>) {
     requests::post_join_queue(client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
@@ -222,17 +222,6 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, h
     }
 }
 
-/// Periodically send an heartbeat signal to the Coordinator to prevent it from
-/// droppping the contributor out of the ceremony in the middle of a contribution.
-/// Heartbeat is checked by the Coordinator every 120 seconds.
-async fn heartbeat(client: &Client, coordinator: &mut Url, keypair: &KeyPair) -> Result<()> {
-    loop {
-        requests::post_heartbeat(client, coordinator, keypair).await?;
-
-        time::sleep(UPDATE_TIME).await;
-    }
-}
-
 async fn close_ceremony(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
         Ok(()) => info!("Ceremony completed!"),
@@ -267,16 +256,22 @@ async fn main() {
         ContributorOpt::Contribute(mut url) => {
             let keypair = get_keypair(false).expect(KEYPAIR_ERROR);
 
-            // Spawn heartbeat task
+            // Spawn heartbeat task to prevent the Coordinator from
+            /// droppping the contributor out of the ceremony in the middle of a contribution.
+            /// Heartbeat is checked by the Coordinator every 120 seconds.
             let client_copy = client.clone();
             let mut coordinator_copy = url.coordinator.clone();
             let keypair_copy = keypair.clone();
             let heartbeat_handle =
                 tokio::task::spawn(
-                    async move { heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await },
+                    async move { loop {
+                        requests::post_heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await?;
+                
+                        time::sleep(UPDATE_TIME).await;
+                    } },
                 );
 
-            contribute(&client, &mut url.coordinator, &keypair, heartbeat_handle).await;
+            contribute(&client, &mut url.coordinator, &keypair, &heartbeat_handle).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
             let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
