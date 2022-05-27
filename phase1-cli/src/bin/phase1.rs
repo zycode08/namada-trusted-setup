@@ -202,10 +202,11 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, h
             }
             ContributorStatus::Round => {
                 do_contribute(client, coordinator, keypair).await.expect("Contribution failed");
-                // NOTE: need to manually cancel the heartbeat task becasue, by default, async runtimes use detach on drop strategy
-                //  (see here https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
+                // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
+                //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
                 //  only gets detached from the main execution unit but keeps running in the background until the main
-                //  function returns
+                //  function returns. This would cause the contributor to send heartbeats even after it has been removed
+                //  from the list of current contributors, causing an error
                 heartbeat_handle.abort();
             }
             ContributorStatus::Finished => {
