@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use tracing::{error, info};
 
-/// Constantly updates the [`Coordinator`] periodically
+/// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
         rest::perform_coordinator_update(coordinator.clone()).await?;
@@ -31,7 +31,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
     }
 }
 
-/// Constantly verifies the pending contributions
+/// Periodically verifies the pending contributions
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
         rest::perform_verify_chunks(coordinator.clone()).await?;

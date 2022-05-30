@@ -44,4 +44,4 @@ update:
 clean:
 	$(CARGO) clean --release
 
-.PHONY : build check clean clippy close-ceremony contribution fmt contributor run-coordinator test-coordinator test-e2e update
+.PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt contribution run-coordinator test-coordinator test-e2e update verify

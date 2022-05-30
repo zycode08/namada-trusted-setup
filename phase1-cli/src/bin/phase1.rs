@@ -141,14 +141,17 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
     debug!("Challenge length {}", challenge.len());
 
-    // NOTE: tried also with spawn_blocking, doesn't improve performance
-    let contribution = compute_contribution(
-        keypair.pubkey(),
-        round_height,
-        &challenge,
-        challenge_hash.to_vec().as_ref(),
-        contribution_id,
-    )?;
+    let keypair_owned = keypair.to_owned();
+    let contribution = tokio::task::spawn_blocking(move || {
+        compute_contribution(
+            keypair_owned.pubkey(),
+            round_height,
+            &challenge,
+            challenge_hash.to_vec().as_ref(),
+            contribution_id,
+        )
+    })
+    .await??;
 
     let contribution_hash = calculate_hash(contribution.as_ref());
     debug!("Contribution hash is {}", pretty_hash!(&contribution_hash));
@@ -178,42 +181,87 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
-    requests::post_join_queue(&client, coordinator, keypair)
+    // NOTE: heartbeat may fail shortly before completing the contribution when the coordinator starts to aggregate
+    //  the round beacause, at that moment, the contributor has already been moved out of the queue and therefore
+    //  cannot heartbeat anymore. This would case the select! statement to stop the contribution
+    //  process. To address this, different calls to [`requests::post_heartbeat`] have been placed around to send the
+    //  heartbeat signal only when appropriate.
+    requests::post_join_queue(client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
 
     loop {
         // Check the contributor's position in the queue
-        let queue_status = requests::get_contributor_queue_status(&client, coordinator, keypair)
+        let queue_status = requests::get_contributor_queue_status(client, coordinator, keypair)
             .await
             .expect("Couldn't get the status of contributor");
 
         match queue_status {
-            ContributorStatus::Queue(position, size) => println!(
-                "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
-                position,
-                size,
-                position * 5
-            ),
+            ContributorStatus::Queue(position, size) => {
+                println!(
+                    "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
+                    position,
+                    size,
+                    position * 5
+                );
+                // Send heartbeat
+                requests::post_heartbeat(client, coordinator, keypair).await;
+            }
             ContributorStatus::Round => {
-                if let Err(e) = do_contribute(&client, coordinator, keypair).await {
-                    eprintln!("{}", e);
-                    panic!();
+                // Spawn heartbeat task
+                let client_copy = client.clone();
+                let mut coordinator_copy = coordinator.clone();
+                let keypair_copy = keypair.clone();
+                let heartbeat_handle =
+                    tokio::task::spawn(
+                        async move { heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await },
+                    );
+
+                // Spawn contribute task
+                let client_copy = client.clone();
+                let mut coordinator_copy = coordinator.clone();
+                let keypair_copy = keypair.clone();
+                let contribute_handle = tokio::task::spawn(async move {
+                    do_contribute(&client_copy, &mut coordinator_copy, &keypair_copy).await
+                });
+
+                tokio::select! {
+                    heartbeat_result = heartbeat_handle => {
+                        if let Err(e) = heartbeat_result.expect("Heartbeat task panicked") {
+                            error!("Heartbeat failed: {}", e);
+                        }
+                    },
+                    contribute_result = contribute_handle => {
+                        match contribute_result.expect("Contribute task panicked") {
+                            Ok(()) => info!("Contribution task completed"),
+                            Err(e) => error!("Contribution failed: {}", e),
+                        }
+                    }
                 }
             }
             ContributorStatus::Finished => {
                 println!("Contribution done!");
                 break;
             }
-            ContributorStatus::Other => println!("Something went wrong!"),
-        }
-
-        if let Err(e) = requests::post_heartbeat(client, coordinator, keypair).await {
-            // Log this error and continue
-            error!("{}", e);
+            ContributorStatus::Other => {
+                println!("Something went wrong!");
+                // Send heartbeat
+                requests::post_heartbeat(client, coordinator, keypair).await;
+            }
         }
 
         // Get status updates
+        time::sleep(UPDATE_TIME).await;
+    }
+}
+
+/// Periodically send an heartbeat signal to the Coordinator to prevent it from
+/// droppping the contributor out of the ceremony in the middle of a contribution.
+/// Heartbeat is checked by the Coordinator every 120 seconds.
+async fn heartbeat(client: &Client, coordinator: &mut Url, keypair: &KeyPair) -> Result<()> {
+    loop {
+        requests::post_heartbeat(client, coordinator, keypair).await?;
+
         time::sleep(UPDATE_TIME).await;
     }
 }
