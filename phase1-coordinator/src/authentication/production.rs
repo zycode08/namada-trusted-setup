@@ -14,7 +14,7 @@ pub struct KeyPair {
 
 impl KeyPair {
     /// Generate a keypair from a seed
-    pub fn from_seed(seed: &[u8]) -> Result<Self, Error> {
+    pub fn try_from_seed(seed: &[u8]) -> Result<Self, Error> {
         let keypair = EdKeyPair::from_slice(seed)?;
 
         Ok(KeyPair {

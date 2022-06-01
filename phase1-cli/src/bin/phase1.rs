@@ -7,11 +7,12 @@ use phase1_coordinator::{
     COORDINATOR_KEYPAIR_FILE,
 };
 
+use rand::Rng;
 use reqwest::{Client, Url};
 
 use anyhow::{anyhow, Result};
-use bip39::Mnemonic;
 use phase1_cli::{requests, ContributorOpt};
+use serde::Deserialize;
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
@@ -22,18 +23,20 @@ use std::{
     time::Instant,
 };
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use base64;
 use bs58;
+
+use rand::distributions::{Distribution, Uniform};
 
 use tokio::{task::JoinHandle, time};
 
 use tracing::{debug, error, info};
 
-const CONTRIBUTOR_INFO_FILE: &str = "contributor.info";
-const KEYPAIR_ERROR: &str = "Failed to retrieve keypair";
+const CONTRIBUTION_INFO_FILE: &str = "contribution.info";
 const MNEMONIC_LEN: usize = 24;
+const MNEMONIC_CHECK_LEN: usize = 3;
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -52,40 +55,94 @@ macro_rules! pretty_hash {
     }};
 }
 
-/// Generates a new [`KeyPair`] from a mnemonic
-fn generate_keypair(mnemonic_path: &Path, passphrase: &str) -> Result<KeyPair> {
-    let mnemonic_str = fs::read_to_string(mnemonic_path)?;
+/// The datetimes of the contribution 
+#[derive(Debug, Deserialize, Serialize)]
+struct ContributionTimeStamps {
+    // User starts the CLI
+    start_contribution: DateTime,
+    // User has joined the queue
+    joined_queue: DateTime,
+    // User has locked the challenge on the coordinator
+    challenge_locked: DateTime,
+    // User has completed the download of the challenge
+    challenge_downloaded: DateTime,
+    // User starts computation locally or downloads the file to another machine
+    start_computation: DateTime,
+    // User finishes computation locally or uploads the file from another machine
+    end_computation: DateTime,
+    // User attests that the file was uploaded correctly
+    end_contribution: DateTime
+}
 
-    if mnemonic_str.len() != MNEMONIC_LEN {
-        return Err(anyhow!("Mnemonic is supposed to be 24 words in size")); 
+/// Summary info about the contribution. This data is supposed to be sent to the 
+/// Coordinator and stored in a file
+#[derive(Debug, Deserialize, Serialize)]
+struct ContributionInfo {
+    // Name of the contributor
+    full_name: String,
+    // Email of the contributor
+    email: String,
+   // ed25519 public key
+    public_key: String,
+   // User participates in incentivized program or not
+   is_incentivized: bool,
+   // User expresses his intent to participate or not in the contest for creative contributions
+   is_contest_participant: bool,
+   // User can choose to contribute on another machine
+   is_another_machine: bool,
+   // User can choose the default method to generate randomness or his own.
+   is_own_seed_of_randomness: bool,
+   // Round in which the contribution took place
+   ceremony_round: u32,
+   // Hash of the contribution run by masp-mpc, contained in the transcript
+   contribution_hash: String,
+   // FIXME: is this necessary? so other user can check the contribution hash against the public key?
+   contribution_hash_signature: String,
+   // Hash of the file saved on disk and sent to the coordinator
+   contribution_file_hash: String,
+   // Signature of the contribution
+   contribution_file_signature: String,
+   // Some timestamps to get performance metrics of the ceremony
+   timestamp: ContributionTimeStamps,
+   // Signature of this struct
+   contributor_info_signature: String
+}
+
+/// Generates a new [`KeyPair`] from a mnemonic
+fn generate_keypair(mnemonic: &str) -> Result<KeyPair> {
+    // FIXME: handle leading and trailing empty spaces
+    let mnemonic = bip39::Mnemonic::from(mnemonic);
+
+    if mnemonic.word_count() != MNEMONIC_LEN {
+        return Err(anyhow!("Mnemonic is supposed to be 24 words in size"));
+    }
+    let seed = mnemonic.to_seed_normalized("");
+
+    // Check if the user has correctly stored the mnemonic
+    let mut rng = rand::thread_rng();
+    let uniform = Uniform::from(0..MNEMONIC_LEN - 1);
+    let random_indexes: [u32; 3] = uniform.sample_iter(rng).take(MNEMONIC_CHECK_LEN).collect();
+
+    println!("Mnemonic verification step");
+    let mnemonic_slice = mnemonic.word_iter().collect();
+
+    for i in random_indexes {
+        println!("Enter the word at index {} of your mnemonic:", i);
+        let mut response = String::new();
+        std::io::stdin().read_line(&mut response)?; //FIXME: async?
+ 
+        if response != mnemonic_slice[i] {
+            return Err(anyhow!("Wrong answer!"));
+        }
     }
 
-    let mnemonic = bip0039::Mnemonic::from_phrase(mnemonic_str)?;
-    let seed = mnemonic.to_seed(passphrase);
+    println!("Verification passed. Be sure to safely store your mnemonic phrase!");
 
-    // FIXME: check if the user has correctly stored the mnemonics
-
-    KeyPair::from_seed(&seed)
+    KeyPair::try_from_seed(&seed)
 }
 
 // FIXME: async operations on files?
 // FIXME: add info also to the coordinator file
-
-fn store_contribution_info(challenge_hash: &[u8], contribution_hash: &[u8], response_hash: &[u8]) -> Result<()> {
-    let mut file = OpenOptions::new().append(true).open(CONTRIBUTOR_INFO_FILE)?;
-    let mut writer = BufWriter::new(file);
-
-    // FIXME: append data to contributor file
-    writer.write_all(&serde_json::to_vec(&Utc::now())?)?;
-    writer.write_all(&serde_json::to_vec(challenge_hash)?)?;
-    writer.write_all(&serde_json::to_vec(contribution_hash)?)?;
-    writer.write_all(&serde_json::to_vec(response_hash)?)?;
-
-    Ok(writer.flush()?)
-    
-
-    // FIXME: need a hashmap?
-}
 
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
     let mut f = File::open(filename)?;
@@ -187,7 +244,14 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
 
     requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
 
-    Ok(())
+    // Write contribution summary file FIXME: complete
+    let timestamps = ContributionTimeStamps {
+
+    };
+    let contribution_info = ContributionInfo {
+
+    };
+    fs::write(CONTRIBUTION_INFO_FILE, &serde_json::to_vec(&contribution_info)?)
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: &JoinHandle<Result<()>>) {
@@ -265,11 +329,11 @@ async fn main() {
 
     match opt {
         ContributorOpt::Contribute(mut args) => {
-            let keypair = generate_keypair(&args.mnemonic_file_path, args.passphrase.as_str()).expect("Error while generating the keypair");
+            let keypair = generate_keypair(&args.mnemonic).expect("Error while generating the keypair");
 
             // Spawn heartbeat task to prevent the Coordinator from
-            /// droppping the contributor out of the ceremony in the middle of a contribution.
-            /// Heartbeat is checked by the Coordinator every 120 seconds.
+            // droppping the contributor out of the ceremony in the middle of a contribution.
+            // Heartbeat is checked by the Coordinator every 120 seconds.
             let client_copy = client.clone();
             let mut coordinator_copy = args.coordinator.clone();
             let keypair_copy = keypair.clone();
@@ -285,17 +349,19 @@ async fn main() {
             contribute(&client, &mut args.coordinator, &keypair, &heartbeat_handle).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
-            // FIXME: get mnemonic from file passed as argument
+            // FIXME: get keypair
             let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
+            // FIXME: get keypair
             let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
+            // FIXME: get keypair
             let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
