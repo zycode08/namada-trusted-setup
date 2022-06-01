@@ -20,23 +20,23 @@ use rocket::{
 use anyhow::Result;
 use std::sync::Arc;
 
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        rest::perform_coordinator_update(coordinator.clone()).await?;
-
         tokio::time::sleep(UPDATE_TIME).await;
+
+        rest::perform_coordinator_update(coordinator.clone()).await?;
     }
 }
 
 /// Periodically verifies the pending contributions
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        rest::perform_verify_chunks(coordinator.clone()).await?;
-
         tokio::time::sleep(UPDATE_TIME).await;
+
+        rest::perform_verify_chunks(coordinator.clone()).await?;
     }
 }
 

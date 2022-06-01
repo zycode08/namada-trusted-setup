@@ -24,7 +24,7 @@ use std::{
 use base64;
 use bs58;
 
-use tokio::time;
+use tokio::{task::JoinHandle, time};
 
 use tracing::{debug, error, info};
 
@@ -180,12 +180,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     Ok(())
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
-    // NOTE: heartbeat may fail shortly before completing the contribution when the coordinator starts to aggregate
-    //  the round beacause, at that moment, the contributor has already been moved out of the queue and therefore
-    //  cannot heartbeat anymore. This would case the select! statement to stop the contribution
-    //  process. To address this, different calls to [`requests::post_heartbeat`] have been placed around to send the
-    //  heartbeat signal only when appropriate.
+async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: &JoinHandle<Result<()>>) {
     requests::post_join_queue(client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
@@ -204,40 +199,15 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
                     size,
                     position * 5
                 );
-                // Send heartbeat
-                requests::post_heartbeat(client, coordinator, keypair).await;
             }
             ContributorStatus::Round => {
-                // Spawn heartbeat task
-                let client_copy = client.clone();
-                let mut coordinator_copy = coordinator.clone();
-                let keypair_copy = keypair.clone();
-                let heartbeat_handle =
-                    tokio::task::spawn(
-                        async move { heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await },
-                    );
-
-                // Spawn contribute task
-                let client_copy = client.clone();
-                let mut coordinator_copy = coordinator.clone();
-                let keypair_copy = keypair.clone();
-                let contribute_handle = tokio::task::spawn(async move {
-                    do_contribute(&client_copy, &mut coordinator_copy, &keypair_copy).await
-                });
-
-                tokio::select! {
-                    heartbeat_result = heartbeat_handle => {
-                        if let Err(e) = heartbeat_result.expect("Heartbeat task panicked") {
-                            error!("Heartbeat failed: {}", e);
-                        }
-                    },
-                    contribute_result = contribute_handle => {
-                        match contribute_result.expect("Contribute task panicked") {
-                            Ok(()) => info!("Contribution task completed"),
-                            Err(e) => error!("Contribution failed: {}", e),
-                        }
-                    }
-                }
+                do_contribute(client, coordinator, keypair).await.expect("Contribution failed");
+                // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
+                //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
+                //  only gets detached from the main execution unit but keeps running in the background until the main
+                //  function returns. This would cause the contributor to send heartbeats even after it has been removed
+                //  from the list of current contributors, causing an error
+                heartbeat_handle.abort();
             }
             ContributorStatus::Finished => {
                 println!("Contribution done!");
@@ -245,23 +215,10 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
             }
             ContributorStatus::Other => {
                 println!("Something went wrong!");
-                // Send heartbeat
-                requests::post_heartbeat(client, coordinator, keypair).await;
             }
         }
 
         // Get status updates
-        time::sleep(UPDATE_TIME).await;
-    }
-}
-
-/// Periodically send an heartbeat signal to the Coordinator to prevent it from
-/// droppping the contributor out of the ceremony in the middle of a contribution.
-/// Heartbeat is checked by the Coordinator every 120 seconds.
-async fn heartbeat(client: &Client, coordinator: &mut Url, keypair: &KeyPair) -> Result<()> {
-    loop {
-        requests::post_heartbeat(client, coordinator, keypair).await?;
-
         time::sleep(UPDATE_TIME).await;
     }
 }
@@ -299,7 +256,23 @@ async fn main() {
     match opt {
         ContributorOpt::Contribute(mut url) => {
             let keypair = get_keypair(false).expect(KEYPAIR_ERROR);
-            contribute(&client, &mut url.coordinator, &keypair).await;
+
+            // Spawn heartbeat task to prevent the Coordinator from
+            /// droppping the contributor out of the ceremony in the middle of a contribution.
+            /// Heartbeat is checked by the Coordinator every 120 seconds.
+            let client_copy = client.clone();
+            let mut coordinator_copy = url.coordinator.clone();
+            let keypair_copy = keypair.clone();
+            let heartbeat_handle =
+                tokio::task::spawn(
+                    async move { loop {
+                        requests::post_heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await?;
+                
+                        time::sleep(UPDATE_TIME).await;
+                    } },
+                );
+
+            contribute(&client, &mut url.coordinator, &keypair, &heartbeat_handle).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
             let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
