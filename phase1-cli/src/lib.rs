@@ -27,6 +27,7 @@ use phase1_coordinator::{
 use reqwest::Url;
 use structopt::StructOpt;
 
+
 #[derive(Debug, StructOpt)]
 pub struct CoordinatorUrl {
     #[structopt(
@@ -40,10 +41,29 @@ pub struct CoordinatorUrl {
 }
 
 #[derive(Debug, StructOpt)]
+pub struct ContributionArgs {
+    #[structopt(flatten)]
+    pub coordinator: CoordinatorUrl,
+    #[structopt(
+        help = "The path to the mnemonic phrase file needed to generate the keypair for the contribution. The phrase should consists of 24 words.",
+        required = true,
+    )]
+    pub mnemonic_file_path: Path,
+    #[structopt(
+        help = "The passhprase used to generate the seed from the mnemonic.",
+        required = true,
+    )]
+    pub passphrase: String
+}
+
+// FIXME: since also for the coordinator we must use mnemonics now, the coordinator will pass the mnemonic file (possibly encrypted), so no need to save it, but all the commands
+//  of the coordinator will need to take the path to this file + passphrase + encyption key?
+
+#[derive(Debug, StructOpt)]
 #[structopt(name = "anoma-mpc", about = "Anoma CLI for trusted setup.")]
 pub enum ContributorOpt {
-    #[structopt(about = "Contribute to the trusted setup")]
-    Contribute(CoordinatorUrl),
+    #[structopt(about = "Contribute to the ceremony")]
+    Contribute(ContributionArgs),
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),
     #[cfg(debug_assertions)]

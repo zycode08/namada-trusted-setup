@@ -510,7 +510,7 @@ impl From<Production> for Environment {
 
 /// Generate keypair for the default verifier of coordinator and writes it to file
 fn generate_keypair() -> anyhow::Result<KeyPair> {
-    let keypair = KeyPair::new();
+    let keypair = KeyPair::new(); //FIXME: use mnemonic!!! Need to pass some parameters to the command to run the coordinator
     fs::write(COORDINATOR_KEYPAIR_FILE, serde_json::to_vec(&keypair)?)?;
 
     Ok(keypair)

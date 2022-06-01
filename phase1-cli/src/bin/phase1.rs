@@ -9,17 +9,20 @@ use phase1_coordinator::{
 
 use reqwest::{Client, Url};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use bip39::Mnemonic;
 use phase1_cli::{requests, ContributorOpt};
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
-    fs::{self, File},
-    io::{Read, Write},
+    fs::{self, File, OpenOptions},
+    io::{Read, Write, BufWriter},
     time::Instant,
 };
+
+use chrono::Utc;
 
 use base64;
 use bs58;
@@ -28,8 +31,9 @@ use tokio::{task::JoinHandle, time};
 
 use tracing::{debug, error, info};
 
-const CONTRIBUTOR_KEYPAIR_FILE: &str = "contributor.keypair";
+const CONTRIBUTOR_INFO_FILE: &str = "contributor.info";
 const KEYPAIR_ERROR: &str = "Failed to retrieve keypair";
+const MNEMONIC_LEN: usize = 24;
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -48,31 +52,39 @@ macro_rules! pretty_hash {
     }};
 }
 
-/// Retrieve [`KeyPair`] from file if it exists, otherwise generates a new keypair
-/// and store its json encoding into a file. The coordinator argument tells
-/// whether the keypair of a coordinator or a contributor is requested (this
-/// depends on the specific endpoint intended to be queried)
-fn get_keypair(coordinator: bool) -> Result<KeyPair> {
-    let path = if coordinator {
-        COORDINATOR_KEYPAIR_FILE
-    } else {
-        CONTRIBUTOR_KEYPAIR_FILE
-    };
+/// Generates a new [`KeyPair`] from a mnemonic
+fn generate_keypair(mnemonic_path: &Path, passphrase: &str) -> Result<KeyPair> {
+    let mnemonic_str = fs::read_to_string(mnemonic_path)?;
 
-    match fs::read(path) {
-        Ok(keypair_str) => {
-            info!("Found keypair file, retrieving key");
-            Ok(serde_json::from_slice(&keypair_str)?)
-        }
-        Err(_) => {
-            info!("Missing keypair file, generating new one");
-            let keypair = KeyPair::new();
-            debug!("Generated pubkey {}", keypair.pubkey());
-
-            fs::write(path, &serde_json::to_vec(&keypair)?)?;
-            Ok(keypair)
-        }
+    if mnemonic_str.len() != MNEMONIC_LEN {
+        return Err(anyhow!("Mnemonic is supposed to be 24 words in size")); 
     }
+
+    let mnemonic = bip0039::Mnemonic::from_phrase(mnemonic_str)?;
+    let seed = mnemonic.to_seed(passphrase);
+
+    // FIXME: check if the user has correctly stored the mnemonics
+
+    KeyPair::from_seed(&seed)
+}
+
+// FIXME: async operations on files?
+// FIXME: add info also to the coordinator file
+
+fn store_contribution_info(challenge_hash: &[u8], contribution_hash: &[u8], response_hash: &[u8]) -> Result<()> {
+    let mut file = OpenOptions::new().append(true).open(CONTRIBUTOR_INFO_FILE)?;
+    let mut writer = BufWriter::new(file);
+
+    // FIXME: append data to contributor file
+    writer.write_all(&serde_json::to_vec(&Utc::now())?)?;
+    writer.write_all(&serde_json::to_vec(challenge_hash)?)?;
+    writer.write_all(&serde_json::to_vec(contribution_hash)?)?;
+    writer.write_all(&serde_json::to_vec(response_hash)?)?;
+
+    Ok(writer.flush()?)
+    
+
+    // FIXME: need a hashmap?
 }
 
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
@@ -98,7 +110,7 @@ fn compute_contribution(
     challenge_hash: &[u8],
     contribution_id: u64,
 ) -> Result<Vec<u8>> {
-    // Pubkey contains special chars that aren't written to the filename. Encode it in base58
+    // Pubkey contains special chars that aren't writable to the filename. Encode it in base58
     let base58_pubkey = bs58::encode(base64::decode(pubkey)?).into_string();
     let filename: String = String::from(format!(
         "anoma_contribution_round_{}_public_key_{}.params",
@@ -107,7 +119,6 @@ fn compute_contribution(
     let mut response_writer = File::create(filename.as_str())?;
     response_writer.write_all(&challenge_hash)?;
 
-    // TODO: add json file with the challenge hash, the contribution hash and the response hash (challenge_hash, contribution)
     let start = Instant::now();
 
     #[cfg(debug_assertions)]
@@ -131,7 +142,6 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
 
     let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
-    // debug!("Challenge is {}", pretty_hash!(&challenge));
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
     let mut challenge_writer = File::create(String::from(format!("anoma_challenge_round_{}.params", round_height)))?;
@@ -254,14 +264,14 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        ContributorOpt::Contribute(mut url) => {
-            let keypair = get_keypair(false).expect(KEYPAIR_ERROR);
+        ContributorOpt::Contribute(mut args) => {
+            let keypair = generate_keypair(&args.mnemonic_file_path, args.passphrase.as_str()).expect("Error while generating the keypair");
 
             // Spawn heartbeat task to prevent the Coordinator from
             /// droppping the contributor out of the ceremony in the middle of a contribution.
             /// Heartbeat is checked by the Coordinator every 120 seconds.
             let client_copy = client.clone();
-            let mut coordinator_copy = url.coordinator.clone();
+            let mut coordinator_copy = args.coordinator.clone();
             let keypair_copy = keypair.clone();
             let heartbeat_handle =
                 tokio::task::spawn(
@@ -272,20 +282,21 @@ async fn main() {
                     } },
                 );
 
-            contribute(&client, &mut url.coordinator, &keypair, &heartbeat_handle).await;
+            contribute(&client, &mut args.coordinator, &keypair, &heartbeat_handle).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
-            let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
+            // FIXME: get mnemonic from file passed as argument
+            let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::VerifyContributions(mut url) => {
-            let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
+            let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         ContributorOpt::UpdateCoordinator(mut url) => {
-            let keypair = get_keypair(true).expect(KEYPAIR_ERROR);
+            let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
     }
