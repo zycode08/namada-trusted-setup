@@ -12,7 +12,7 @@ use reqwest::{Client, Url};
 
 use anyhow::{anyhow, Result};
 use phase1_cli::{requests, ContributorOpt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
@@ -27,8 +27,10 @@ use chrono::{DateTime, Utc};
 
 use base64;
 use bs58;
+use bip39::{Language, Mnemonic};
 
 use rand::distributions::{Distribution, Uniform};
+use regex::Regex;
 
 use tokio::{task::JoinHandle, time};
 
@@ -59,30 +61,39 @@ macro_rules! pretty_hash {
 #[derive(Debug, Deserialize, Serialize)]
 struct ContributionTimeStamps {
     // User starts the CLI
-    start_contribution: DateTime,
+    start_contribution: DateTime<Utc>,
     // User has joined the queue
-    joined_queue: DateTime,
+    joined_queue: DateTime<Utc>,
     // User has locked the challenge on the coordinator
-    challenge_locked: DateTime,
+    challenge_locked: DateTime<Utc>,
     // User has completed the download of the challenge
-    challenge_downloaded: DateTime,
+    challenge_downloaded: DateTime<Utc>,
     // User starts computation locally or downloads the file to another machine
-    start_computation: DateTime,
+    start_computation: DateTime<Utc>,
     // User finishes computation locally or uploads the file from another machine
-    end_computation: DateTime,
+    end_computation: DateTime<Utc>,
     // User attests that the file was uploaded correctly
-    end_contribution: DateTime
+    end_contribution: DateTime<Utc>
+}
+
+impl Default for ContributionTimeStamps {
+    /// Generate a [`ContributionTimeStamps`] instance with all the timestamps 
+    /// set to [`Utc::now`].
+    fn default() -> Self {
+        let timestamp = Utc::now();
+        Self { start_contribution: timestamp, joined_queue: timestamp, challenge_locked: timestamp, challenge_downloaded: timestamp, start_computation: timestamp, end_computation: timestamp, end_contribution: timestamp }
+    }
 }
 
 /// Summary info about the contribution. This data is supposed to be sent to the 
 /// Coordinator and stored in a file
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct ContributionInfo {
     // Name of the contributor
-    full_name: String,
+    full_name: Option<String>,
     // Email of the contributor
-    email: String,
-   // ed25519 public key
+    email: Option<String>,
+   // ed25519 public key, base64 encoded
     public_key: String,
    // User participates in incentivized program or not
    is_incentivized: bool,
@@ -93,56 +104,94 @@ struct ContributionInfo {
    // User can choose the default method to generate randomness or his own.
    is_own_seed_of_randomness: bool,
    // Round in which the contribution took place
-   ceremony_round: u32,
+   ceremony_round: u64,
    // Hash of the contribution run by masp-mpc, contained in the transcript
    contribution_hash: String,
    // FIXME: is this necessary? so other user can check the contribution hash against the public key?
    contribution_hash_signature: String,
    // Hash of the file saved on disk and sent to the coordinator
-   contribution_file_hash: String,
+   contribution_file_hash: String, //FIXME: what's the difference with contribution_hash?
    // Signature of the contribution
    contribution_file_signature: String,
    // Some timestamps to get performance metrics of the ceremony
-   timestamp: ContributionTimeStamps,
+   timestamps: ContributionTimeStamps,
    // Signature of this struct
    contributor_info_signature: String
 }
 
-/// Generates a new [`KeyPair`] from a mnemonic
-fn generate_keypair(mnemonic: &str) -> Result<KeyPair> {
-    // FIXME: handle leading and trailing empty spaces
-    let mnemonic = bip39::Mnemonic::from(mnemonic);
+/// Helper function to get input from the user. Accept an optional [`Regex`] to
+/// compare the answer to.
+fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String> {
+    let mut response = String::new();
 
-    if mnemonic.word_count() != MNEMONIC_LEN {
+    loop {
+        println!("{}", request);
+        std::io::stdin().read_line(&mut response)?;
+
+        if expected.is_none() || expected.is_match(response) {
+            break;
+        }
+
+        println!("Wrong answer format, please answer again");
+    }
+
+    Ok(response)
+}
+
+/// Asks the user for some questions to properly setup the contribution.
+fn initialize_contribution() -> Result<ContributionInfo> {
+    let mut contrib_info = ContributionInfo::default();
+    println!("Welcome to the Namanda trusted setup ceremony!\nBefore starting, a couple of questions:");
+    let incentivization  = get_user_input("Do you want to participate in the incentivised trusted setup? y/n", Some(&Regex::new(r"(?i)[yn]")?))?.to_lowercase();
+
+    if incentivization == "y" {
+        // Ask for personal info
+        contrib_info.full_name = Some(get_user_input("Please enter your full name:", None)?);
+        contrib_info.email = Some(get_user_input("Please enter your email address:", Some(&Regex::new(r".*@.*..*")?))?); //FIXME: regex
+        contrib_info.is_incentivized = true;
+    };
+
+    if get_user_input("Do you want to take part in the contest? y/n", Some(&Regex::new(r"(?i)[yn]")?))?.to_lowercase() == "y" {
+        contrib_info.is_contest_participant = true;
+    };
+
+    Ok(contrib_info)
+}
+
+/// Generates a new [`KeyPair`] from a mnemonic provided by the user
+fn generate_keypair() -> Result<KeyPair> {
+    // Request mnemonic to the user
+    let mnemonic_str = get_user_input("Please provide a 24 words mnemonic for your keypair:", Some(&Regex::new(r"(?x)\w{24}")?))?;
+    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.trim()).map_err(|e| anyhow!("Error while parsing mnemonic string: {}", e))?; 
+
+    if mnemonic.word_count() != MNEMONIC_LEN { //FIXME: remove if regex works
         return Err(anyhow!("Mnemonic is supposed to be 24 words in size"));
     }
-    let seed = mnemonic.to_seed_normalized("");
 
-    // Check if the user has correctly stored the mnemonic
-    let mut rng = rand::thread_rng();
-    let uniform = Uniform::from(0..MNEMONIC_LEN - 1);
-    let random_indexes: [u32; 3] = uniform.sample_iter(rng).take(MNEMONIC_CHECK_LEN).collect();
+    // // Check if the user has correctly stored the mnemonic FIXME: decomment
+    // let mut rng = rand::thread_rng();
+    // let uniform = Uniform::from(1..MNEMONIC_LEN);
+    // let random_indexes: Vec<usize> = uniform.sample_iter(rng).take(MNEMONIC_CHECK_LEN).collect();
 
-    println!("Mnemonic verification step");
-    let mnemonic_slice = mnemonic.word_iter().collect();
+    // println!("Mnemonic verification step");
+    // let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
-    for i in random_indexes {
-        println!("Enter the word at index {} of your mnemonic:", i);
-        let mut response = String::new();
-        std::io::stdin().read_line(&mut response)?; //FIXME: async?
+    // for i in random_indexes {
+    //    let response = get_user_input(format!("Enter the word at index {} of your mnemonic:", i).as_str(), Some(&Regex::new(r"\w")?))?;
  
-        if response != mnemonic_slice[i] {
-            return Err(anyhow!("Wrong answer!"));
-        }
-    }
+    //     if response.trim() != mnemonic_slice[i - 1] {
+    //         debug!("Expected: {}, answer: {}", mnemonic_slice[i - 1], response);
+    //         return Err(anyhow!("Wrong answer!"));
+    //     }
+    // }
 
-    println!("Verification passed. Be sure to safely store your mnemonic phrase!");
+    // println!("Verification passed. Be sure to safely store your mnemonic phrase!");
 
-    KeyPair::try_from_seed(&seed)
+    let seed = mnemonic.to_seed_normalized("");
+    Ok(KeyPair::try_from_seed(&seed)?)
 }
 
 // FIXME: async operations on files?
-// FIXME: add info also to the coordinator file
 
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
     let mut f = File::open(filename)?;
@@ -160,6 +209,7 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
     Ok(buffer)
 }
 
+/// Generates randomness for the ceremony
 fn compute_contribution(
     pubkey: &str,
     round_height: u64,
@@ -190,15 +240,18 @@ fn compute_contribution(
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
 }
 
-async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair) -> Result<()> {
+async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, contrib_info: &mut ContributionInfo) -> Result<()> {
     let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
+    contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
+    contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
     let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
 
     let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
+    contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
     let mut challenge_writer = File::create(String::from(format!("anoma_challenge_round_{}.params", round_height)))?;
@@ -209,6 +262,7 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     debug!("Challenge length {}", challenge.len());
 
     let keypair_owned = keypair.to_owned();
+    contrib_info.timestamps.start_computation = Utc::now();
     let contribution = tokio::task::spawn_blocking(move || {
         compute_contribution(
             keypair_owned.pubkey(),
@@ -219,14 +273,17 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
         )
     })
     .await??;
+    contrib_info.timestamps.end_computation = Utc::now();
 
     let contribution_hash = calculate_hash(contribution.as_ref());
     debug!("Contribution hash is {}", pretty_hash!(&contribution_hash));
     debug!("Contribution length: {}", contribution.len());
+    contrib_info.contribution_hash = String::from(contribution_hash); //FIXME: works?
+    contrib_info.contribution_hash_signature = Production.sign(contrib_info.public_key.as_str(), contrib_info.contribution_hash.as_str())?;
 
     let contribution_state = ContributionState::new(
         challenge_hash.to_vec(),
-        calculate_hash(contribution.as_ref()).to_vec(),
+        contribution_hash.to_vec(),
         None,
     )?;
 
@@ -243,21 +300,27 @@ async fn do_contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair
     requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
 
     requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
+    contrib_info.timestamps.end_contribution = Utc::now();
 
-    // Write contribution summary file FIXME: complete
-    let timestamps = ContributionTimeStamps {
+    // Compute signature of info
+    let serde_contrib_info = serde_json::to_value(contrib_info)?;
+    serde_contrib_info["contributor_info_signature"].take();
+    let serialized_contrib_info = serde_contrib_info.to_string();
+    let contrib_info_signature = Production.sign(contrib_info.public_key.as_str(), serialized_contrib_info.as_str())?;
+    contrib_info.contributor_info_signature = contrib_info_signature;
 
-    };
-    let contribution_info = ContributionInfo {
+    // Write contribution summary file and send it to the Coordinator FIXME: complete
+    fs::write(CONTRIBUTION_INFO_FILE, &serde_json::to_vec(&contrib_info)?);
 
-    };
-    fs::write(CONTRIBUTION_INFO_FILE, &serde_json::to_vec(&contribution_info)?)
+    Ok(())
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: &JoinHandle<Result<()>>) {
+async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: &JoinHandle<Result<()>>, &mut contrib_info: ContributionInfo,) {
     requests::post_join_queue(client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
+
+    contrib_info.timestamps.joined_queue = Utc::now();
 
     loop {
         // Check the contributor's position in the queue
@@ -275,7 +338,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, h
                 );
             }
             ContributorStatus::Round => {
-                do_contribute(client, coordinator, keypair).await.expect("Contribution failed");
+                do_contribute(client, coordinator, keypair, &mut contrib_info).await.expect("Contribution failed");
                 // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
                 //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
                 //  only gets detached from the main execution unit but keeps running in the background until the main
@@ -328,14 +391,18 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        ContributorOpt::Contribute(mut args) => {
-            let keypair = generate_keypair(&args.mnemonic).expect("Error while generating the keypair");
+        ContributorOpt::Contribute(mut url) => {
+            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution).await.unwrap().expect("Error while initializing the contribution");
+            contrib_info.timestamps.start_contribution = Utc::now();
+
+            let keypair = tokio::task::spawn_blocking(generate_keypair).await.unwrap().expect("Error while generating the keypair");
+            contrib_info.public_key = keypair.pubkey().to_string();
 
             // Spawn heartbeat task to prevent the Coordinator from
             // droppping the contributor out of the ceremony in the middle of a contribution.
             // Heartbeat is checked by the Coordinator every 120 seconds.
             let client_copy = client.clone();
-            let mut coordinator_copy = args.coordinator.clone();
+            let mut coordinator_copy = url.coordinator.clone();
             let keypair_copy = keypair.clone();
             let heartbeat_handle =
                 tokio::task::spawn(
@@ -346,10 +413,10 @@ async fn main() {
                     } },
                 );
 
-            contribute(&client, &mut args.coordinator, &keypair, &heartbeat_handle).await;
+            contribute(&client, &mut url.coordinator, &keypair, &heartbeat_handle, &mut contrib_info).await;
         }
         ContributorOpt::CloseCeremony(mut url) => {
-            // FIXME: get keypair
+            // FIXME: get keypair, ask for some of the words since the keypair is already stored in the executable  
             let keypair = serde_json::from_slice(&fs::read(COORDINATOR_KEYPAIR_FILE).expect("Unable to read file")).expect("Error while retrieving the keypair");
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
