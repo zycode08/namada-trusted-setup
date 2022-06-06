@@ -1,6 +1,6 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
-use phase1_coordinator::{authentication::KeyPair, rest::SignedRequest};
+use phase1_coordinator::{authentication::KeyPair, rest::{ContributionInfo, SignedRequest, TrimmedContributionInfo}};
 use reqwest::{Client, Method, Response, Url};
 use serde::Serialize;
 use std::collections::LinkedList;
@@ -237,4 +237,18 @@ pub async fn get_contributor_queue_status(
     .await?;
 
     Ok(response.json::<ContributorStatus>().await?)
+}
+
+/// Send [`ContributionInfo`] to the Coordinator.
+pub async fn post_contribution_info(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair, request_body: ContributionInfo) -> Result<()> {
+    submit_request::<ContributionInfo>(client, coordinator_address, "/contributor/contribution_info", keypair, Some(request_body), &Method::POST).await?;
+
+    Ok(())
+}
+
+/// Retrieve the list of contributions
+pub async fn get_contributions_info(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<Vec<TrimmedContributionInfo>> {
+    let response = submit_request::<()>(client, coordinator_address, "/contribution_info", keypair, None, &Method::GET).await?;
+
+    Ok(response.json::<Vec<TrimmedContributionInfo>>().await?)
 }

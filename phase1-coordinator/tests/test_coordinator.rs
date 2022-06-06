@@ -113,7 +113,9 @@ fn build_context() -> TestCtx {
             rest::get_tasks_left,
             rest::stop_coordinator,
             rest::verify_chunks,
-            rest::get_contributor_queue_status
+            rest::get_contributor_queue_status,
+            rest::post_contribution_info,
+            rest::get_contributions_info
         ])
         .manage(coordinator);
 

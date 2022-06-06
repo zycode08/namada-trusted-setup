@@ -88,7 +88,9 @@ pub async fn main() {
         rest::get_tasks_left,
         rest::stop_coordinator,
         rest::verify_chunks,
-        rest::get_contributor_queue_status
+        rest::get_contributor_queue_status,
+        rest::post_contribution_info,
+        rest::get_contributions_info
     ];
 
     #[cfg(not(debug_assertions))]
@@ -102,7 +104,9 @@ pub async fn main() {
         rest::heartbeat,
         rest::get_tasks_left,
         rest::stop_coordinator,
-        rest::get_contributor_queue_status
+        rest::get_contributor_queue_status,
+        rest::post_contribution_info,
+        rest::get_contributions_info
     ];
 
     let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
