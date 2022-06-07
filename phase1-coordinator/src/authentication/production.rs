@@ -24,8 +24,7 @@ impl KeyPair {
         })
     }
 
-    /// Generate a random key pair, only for tests.
-    #[cfg(debug_assertions)]
+    /// Generate a random keypair
     pub fn new() -> Self {
         let keypair = EdKeyPair::generate();
 

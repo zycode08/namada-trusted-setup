@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use std::fs;
 
-pub const COORDINATOR_KEYPAIR_FILE: &str = "coordinator.keypair";
-
 type BatchSize = usize;
 type ChunkSize = usize;
 type NumberOfChunks = usize;
@@ -508,14 +506,6 @@ impl From<Production> for Environment {
     }
 }
 
-/// Generate keypair for the default verifier of coordinator and writes it to file
-fn generate_keypair() -> anyhow::Result<KeyPair> {
-    let keypair = KeyPair::new(); //FIXME: use mnemonic!!!
-    fs::write(COORDINATOR_KEYPAIR_FILE, serde_json::to_vec(&keypair)?)?;
-
-    Ok(keypair)
-}
-
 // TODO (howardwu): Convert the implementation to a procedural macro.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Testing {
@@ -579,6 +569,45 @@ impl Testing {
         deployment.environment.queue_seen_timeout = queue_seen_timeout;
         deployment
     }
+
+    pub fn new(parameters: Parameters, keypair: &KeyPair) -> Self {
+        let mut testing = Self {
+            environment: Environment {
+                parameters: Parameters::Test3Chunks.to_settings(),
+                compressed_inputs: UseCompression::No,
+                compressed_outputs: UseCompression::Yes,
+                check_input_for_correctness: CheckForCorrectness::No,
+
+                minimum_contributors_per_round: 1,
+                maximum_contributors_per_round: 1,
+                minimum_verifiers_per_round: 1,
+                maximum_verifiers_per_round: 5,
+                contributor_lock_chunk_limit: 1,
+                verifier_lock_chunk_limit: 5,
+                contributor_seen_timeout: time::Duration::minutes(5),
+                verifier_seen_timeout: time::Duration::minutes(15),
+                participant_lock_timeout: time::Duration::minutes(20),
+                queue_seen_timeout: time::Duration::days(10),
+                participant_ban_threshold: 5,
+                allow_current_contributors_in_queue: true,
+                allow_current_verifiers_in_queue: true,
+                queue_wait_time: 0,
+
+                coordinator_contributors: vec![Participant::new_contributor("testing-coordinator-contributor")],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
+                default_verifier_signing_key: keypair.sigkey().to_owned(),
+
+                software_version: 1,
+                deployment: Deployment::Testing,
+                local_base_directory: "./transcript/testing".to_string(),
+
+                disable_reliability_zeroing: false,
+            },
+        };
+        testing.environment.parameters = parameters.to_settings();
+
+        testing
+    }
 }
 
 impl From<Parameters> for Testing {
@@ -599,7 +628,7 @@ impl std::ops::Deref for Testing {
 
 impl std::default::Default for Testing {
     fn default() -> Self {
-        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
+        let keypair = KeyPair::new();
 
         Self {
             environment: Environment {
@@ -692,6 +721,45 @@ impl Development {
         deployment.environment.coordinator_verifiers = verifiers.to_vec();
         deployment
     }
+
+    pub fn new(parameters: Parameters, keypair: &KeyPair) -> Self {
+        let mut development = Self {
+            environment: Environment {
+                parameters: Parameters::AleoInner.to_settings(),
+                compressed_inputs: UseCompression::No,
+                compressed_outputs: UseCompression::Yes,
+                check_input_for_correctness: CheckForCorrectness::No,
+
+                minimum_contributors_per_round: 1,
+                maximum_contributors_per_round: 1,
+                minimum_verifiers_per_round: 1,
+                maximum_verifiers_per_round: 5,
+                contributor_lock_chunk_limit: 1,
+                verifier_lock_chunk_limit: 5,
+                contributor_seen_timeout: time::Duration::minutes(1),
+                verifier_seen_timeout: time::Duration::minutes(15),
+                participant_lock_timeout: time::Duration::minutes(20),
+                queue_seen_timeout: time::Duration::minutes(10),
+                participant_ban_threshold: 5,
+                allow_current_contributors_in_queue: true,
+                allow_current_verifiers_in_queue: true,
+                queue_wait_time: 60,
+
+                coordinator_contributors: vec![Participant::new_contributor("development-coordinator-contributor")],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
+                default_verifier_signing_key: keypair.sigkey().to_owned(),
+
+                software_version: 1,
+                deployment: Deployment::Development,
+                local_base_directory: "./transcript/development".to_string(),
+
+                disable_reliability_zeroing: false,
+            },
+        };
+        development.environment.parameters = parameters.to_settings();
+
+        development
+    }
 }
 
 impl From<Parameters> for Development {
@@ -718,8 +786,7 @@ impl std::ops::DerefMut for Development {
 
 impl std::default::Default for Development {
     fn default() -> Self {
-        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
-
+        let keypair = KeyPair::new();
         Self {
             environment: Environment {
                 parameters: Parameters::AleoInner.to_settings(),
@@ -816,6 +883,45 @@ impl Production {
         deployment.environment.coordinator_verifiers = verifiers.to_vec();
         deployment
     }
+
+    pub fn new(parameters: Parameters, keypair: &KeyPair) -> Self { //FIXME: refactors together with default (use helepr function)
+        let mut production = Self {
+            environment: Environment {
+                parameters: Parameters::AleoInner.to_settings(),
+                compressed_inputs: UseCompression::No,
+                compressed_outputs: UseCompression::Yes,
+                check_input_for_correctness: CheckForCorrectness::No,
+
+                minimum_contributors_per_round: 1,
+                maximum_contributors_per_round: 1,
+                minimum_verifiers_per_round: 1,
+                maximum_verifiers_per_round: 5,
+                contributor_lock_chunk_limit: 1,
+                verifier_lock_chunk_limit: 5,
+                contributor_seen_timeout: time::Duration::minutes(5),
+                verifier_seen_timeout: time::Duration::days(7),
+                participant_lock_timeout: time::Duration::minutes(20),
+                queue_seen_timeout: time::Duration::minutes(5),
+                participant_ban_threshold: 5,
+                allow_current_contributors_in_queue: false,
+                allow_current_verifiers_in_queue: true,
+                queue_wait_time: 5,
+
+                coordinator_contributors: vec![Participant::new_contributor("coordinator-contributor")],
+                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
+                default_verifier_signing_key: keypair.sigkey().to_owned(),
+
+                software_version: 1,
+                deployment: Deployment::Production,
+                local_base_directory: "./transcript".to_string(),
+
+                disable_reliability_zeroing: false,
+            },
+        };
+        production.environment.parameters = parameters.to_settings();
+
+        production
+    }
 }
 
 impl From<Parameters> for Production {
@@ -836,7 +942,7 @@ impl std::ops::Deref for Production {
 
 impl std::default::Default for Production {
     fn default() -> Self {
-        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
+        let keypair = KeyPair::new();
 
         Self {
             environment: Environment {

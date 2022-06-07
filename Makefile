@@ -44,4 +44,6 @@ update:
 clean:
 	$(CARGO) clean --release
 
+# FIXME: add steps for the two new endpoints
+
 .PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt contribution run-coordinator test-coordinator test-e2e update verify

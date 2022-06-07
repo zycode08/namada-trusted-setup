@@ -1,6 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     environment::Parameters,
+    io,
     rest::{self, UPDATE_TIME},
     Coordinator,
 };
@@ -59,7 +60,12 @@ pub async fn main() {
     };
 
     #[cfg(not(debug_assertions))]
-    let environment: Production = Production::from(parameters);
+    let environment: Production = {
+        // Generate KeyPair
+        let keypair = io::generate_keypair().expect("Error while generating the keypair");
+
+        Production::new(parameters, &keypair)
+    };
 
     // Instantiate and start the coordinator
     let coordinator =

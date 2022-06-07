@@ -31,7 +31,7 @@ use chrono::{DateTime, Utc};
 
 use tracing::debug;
 
-const CONTRIBUTORS_INFO_PATH: &str = "./contributors.json";
+const CONTRIBUTORS_INFO_FILE: &str = "contributors.json";
 
 #[cfg(debug_assertions)]
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
@@ -643,11 +643,11 @@ pub async fn post_contribution_info(coordinator: &State<Coordinator>, request: J
 
     // Check participant is registered in the ceremony
     let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
-    if !coordinator.read().await.is_current_contributor(&contributor) {
+    if !coordinator.read().await.is_finished_contributor(&contributor) {
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(contributor, String::from("/contributor/contribution_info")));
     }
-    //FIXME: async file io?
+    //FIXME: async file io? Measure performance
     // Write contribution info to file
     let round = signed_request.ceremony_round;
     let request = signed_request.request.unwrap();
@@ -655,11 +655,17 @@ pub async fn post_contribution_info(coordinator: &State<Coordinator>, request: J
     task::spawn_blocking(move || {fs::write(format!("./contributors/namada_contributor_info_round_{}.json", round), &serde_json::to_vec(&request_clone)?)}).await??;
 
     // Exctract key subset and append it to file
-    let summary_file_bytes = task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_PATH)}).await??;
-    let mut summary_file: Vec<TrimmedContributionInfo> = serde_json::from_slice(&summary_file_bytes)?;
+    let mut summary_file: Vec<TrimmedContributionInfo> = match task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await? { //FIXME: still broken
+        Ok(bytes) => serde_json::from_slice(&bytes)?,
+        Err(e) => {
+            // Create missing file
+            fs::File::create(CONTRIBUTORS_INFO_FILE)?;
+            Vec::new()
+        },
+    };
     summary_file.push(request.into());
 
-    Ok(task::spawn_blocking(move || {fs::write(CONTRIBUTORS_INFO_PATH, &serde_json::to_vec(&summary_file)?)}).await??)
+    Ok(task::spawn_blocking(move || {fs::write(CONTRIBUTORS_INFO_FILE, &serde_json::to_vec(&summary_file)?)}).await??)
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible only by the coordinator itself.
@@ -670,12 +676,11 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: J
     // Verify request
     signed_request.check_coordinator_request(coordinator, "/contribution_info").await?;
 
-    let info_bytes = task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_PATH)}).await??;
+    let info_bytes = task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await??; //FIXME: file could not exist return an error and manage it in the CLI by simply printing that there are no contributions yet
 
     Ok(Json(serde_json::from_slice(&info_bytes)?))
 }
 
-// FIXME: refactor, move types to a different module and manage imports in phase1?
 // FIXME: test new endpoints
 
 #[cfg(test)]

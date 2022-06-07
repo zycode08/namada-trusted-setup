@@ -46,7 +46,7 @@ pub mod coordinator_state;
 pub use coordinator_state::CoordinatorState;
 
 pub mod environment;
-pub use environment::COORDINATOR_KEYPAIR_FILE;
+pub mod io;
 
 pub mod objects;
 pub use objects::{ContributionFileSignature, ContributionState, Participant, Round};
