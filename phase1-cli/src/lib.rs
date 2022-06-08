@@ -33,15 +33,15 @@ pub struct CoordinatorUrl {
         help = "The ip address and port of the coordinator",
         required = true,
         default_value = "http://127.0.0.1:8000",
-        env = "ANOMA_COORDINATOR_ADDRESS",
+        env = "NAMADA_COORDINATOR_ADDRESS",
         parse(try_from_str)
     )]
     pub coordinator: Url,
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "anoma-mpc", about = "Anoma CLI for trusted setup.")]
-pub enum ContributorOpt {
+#[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
+pub enum CeremonyOpt {
     #[structopt(about = "Contribute to the ceremony")]
     Contribute(CoordinatorUrl),
     #[structopt(about = "Stop the coordinator and close the ceremony")]

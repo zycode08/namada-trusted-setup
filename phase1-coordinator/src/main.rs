@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::Production as ProductionSig,
     environment::Parameters,
     io,
-    rest::{self, UPDATE_TIME},
+    rest::{self, CONTRIBUTORS_INFO_FOLDER, UPDATE_TIME},
     Coordinator,
 };
 
@@ -15,7 +15,7 @@ use phase1_coordinator::environment::Production;
 use rocket::{
     self,
     routes,
-    tokio::{self, sync::RwLock},
+    tokio::{self, fs, sync::RwLock},
 };
 
 use anyhow::Result;
@@ -47,25 +47,23 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
 
     // Set the environment
-    let parameters = Parameters::TestAnoma {
-        number_of_chunks: 1,
-        power: 6,
-        batch_size: 16,
-    };
+    let keypair = tokio::task::spawn_blocking(io::generate_keypair).await.unwrap().expect("Error while generating the keypair");
 
     #[cfg(debug_assertions)]
     let environment: Testing = {
-        phase1_coordinator::testing::clear_test_storage(&Testing::from(parameters.clone()).into());
-        Testing::from(parameters)
+        phase1_coordinator::testing::clear_test_storage(&Testing::default().into());
+        Testing::new(&keypair)
     };
 
     #[cfg(not(debug_assertions))]
     let environment: Production = {
-        // Generate KeyPair
-        let keypair = io::generate_keypair().expect("Error while generating the keypair");
-
-        Production::new(parameters, &keypair)
+        Production::new(&keypair)
     };
+
+    // Create required folder for contributors' info FIXME:
+    if fs::metadata(CONTRIBUTORS_INFO_FOLDER).await.is_err() {
+        fs::create_dir(CONTRIBUTORS_INFO_FOLDER).await.unwrap();
+    }
 
     // Instantiate and start the coordinator
     let coordinator =

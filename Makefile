@@ -20,6 +20,9 @@ verify: # Verify pending contributions on local coordinator (127.0.0.1:8000)
 update-coordinator: # Update manually the coordinator
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) update-coordinator
 
+get-contributions: # Get the received contributions on local coordinator (127.0.0.1:8000)
+	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) get-contributions
+
 run-coordinator:
 	RUST_LOG=debug $(CARGO) run --bin phase1-coordinator
 
@@ -44,6 +47,4 @@ update:
 clean:
 	$(CARGO) clean --release
 
-# FIXME: add steps for the two new endpoints
-
-.PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt contribution run-coordinator test-coordinator test-e2e update verify
+.PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt get-contributions run-coordinator test-coordinator test-e2e update verify

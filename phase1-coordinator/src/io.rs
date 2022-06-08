@@ -1,6 +1,5 @@
 use crate::authentication::KeyPair;
 use rand::Rng;
-use rand::distributions::{Distribution, Uniform};
 use regex::Regex;
 use bip39::{Language, Mnemonic};
 use thiserror::Error;
@@ -45,7 +44,7 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
         }
 
         response.clear();
-        println!("Invalid reply, please answer again...");
+        println!("Invalid reply, please type a valid answer...");
     }
 
     Ok(response)
@@ -57,9 +56,8 @@ pub fn generate_keypair() -> Result<KeyPair> {
     let mnemonic_str = get_user_input(format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(), Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?))?;
     let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str()).map_err(|e| {IOError::MnemonicError(e)})?;
 
-    // FIXME: add unit tests for regex (proptest?)
-
     // Check if the user has correctly stored the mnemonic
+    #[cfg(not(debug_assertions))]
     check_mnemonic(&mnemonic)?;
 
     let seed = mnemonic.to_seed_normalized("");
@@ -67,15 +65,19 @@ pub fn generate_keypair() -> Result<KeyPair> {
 }
 
 /// Interactively check if the user has correctly stored the mnemonic phrase
-fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> { //FIXME: improve prints
-    let rng = rand::thread_rng();
-    let uniform = Uniform::from(1..MNEMONIC_LEN);
-    let random_indexes: Vec<usize> = uniform.sample_iter(rng).take(MNEMONIC_CHECK_LEN).collect(); //FIXME: this could get the same number more than once, check uniqueness of the index extracted
+fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
+    let mut rng = rand::thread_rng();
+    let mut indexes = [0usize; MNEMONIC_LEN];
+
+    for i in 1..MNEMONIC_LEN {
+        indexes[i] = i;
+    }
+    indexes.shuffle(&mut rng);
 
     println!("Mnemonic verification step");
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
-    for i in random_indexes {
+    for i in indexes[..MNEMONIC_CHECK_LEN].iter() {
        let response = get_user_input(format!("Enter the word at index {} of your mnemonic:", i).as_str(), Some(&Regex::new(r"[[:alpha:]]+")?))?;
  
         if response != mnemonic_slice[i - 1] {

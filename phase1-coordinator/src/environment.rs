@@ -96,7 +96,7 @@ pub enum Parameters {
         power: usize,
         batch_size: usize,
     },
-    TestAnoma {
+    Namada {
         number_of_chunks: usize,
         power: usize,
         batch_size: usize,
@@ -119,11 +119,11 @@ impl Parameters {
                 power,
                 batch_size,
             } => Self::test_custom(number_of_chunks, power, batch_size),
-            Parameters::TestAnoma {
+            Parameters::Namada {
                 number_of_chunks,
                 power,
                 batch_size,
-            } => Self::test_anoma(number_of_chunks, power, batch_size),
+            } => Self::namada(number_of_chunks, power, batch_size),
         }
     }
 
@@ -208,7 +208,7 @@ impl Parameters {
         )
     }
 
-    fn test_anoma(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
+    fn namada(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
         let proving_system = ProvingSystem::Groth16;
         Settings::new(
             ContributionMode::Full,
@@ -570,69 +570,10 @@ impl Testing {
         deployment
     }
 
-    pub fn new(parameters: Parameters, keypair: &KeyPair) -> Self {
-        let mut testing = Self {
-            environment: Environment {
-                parameters: Parameters::Test3Chunks.to_settings(),
-                compressed_inputs: UseCompression::No,
-                compressed_outputs: UseCompression::Yes,
-                check_input_for_correctness: CheckForCorrectness::No,
-
-                minimum_contributors_per_round: 1,
-                maximum_contributors_per_round: 1,
-                minimum_verifiers_per_round: 1,
-                maximum_verifiers_per_round: 5,
-                contributor_lock_chunk_limit: 1,
-                verifier_lock_chunk_limit: 5,
-                contributor_seen_timeout: time::Duration::minutes(5),
-                verifier_seen_timeout: time::Duration::minutes(15),
-                participant_lock_timeout: time::Duration::minutes(20),
-                queue_seen_timeout: time::Duration::days(10),
-                participant_ban_threshold: 5,
-                allow_current_contributors_in_queue: true,
-                allow_current_verifiers_in_queue: true,
-                queue_wait_time: 0,
-
-                coordinator_contributors: vec![Participant::new_contributor("testing-coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
-                default_verifier_signing_key: keypair.sigkey().to_owned(),
-
-                software_version: 1,
-                deployment: Deployment::Testing,
-                local_base_directory: "./transcript/testing".to_string(),
-
-                disable_reliability_zeroing: false,
-            },
-        };
-        testing.environment.parameters = parameters.to_settings();
-
-        testing
-    }
-}
-
-impl From<Parameters> for Testing {
-    fn from(parameters: Parameters) -> Self {
-        let mut testing = Self::default();
-        testing.environment.parameters = parameters.to_settings();
-        testing
-    }
-}
-
-impl std::ops::Deref for Testing {
-    type Target = Environment;
-
-    fn deref(&self) -> &Self::Target {
-        &self.environment
-    }
-}
-
-impl std::default::Default for Testing {
-    fn default() -> Self {
-        let keypair = KeyPair::new();
-
+    fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::Test3Chunks.to_settings(),
+                parameters: Parameters::Namada { number_of_chunks: 1, power: 6, batch_size: 16 }.to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -663,6 +604,35 @@ impl std::default::Default for Testing {
                 disable_reliability_zeroing: false,
             },
         }
+    }
+
+    /// Generate a new Testing env with [`Parameters::Namada`] parameters
+    pub fn new(keypair: &KeyPair) -> Self {
+        Self::generate_namada_env(keypair)
+    }
+}
+
+impl From<Parameters> for Testing {
+    fn from(parameters: Parameters) -> Self {
+        let mut testing = Self::default();
+        testing.environment.parameters = parameters.to_settings();
+        testing
+    }
+}
+
+impl std::ops::Deref for Testing {
+    type Target = Environment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.environment
+    }
+}
+
+impl std::default::Default for Testing {
+    fn default() -> Self {
+        let keypair = KeyPair::new();
+
+        Self::generate_namada_env(&keypair)
     }
 }
 
@@ -722,74 +692,10 @@ impl Development {
         deployment
     }
 
-    pub fn new(parameters: Parameters, keypair: &KeyPair) -> Self {
-        let mut development = Self {
-            environment: Environment {
-                parameters: Parameters::AleoInner.to_settings(),
-                compressed_inputs: UseCompression::No,
-                compressed_outputs: UseCompression::Yes,
-                check_input_for_correctness: CheckForCorrectness::No,
-
-                minimum_contributors_per_round: 1,
-                maximum_contributors_per_round: 1,
-                minimum_verifiers_per_round: 1,
-                maximum_verifiers_per_round: 5,
-                contributor_lock_chunk_limit: 1,
-                verifier_lock_chunk_limit: 5,
-                contributor_seen_timeout: time::Duration::minutes(1),
-                verifier_seen_timeout: time::Duration::minutes(15),
-                participant_lock_timeout: time::Duration::minutes(20),
-                queue_seen_timeout: time::Duration::minutes(10),
-                participant_ban_threshold: 5,
-                allow_current_contributors_in_queue: true,
-                allow_current_verifiers_in_queue: true,
-                queue_wait_time: 60,
-
-                coordinator_contributors: vec![Participant::new_contributor("development-coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
-                default_verifier_signing_key: keypair.sigkey().to_owned(),
-
-                software_version: 1,
-                deployment: Deployment::Development,
-                local_base_directory: "./transcript/development".to_string(),
-
-                disable_reliability_zeroing: false,
-            },
-        };
-        development.environment.parameters = parameters.to_settings();
-
-        development
-    }
-}
-
-impl From<Parameters> for Development {
-    fn from(parameters: Parameters) -> Self {
-        let mut testing = Self::default();
-        testing.environment.parameters = parameters.to_settings();
-        testing
-    }
-}
-
-impl std::ops::Deref for Development {
-    type Target = Environment;
-
-    fn deref(&self) -> &Self::Target {
-        &self.environment
-    }
-}
-
-impl std::ops::DerefMut for Development {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.environment
-    }
-}
-
-impl std::default::Default for Development {
-    fn default() -> Self {
-        let keypair = KeyPair::new();
+    fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::AleoInner.to_settings(),
+                parameters: Parameters::Namada { number_of_chunks: 1, power: 6, batch_size: 16 }.to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -820,6 +726,41 @@ impl std::default::Default for Development {
                 disable_reliability_zeroing: false,
             },
         }
+    }
+
+    /// Generate a new Development env with [`Parameters::Namada`] parameters
+    pub fn new(keypair: &KeyPair) -> Self {
+        Self::generate_namada_env(keypair)
+    }
+}
+
+impl From<Parameters> for Development {
+    fn from(parameters: Parameters) -> Self {
+        let mut testing = Self::default();
+        testing.environment.parameters = parameters.to_settings();
+        testing
+    }
+}
+
+impl std::ops::Deref for Development {
+    type Target = Environment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.environment
+    }
+}
+
+impl std::ops::DerefMut for Development {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.environment
+    }
+}
+
+impl std::default::Default for Development {
+    fn default() -> Self {
+        let keypair = KeyPair::new();
+
+        Self::generate_namada_env(&keypair)
     }
 }
 
@@ -884,10 +825,10 @@ impl Production {
         deployment
     }
 
-    pub fn new(parameters: Parameters, keypair: &KeyPair) -> Self { //FIXME: refactors together with default (use helepr function)
-        let mut production = Self {
+    fn generate_namada_env(keypair: &KeyPair) -> Self {
+        Self {
             environment: Environment {
-                parameters: Parameters::AleoInner.to_settings(),
+                parameters: Parameters::Namada { number_of_chunks: 1, power: 6, batch_size: 16 }.to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -916,11 +857,13 @@ impl Production {
                 local_base_directory: "./transcript".to_string(),
 
                 disable_reliability_zeroing: false,
-            },
-        };
-        production.environment.parameters = parameters.to_settings();
+            }
+        }
+    }
 
-        production
+    /// Generate a new Production env with [`Parameters::Namada`] parameters
+    pub fn new(keypair: &KeyPair) -> Self {
+        Self::generate_namada_env(keypair)
     }
 }
 
@@ -944,39 +887,7 @@ impl std::default::Default for Production {
     fn default() -> Self {
         let keypair = KeyPair::new();
 
-        Self {
-            environment: Environment {
-                parameters: Parameters::AleoInner.to_settings(),
-                compressed_inputs: UseCompression::No,
-                compressed_outputs: UseCompression::Yes,
-                check_input_for_correctness: CheckForCorrectness::No,
-
-                minimum_contributors_per_round: 1,
-                maximum_contributors_per_round: 1,
-                minimum_verifiers_per_round: 1,
-                maximum_verifiers_per_round: 5,
-                contributor_lock_chunk_limit: 1,
-                verifier_lock_chunk_limit: 5,
-                contributor_seen_timeout: time::Duration::minutes(5),
-                verifier_seen_timeout: time::Duration::days(7),
-                participant_lock_timeout: time::Duration::minutes(20),
-                queue_seen_timeout: time::Duration::minutes(5),
-                participant_ban_threshold: 5,
-                allow_current_contributors_in_queue: false,
-                allow_current_verifiers_in_queue: true,
-                queue_wait_time: 5,
-
-                coordinator_contributors: vec![Participant::new_contributor("coordinator-contributor")],
-                coordinator_verifiers: vec![Participant::new_verifier(keypair.pubkey())],
-                default_verifier_signing_key: keypair.sigkey().to_owned(),
-
-                software_version: 1,
-                deployment: Deployment::Production,
-                local_base_directory: "./transcript".to_string(),
-
-                disable_reliability_zeroing: false,
-            },
-        }
+        Self::generate_namada_env(&keypair)
     }
 }
 

@@ -32,6 +32,7 @@ use chrono::{DateTime, Utc};
 use tracing::debug;
 
 const CONTRIBUTORS_INFO_FILE: &str = "contributors.json";
+pub const CONTRIBUTORS_INFO_FOLDER: &str = "./contributors";
 
 #[cfg(debug_assertions)]
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
@@ -652,32 +653,29 @@ pub async fn post_contribution_info(coordinator: &State<Coordinator>, request: J
     let round = signed_request.ceremony_round;
     let request = signed_request.request.unwrap();
     let request_clone = request.clone();
-    task::spawn_blocking(move || {fs::write(format!("./contributors/namada_contributor_info_round_{}.json", round), &serde_json::to_vec(&request_clone)?)}).await??;
+
+    task::spawn_blocking(move || {fs::write(format!("{}/namada_contributor_info_round_{}.json", CONTRIBUTORS_INFO_FOLDER, round), &serde_json::to_vec(&request_clone)?)}).await??;
 
     // Exctract key subset and append it to file
-    let mut summary_file: Vec<TrimmedContributionInfo> = match task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await? { //FIXME: still broken
+    let mut summary_file: Vec<TrimmedContributionInfo> = match task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await? {
         Ok(bytes) => serde_json::from_slice(&bytes)?,
-        Err(e) => {
-            // Create missing file
-            fs::File::create(CONTRIBUTORS_INFO_FILE)?;
-            Vec::new()
-        },
+        Err(_) => Vec::new(),
     };
     summary_file.push(request.into());
 
+    // FIXME: use disk inside Coordinator
     Ok(task::spawn_blocking(move || {fs::write(CONTRIBUTORS_INFO_FILE, &serde_json::to_vec(&summary_file)?)}).await??)
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible only by the coordinator itself.
 #[get("/contribution_info", format = "json", data = "<request>")]
-pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<Json<Vec<TrimmedContributionInfo>>> {
+pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<Json<Vec<TrimmedContributionInfo>>> { //FIXME: pretty print TrimmedContributionInfo, maybe return json encoded?
     let signed_request = request.into_inner();
 
     // Verify request
     signed_request.check_coordinator_request(coordinator, "/contribution_info").await?;
 
-    let info_bytes = task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await??; //FIXME: file could not exist return an error and manage it in the CLI by simply printing that there are no contributions yet
-
+    let info_bytes = task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await??;
     Ok(Json(serde_json::from_slice(&info_bytes)?))
 }
 

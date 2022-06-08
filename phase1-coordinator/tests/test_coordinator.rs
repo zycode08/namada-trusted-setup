@@ -50,14 +50,8 @@ struct TestCtx {
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
-    let parameters = Parameters::TestAnoma {
-        number_of_chunks: 1,
-        power: 6,
-        batch_size: 16,
-    };
-
     // Reset storage to prevent state conflicts between tests and initialize test environment
-    let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
+    let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
@@ -464,13 +458,14 @@ fn test_wrong_verify() {
     assert!(response.body().is_some());
 }
 
-/// To test a full contribution we need to test the 5 involved endpoints sequentially:
+/// To test a full contribution we need to test the 6 involved endpoints sequentially:
 ///
 /// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
+/// - get_contributions_info
 ///
 #[test]
 fn test_contribution() {
@@ -551,4 +546,6 @@ fn test_contribution() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
+
+    //FIXME: Get contributions info
 }

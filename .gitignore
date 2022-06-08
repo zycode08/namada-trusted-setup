@@ -15,5 +15,7 @@ tmp_*
 **/*.env
 
 # Contribution artifacts FIXME:
+contributors.json
+contributors/
 *.params
-*keypair
+namada_contributor_info_round_*

@@ -53,14 +53,8 @@ struct TestCtx {
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
 async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) {
-    let parameters = Parameters::TestAnoma {
-        number_of_chunks: 1,
-        power: 6,
-        batch_size: 16,
-    };
-
     // Reset storage to prevent state conflicts between tests and initialize test environment
-    let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
+    let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
