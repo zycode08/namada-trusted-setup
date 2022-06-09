@@ -1,6 +1,6 @@
 use crate::{
     environment::Environment,
-    objects::{ContributionFileSignature, Round},
+    objects::{ContributionFileSignature, ContributionInfo, Round, TrimmedContributionInfo},
     CoordinatorError,
     CoordinatorState,
 };
@@ -106,6 +106,8 @@ pub enum Locator {
     RoundFile { round_height: u64 },
     ContributionFile(ContributionLocator),
     ContributionFileSignature(ContributionSignatureLocator),
+    ContributionInfoFile { round_height: u64 },
+    ContributionsInfoSummary
 }
 
 impl From<ContributionLocator> for Locator {
@@ -129,6 +131,8 @@ pub enum Object {
     RoundFile(Vec<u8>),
     ContributionFile(Vec<u8>),
     ContributionFileSignature(ContributionFileSignature),
+    ContributionInfoFile(ContributionInfo),
+    ContributionsInfoSummary(Vec<TrimmedContributionInfo>)
 }
 
 impl Object {
@@ -144,19 +148,14 @@ impl Object {
             Object::ContributionFileSignature(signature) => {
                 serde_json::to_vec_pretty(signature).expect("contribution file signature to bytes failed")
             }
+            Object::ContributionInfoFile(info) => serde_json::to_vec(info).expect("Contribution info file to bytes failed"),
+            Object::ContributionsInfoSummary(summary) => serde_json::to_vec(summary).expect("Contribution info summary to bytes failed")
         }
     }
 
     /// Returns the size in bytes of the object.
     pub fn size(&self) -> u64 {
-        match self {
-            Object::CoordinatorState(_) => self.to_bytes().len() as u64,
-            Object::RoundHeight(_) => self.to_bytes().len() as u64,
-            Object::RoundState(_) => self.to_bytes().len() as u64,
-            Object::RoundFile(round) => round.len() as u64,
-            Object::ContributionFile(contribution) => contribution.len() as u64,
-            Object::ContributionFileSignature(_) => self.to_bytes().len() as u64,
-        }
+        self.to_bytes().len() as u64
     }
 
     /// Returns the expected file size of an aggregated round.

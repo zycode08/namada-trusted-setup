@@ -10,7 +10,7 @@ use crate::{
         RoundMetrics,
     },
     environment::{Deployment, Environment},
-    objects::{participant::*, task::TaskInitializationError, ContributionFileSignature, LockedLocators, Round, Task},
+    objects::{participant::*, task::TaskInitializationError, ContributionFileSignature, ContributionInfo, LockedLocators, Round, Task, TrimmedContributionInfo},
     storage::{
         ContributionLocator, ContributionSignatureLocator, Disk, Locator, LocatorPath, Object, StorageAction,
         StorageLocator, StorageObject, UpdateAction,
@@ -1626,6 +1626,25 @@ impl Coordinator {
             &Locator::ContributionFile(contribution_locator),
             Object::ContributionFile(contribution.into()),
         )
+    }
+
+    /// Writes the contribution metadata to storage at the appropriate locator.
+    #[inline]
+    pub(crate) fn write_contribution_info(&mut self, contribution_info: ContributionInfo) -> Result<(), CoordinatorError> {
+        let round_height = Self::load_current_round_height(&self.storage)?;
+        self.storage.update(&Locator::ContributionInfoFile { round_height  }, Object::ContributionInfoFile(contribution_info))
+    }
+
+    /// Appends current round summary to storage at the appropriate locator. 
+    #[inline]
+    pub(crate) fn update_contribution_summary(&mut self, contribution_summary: TrimmedContributionInfo) -> Result<(), CoordinatorError> {
+        let mut summary = match self.storage.get(&Locator::ContributionsInfoSummary)? {
+            Object::ContributionsInfoSummary(summary) => summary,
+            _ => unreachable!(), //FIXME: correct?
+        };
+        summary.push(contribution_summary);
+
+        self.storage.update(&Locator::ContributionsInfoSummary, Object::ContributionsInfoSummary(summary))
     }
 
     /// Writes the bytes of a contribution file signature to storage at the appropriate  

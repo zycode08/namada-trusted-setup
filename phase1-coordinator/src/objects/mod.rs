@@ -7,6 +7,9 @@ pub use contribution::*;
 pub mod contribution_file_signature;
 pub use contribution_file_signature::*;
 
+pub mod contribution_info;
+pub use contribution_info::*;
+
 pub mod participant;
 pub use participant::*;
 

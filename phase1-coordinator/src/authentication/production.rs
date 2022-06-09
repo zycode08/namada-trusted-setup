@@ -18,7 +18,7 @@ impl KeyPair {
         let seed = Seed::from_slice(&seed[0..32])?;
         let keypair = EdKeyPair::from_seed(seed);
 
-        Ok(KeyPair {
+        Ok(KeyPair { //FIXME: encode with Borsh and fix all the base64 and base58 encodings around
             pubkey: base64::encode(keypair.pk.deref()),
             sigkey: base64::encode(keypair.sk.deref()),
         })

@@ -4,6 +4,7 @@ use regex::Regex;
 use bip39::{Language, Mnemonic};
 use thiserror::Error;
 use tracing::debug;
+use rand::prelude::SliceRandom;
 
 const MNEMONIC_LEN: usize = 24;
 const MNEMONIC_CHECK_LEN: usize = 3;
