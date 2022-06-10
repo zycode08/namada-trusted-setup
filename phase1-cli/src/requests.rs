@@ -1,6 +1,6 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
-use phase1_coordinator::{authentication::KeyPair, rest::{ContributionInfo, SignedRequest, TrimmedContributionInfo}};
+use phase1_coordinator::{authentication::KeyPair, objects::{ContributionInfo, TrimmedContributionInfo}, rest::SignedRequest};
 use reqwest::{Client, Method, Response, Url};
 use serde::Serialize;
 use std::collections::LinkedList;

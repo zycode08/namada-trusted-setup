@@ -2,8 +2,8 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
     io,
-    objects::{ContributionFileSignature, ContributionState},
-    rest::{ContributionInfo, ContributionTimeStamps, ContributorStatus, PostChunkRequest, UPDATE_TIME},
+    objects::{ContributionFileSignature, ContributionInfo, ContributionState, ContributionTimeStamps},
+    rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
     storage::Object,
 };
 
@@ -17,9 +17,9 @@ use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write, BufWriter},
-    time::Instant,
+    io::{Read, Write},
+    fs::{self, File},
+    time::Instant
 };
 
 use chrono::Utc;
@@ -29,7 +29,7 @@ use bs58;
 
 use regex::Regex;
 
-use tokio::{task::JoinHandle, time};
+use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 
 use tracing::{debug, error, info};
 
@@ -70,11 +70,9 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     Ok(contrib_info)
 }
 
-// FIXME: async operations on files? Try measuring performance
-
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
     let mut f = File::open(filename)?;
-    let metadata = std::fs::metadata(filename)?;
+    let metadata = fs::metadata(filename)?;
 
     let anoma_file_size: u64 = Object::anoma_contribution_file_size(round_height, contribution_id);
     let mut buffer = vec![0; anoma_file_size as usize];
@@ -133,8 +131,8 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
-    let mut challenge_writer = File::create(String::from(format!("namada_challenge_round_{}.params", round_height)))?;
-    challenge_writer.write_all(&challenge.as_slice())?;
+    let mut challenge_writer = async_fs::File::create(String::from(format!("namada_challenge_round_{}.params", round_height))).await?;
+    challenge_writer.write_all(&challenge.as_slice()).await?;
 
     let challenge_hash = calculate_hash(challenge.as_ref());
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
@@ -183,7 +181,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // FIXME: populate the missing fields of contrib if needed
-    // Compute signature of info FIXME: remove if unused
+    // Compute signature of info FIXME: check if correct
     let mut serde_contrib_info = serde_json::to_value(contrib_info.clone())?;
     serde_contrib_info["contributor_info_signature"].take();
     let serialized_contrib_info = serde_contrib_info.to_string();
@@ -191,18 +189,34 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.contributor_info_signature = contrib_info_signature;
 
     // Write contribution summary file and send it to the Coordinator
-    fs::write(format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round), &serde_json::to_vec(&contrib_info)?)?;
+    async_fs::write(format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round), &serde_json::to_vec(&contrib_info)?).await?;
     requests::post_contribution_info(client, coordinator, keypair, contrib_info).await?;
 
     Ok(())
 }
 
-async fn contribution_loop(client: &Client, coordinator: &mut Url, keypair: &KeyPair, heartbeat_handle: &JoinHandle<Result<()>>, mut contrib_info: ContributionInfo,) {
+async fn contribution_loop(client: &Client, coordinator: &mut Url, keypair: &KeyPair, mut contrib_info: ContributionInfo) {
     requests::post_join_queue(client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
-
     contrib_info.timestamps.joined_queue = Utc::now();
+
+    let client_clone = client.clone();
+    let mut coordinator_clone = coordinator.clone();
+    let keypair_clone = keypair.to_owned();
+
+     // Spawn heartbeat task to prevent the Coordinator from
+    // dropping the contributor out of the ceremony in the middle of a contribution.
+    // Heartbeat is checked by the Coordinator every 120 seconds.
+    let heartbeat_handle =
+    tokio::task::spawn(
+        async move { loop {
+            if let Err(e) = requests::post_heartbeat(&client_clone, &mut coordinator_clone, &keypair_clone).await {
+                error!("Heartbeat error: {}", e);
+            }
+            time::sleep(UPDATE_TIME).await;
+        } },
+     );
 
     loop {
         // Check the contributor's position in the queue
@@ -251,7 +265,7 @@ async fn close_ceremony(client: &Client, coordinator: &mut Url, keypair: &KeyPai
 
 async fn get_contributions(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
     match requests::get_contributions_info(client, coordinator, keypair).await {
-        Ok(contributions) => info!("Contributions:\n{:#?}", contributions),
+       Ok(contributions) => info!("Contributions:\n{}", serde_json::to_string_pretty(&contributions).unwrap()),
         Err(e) => error!("{}", e),
     }
 }
@@ -287,22 +301,7 @@ async fn main() {
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 
-            // Spawn heartbeat task to prevent the Coordinator from
-            // droppping the contributor out of the ceremony in the middle of a contribution.
-            // Heartbeat is checked by the Coordinator every 120 seconds.
-            let client_copy = client.clone();
-            let mut coordinator_copy = url.coordinator.clone();
-            let keypair_copy = keypair.clone();
-            let heartbeat_handle =
-                tokio::task::spawn(
-                    async move { loop {
-                        requests::post_heartbeat(&client_copy, &mut coordinator_copy, &keypair_copy).await?;
-                
-                        time::sleep(UPDATE_TIME).await;
-                    } },
-                );
-
-            contribution_loop(&client, &mut url.coordinator, &keypair, &heartbeat_handle, contrib_info).await;
+            contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
         }
         CeremonyOpt::CloseCeremony(mut url) => {
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
@@ -320,3 +319,5 @@ async fn main() {
         }
     }
 }
+
+// FIXME: fix unused imports

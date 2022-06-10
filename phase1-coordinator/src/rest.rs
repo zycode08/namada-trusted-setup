@@ -2,12 +2,10 @@
 
 use crate::{
     authentication::{KeyPair, Production, Signature},
-    objects::Task,
-    storage::{ContributionLocator, ContributionSignatureLocator},
+    objects::{ContributionInfo, Task, TrimmedContributionInfo},
+    storage::{ContributionLocator, ContributionSignatureLocator, Locator},
     ContributionFileSignature,
 };
-
-pub use crate::objects::{ContributionInfo, TrimmedContributionInfo};
 
 use rocket::{
     error,
@@ -32,9 +30,6 @@ use std::{collections::{LinkedList, HashMap}, io::Cursor, fs, net::SocketAddr, o
 use thiserror::Error;
 
 use tracing::debug;
-
-const CONTRIBUTORS_INFO_FILE: &str = "contributors.json";
-pub const CONTRIBUTORS_INFO_FOLDER: &str = "./contributors";
 
 #[cfg(debug_assertions)]
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
@@ -543,39 +538,42 @@ pub async fn post_contribution_info(coordinator: &State<Coordinator>, request: J
 
     // Check participant is registered in the ceremony
     let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
-    if !coordinator.read().await.is_finished_contributor(&contributor) {
+    let contributor_clone = contributor.clone();
+    let read_lock = (*coordinator).clone().read_owned().await;
+
+    if !task::spawn_blocking(move || read_lock.is_current_contributor(&contributor_clone)).await? {
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(contributor, String::from("/contributor/contribution_info")));
     }
-    //FIXME: async file io? Measure performance
+
     // Write contribution info to file
-    let round = signed_request.ceremony_round;
-    let request = signed_request.request.unwrap();
-    let request_clone = request.clone();
+    let contribution_info = signed_request.request.clone().unwrap();
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+    task::spawn_blocking(move || {write_lock.write_contribution_info(contribution_info)}).await?.map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    task::spawn_blocking(move || {fs::write(format!("{}/namada_contributor_info_round_{}.json", CONTRIBUTORS_INFO_FOLDER, round), &serde_json::to_vec(&request_clone)?)}).await??;
+    // Append summary to file
+    let contribution_summary = signed_request.request.unwrap().into();
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+    task::spawn_blocking(move || {write_lock.update_contribution_summary(contribution_summary)}).await?.map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    // Exctract key subset and append it to file
-    let mut summary_file: Vec<TrimmedContributionInfo> = match task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await? {
-        Ok(bytes) => serde_json::from_slice(&bytes)?,
-        Err(_) => Vec::new(),
-    };
-    summary_file.push(request.into());
-
-    // FIXME: use disk inside Coordinator
-    Ok(task::spawn_blocking(move || {fs::write(CONTRIBUTORS_INFO_FILE, &serde_json::to_vec(&summary_file)?)}).await??)
+    Ok(())
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible only by the coordinator itself.
 #[get("/contribution_info", format = "json", data = "<request>")]
-pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<Json<Vec<TrimmedContributionInfo>>> { //FIXME: pretty print TrimmedContributionInfo, maybe return json encoded?
+pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<Json<Vec<TrimmedContributionInfo>>> { 
     let signed_request = request.into_inner();
 
     // Verify request
     signed_request.check_coordinator_request(coordinator, "/contribution_info").await?;
+  
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let summary = match task::spawn_blocking(move || {read_lock.storage().get(&Locator::ContributionsInfoSummary)}).await?.map_err(|e| ResponseError::CoordinatorError(e))? {
+        crate::storage::Object::ContributionsInfoSummary(summary) => summary,
+        _ => unreachable!()
+    };
 
-    let info_bytes = task::spawn_blocking(|| {fs::read(CONTRIBUTORS_INFO_FILE)}).await??;
-    Ok(Json(serde_json::from_slice(&info_bytes)?))
+    Ok(Json(summary))
 }
 
 // FIXME: test new endpoints

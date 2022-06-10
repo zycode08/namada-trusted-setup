@@ -38,10 +38,11 @@ impl Disk {
     {
         trace!("Loading disk storage");
 
-        // Check the base directory exists.
-        if !Path::new(environment.local_base_directory()).exists() {
-            // Create the base directory if it does not exist.
-            fs::create_dir_all(environment.local_base_directory()).expect("unable to create the base directory");
+        // Check the base and contribution info directory exist.
+        let contributors_dir = Path::new(environment.local_base_directory()).join("contributors");
+        if !contributors_dir.exists() {
+            // Create the base and contributors directory if they do not exist.
+            fs::create_dir_all(contributors_dir).expect("unable to create the contributors directory");
         }
 
         // Create a new `Storage` instance, and set the `Environment`.
@@ -56,6 +57,11 @@ impl Disk {
                 Locator::CoordinatorState,
                 Object::CoordinatorState(CoordinatorState::new(environment.clone())),
             )?;
+        }
+
+        // Create the contributions summary locator if it does not exist yet.
+        if !storage.exists(&Locator::ContributionsInfoSummary) {
+            storage.insert(Locator::ContributionsInfoSummary, Object::ContributionsInfoSummary(vec![]))?;
         }
 
         trace!("Loaded disk storage");

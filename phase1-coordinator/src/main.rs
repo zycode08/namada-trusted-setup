@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::Production as ProductionSig,
     environment::Parameters,
     io,
-    rest::{self, CONTRIBUTORS_INFO_FOLDER, UPDATE_TIME},
+    rest::{self , UPDATE_TIME},
     Coordinator,
 };
 
@@ -15,7 +15,7 @@ use phase1_coordinator::environment::Production;
 use rocket::{
     self,
     routes,
-    tokio::{self, fs, sync::RwLock},
+    tokio::{self, sync::RwLock},
 };
 
 use anyhow::Result;
@@ -59,11 +59,6 @@ pub async fn main() {
     let environment: Production = {
         Production::new(&keypair)
     };
-
-    // Create required folder for contributors' info FIXME:
-    if fs::metadata(CONTRIBUTORS_INFO_FOLDER).await.is_err() {
-        fs::create_dir(CONTRIBUTORS_INFO_FOLDER).await.unwrap();
-    }
 
     // Instantiate and start the coordinator
     let coordinator =

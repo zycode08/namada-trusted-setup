@@ -32,13 +32,13 @@ impl Default for ContributionTimeStamps {
 
 /// A summarized version of [`ContributionTimeStamps`] 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TrimmedContributionTimeStamps { //FIXME: include in other struct?
+pub struct TrimmedContributionTimeStamps {
     start_contribution: DateTime<Utc>,
     end_contribution: DateTime<Utc>
 }
 
-impl From<&ContributionTimeStamps> for TrimmedContributionTimeStamps {
-    fn from(parent: &ContributionTimeStamps) -> Self {
+impl From<ContributionTimeStamps> for TrimmedContributionTimeStamps {
+    fn from(parent: ContributionTimeStamps) -> Self {
         Self {
             start_contribution: parent.start_contribution,
             end_contribution: parent.end_contribution
@@ -91,8 +91,8 @@ pub struct TrimmedContributionInfo {
     timestamps: TrimmedContributionTimeStamps
 }
 
-impl From<&ContributionInfo> for TrimmedContributionInfo {
-    fn from(parent: &ContributionInfo) -> Self {
+impl From<ContributionInfo> for TrimmedContributionInfo {
+    fn from(parent: ContributionInfo) -> Self {
         Self {
             public_key: parent.public_key,
             is_another_machine: parent.is_another_machine,

@@ -1613,7 +1613,6 @@ impl Coordinator {
 
     /// Writes the bytes of a contribution to storage at the appropriate file
     /// locator.
-    #[inline]
     pub(crate) fn write_contribution<T>(
         &mut self,
         contribution_locator: ContributionLocator,
@@ -1622,6 +1621,7 @@ impl Coordinator {
     where
         T: Into<Vec<u8>>,
     {
+        // Can use update instead of insert because the path is already initialized by other functions
         self.storage.update(
             &Locator::ContributionFile(contribution_locator),
             Object::ContributionFile(contribution.into()),
@@ -1629,18 +1629,16 @@ impl Coordinator {
     }
 
     /// Writes the contribution metadata to storage at the appropriate locator.
-    #[inline]
     pub(crate) fn write_contribution_info(&mut self, contribution_info: ContributionInfo) -> Result<(), CoordinatorError> {
         let round_height = Self::load_current_round_height(&self.storage)?;
-        self.storage.update(&Locator::ContributionInfoFile { round_height  }, Object::ContributionInfoFile(contribution_info))
+        self.storage.insert(Locator::ContributionInfoFile { round_height  }, Object::ContributionInfoFile(contribution_info))
     }
 
     /// Appends current round summary to storage at the appropriate locator. 
-    #[inline]
     pub(crate) fn update_contribution_summary(&mut self, contribution_summary: TrimmedContributionInfo) -> Result<(), CoordinatorError> {
         let mut summary = match self.storage.get(&Locator::ContributionsInfoSummary)? {
             Object::ContributionsInfoSummary(summary) => summary,
-            _ => unreachable!(), //FIXME: correct?
+            _ => unreachable!(),
         };
         summary.push(contribution_summary);
 
@@ -1649,7 +1647,6 @@ impl Coordinator {
 
     /// Writes the bytes of a contribution file signature to storage at the appropriate  
     /// locator.
-    #[inline]
     pub(crate) fn write_contribution_file_signature(
         &mut self,
         locator: ContributionSignatureLocator,
@@ -2314,7 +2311,6 @@ impl Coordinator {
     /// Returns a reference to the instantiation of `Storage` that this
     /// coordinator is using.
     ///
-    #[cfg(any(test, testing))]
     #[inline]
     pub(super) fn storage(&self) -> &Disk {
         &self.storage
