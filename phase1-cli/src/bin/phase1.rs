@@ -31,7 +31,7 @@ use regex::Regex;
 
 use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -67,6 +67,8 @@ fn initialize_contribution() -> Result<ContributionInfo> {
         contrib_info.is_contest_participant = true;
     };
 
+    //FIXME: add contrib_info.is_another_machine and is_own_seed_of_randomness when working on Issue #21, more in general, review all the writings of the contributor info to check their correctness
+
     Ok(contrib_info)
 }
 
@@ -101,23 +103,24 @@ fn compute_contribution(
         round_height, base58_pubkey
     ));
     let mut response_writer = File::create(filename.as_str())?;
-    response_writer.write_all(&challenge_hash)?;
+    response_writer.write_all(challenge_hash)?;
 
     let start = Instant::now();
 
     #[cfg(debug_assertions)]
-    Computation::contribute_test_masp(&challenge, &mut response_writer);
+    Computation::contribute_test_masp(challenge, &mut response_writer);
 
     #[cfg(not(debug_assertions))]
-    Computation::contribute_masp(&challenge, &mut response_writer);
+    Computation::contribute_masp(challenge, &mut response_writer);
 
-    debug!("response writer {:?}", response_writer);
+    trace!("response writer {:?}", response_writer);
     println!("Completed contribution in {:?}", start.elapsed());
 
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
 }
 
 async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, mut contrib_info: ContributionInfo) -> Result<()> {
+    // Get the necessary info to compute the contribution
     let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
@@ -138,6 +141,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     debug!("Challenge hash is {}", pretty_hash!(&challenge_hash));
     debug!("Challenge length {}", challenge.len());
 
+    // Compute randomness
     let keypair_owned = keypair.to_owned();
     contrib_info.timestamps.start_computation = Utc::now();
     let contribution = tokio::task::spawn_blocking(move || {
@@ -152,12 +156,16 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     .await??;
     contrib_info.timestamps.end_computation = Utc::now();
 
-    let contribution_hash = calculate_hash(contribution.as_ref());
-    let contribution_hash_str = pretty_hash!(&contribution_hash);
-    debug!("Contribution hash is {}", contribution_hash_str);
+    // Update contribution info
+    let contribution_file_hash = calculate_hash(contribution.as_ref());
+    let contribution_file_hash_str = pretty_hash!(&contribution_file_hash);
+    debug!("Contribution hash is {}", contribution_file_hash_str);
     debug!("Contribution length: {}", contribution.len());
-    contrib_info.contribution_hash = contribution_hash_str;
-    contrib_info.contribution_hash_signature = Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?;
+    contrib_info.contribution_file_hash = contribution_file_hash_str;
+    contrib_info.contribution_file_signature = Production.sign(keypair.sigkey(), contrib_info.contribution_file_hash.as_str())?;
+     let challenge_hash_len = challenge_hash.len();
+     contrib_info.contribution_hash = pretty_hash!(&calculate_hash(&contribution[challenge_hash_len..]));
+     contrib_info.contribution_hash_signature = Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?; 
 
     let contribution_state = ContributionState::new(
         challenge_hash.to_vec(),
@@ -166,9 +174,9 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     )?;
 
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
-
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
+    // Send contribution to the coordinator
     let post_chunk_req = PostChunkRequest::new(
         locked_locators.next_contribution(),
         contribution,
@@ -180,15 +188,14 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
     contrib_info.timestamps.end_contribution = Utc::now();
 
-    // FIXME: populate the missing fields of contrib if needed
-    // Compute signature of info FIXME: check if correct
+    // Compute signature of contributor info
     let mut serde_contrib_info = serde_json::to_value(contrib_info.clone())?;
     serde_contrib_info["contributor_info_signature"].take();
     let serialized_contrib_info = serde_contrib_info.to_string();
     let contrib_info_signature = Production.sign(keypair.sigkey(), serialized_contrib_info.as_str())?;
     contrib_info.contributor_info_signature = contrib_info_signature;
 
-    // Write contribution summary file and send it to the Coordinator
+    // Write contribution info file and send it to the Coordinator
     async_fs::write(format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round), &serde_json::to_vec(&contrib_info)?).await?;
     requests::post_contribution_info(client, coordinator, keypair, contrib_info).await?;
 

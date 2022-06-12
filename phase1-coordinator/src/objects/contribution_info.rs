@@ -75,8 +75,8 @@ pub struct ContributionInfo {
    pub contribution_file_signature: String,
    // Some timestamps to get performance metrics of the ceremony
    pub timestamps: ContributionTimeStamps,
-   // Signature of this struct
-   pub contributor_info_signature: String //FIXME: computes that on the json encoding
+   // Signature of this struct, computed on the json string encoding of all the other fields of this struct
+   pub contributor_info_signature: String
 }
 
 /// A summarized version of [`ContributionInfo`]
