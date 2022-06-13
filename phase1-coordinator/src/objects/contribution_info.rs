@@ -1,6 +1,18 @@
+use crate::authentication::{Production, Signature, KeyPair};
+
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use serde_json::Error;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ContributionInfoError {
+    #[error("Error while serializing ContributionInfo: {0}")]
+    SerdeError(#[from] serde_json::Error),
+    #[error("Expected ContributionInfo to be serialized as a Map")]
+    UnexpectedSerializationFormat,
+    #[error("Error while signing ContributionInfo: {0}")]
+    SignatureError(String)
+}
 
 /// Timestamps of the contribution 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -79,6 +91,38 @@ pub struct ContributionInfo {
    pub contributor_info_signature: String
 }
 
+impl ContributionInfo {
+    /// Computes the signature of a json string encoding the struct.
+    pub fn try_sign(&mut self, sigkey: &str) -> Result<(), ContributionInfoError> {
+        // FIXME: sign the hash of the json
+        let mut serde_contrib_info = serde_json::to_value(self.clone())?;
+
+        // Remove contributor_info_signature from json
+        let mut map = serde_contrib_info.as_object_mut().ok_or(ContributionInfoError::UnexpectedSerializationFormat)?;
+        map.remove("contributor_info_signature");
+
+        // Compute signature
+        let serialized_contrib_info = serde_contrib_info.to_string();
+        let contrib_info_signature = Production.sign(sigkey, serialized_contrib_info.as_str()).map_err(|e| ContributionInfoError::SignatureError(format!("{}", e)))?;
+        self.contributor_info_signature = contrib_info_signature;
+
+        Ok(())
+    }
+
+    /// Verifies the signature.
+    fn verify_signature(&self) -> Result<bool, ContributionInfoError> {
+        let mut serde_contrib_info = serde_json::to_value(self.clone())?; //FIXME: first part in common with try_sign
+
+        // Remove contributor_info_signature from json
+        let mut map = serde_contrib_info.as_object_mut().expect("Expected ContributionInfo to be a Map");
+        map.remove("contributor_info_signature");
+
+        let serialized_contrib_info = serde_contrib_info.to_string();
+        
+        Ok(Production.verify(self.public_key.as_str(), serialized_contrib_info.as_str(), self.contributor_info_signature.as_str()))
+    }
+}
+
 /// A summarized version of [`ContributionInfo`]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TrimmedContributionInfo {
@@ -102,5 +146,23 @@ impl From<ContributionInfo> for TrimmedContributionInfo {
             contribution_hash_signature: parent.contribution_hash_signature,
             timestamps: parent.timestamps.into()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::authentication::KeyPair;
+
+    use super::ContributionInfo;
+
+    #[test]
+    fn sign_and_verify() {
+        let keypair = KeyPair::new();
+        let mut test_info = ContributionInfo::default();
+        test_info.public_key = keypair.pubkey().to_owned();
+
+        test_info.try_sign(keypair.sigkey()).unwrap();
+
+        assert!(test_info.verify_signature().unwrap());
     }
 }

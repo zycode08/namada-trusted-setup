@@ -189,11 +189,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Compute signature of contributor info
-    let mut serde_contrib_info = serde_json::to_value(contrib_info.clone())?;
-    serde_contrib_info["contributor_info_signature"].take();
-    let serialized_contrib_info = serde_contrib_info.to_string();
-    let contrib_info_signature = Production.sign(keypair.sigkey(), serialized_contrib_info.as_str())?;
-    contrib_info.contributor_info_signature = contrib_info_signature;
+    contrib_info.try_sign(keypair.sigkey()).expect("Error while signing the contribution info");
 
     // Write contribution info file and send it to the Coordinator
     async_fs::write(format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round), &serde_json::to_vec(&contrib_info)?).await?;

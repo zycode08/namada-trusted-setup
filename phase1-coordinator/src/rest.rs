@@ -137,7 +137,8 @@ impl<T: Serialize> SignedRequest<T> {
     /// Returns a signed request
     pub fn try_sign(keypair: &KeyPair, request: Option<T>) -> Result<Self> {
         let mut message = json::to_string(&keypair.pubkey().to_owned())?;
-
+        // FIXME: is it correct to concatenate the strings? Better to create a Value?
+        // FIXME: sign the hash of the json encoding string
         // If body is non-empty add it to the message to be signed
         if let Some(ref r) = request {
             message.push_str(json::to_string(r)?.as_str());
