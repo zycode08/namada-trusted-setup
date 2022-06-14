@@ -159,7 +159,16 @@ impl Object {
 
     /// Returns the size in bytes of the object.
     pub fn size(&self) -> u64 {
-        self.to_bytes().len() as u64
+        match self {
+            Object::CoordinatorState(_) => self.to_bytes().len() as u64,
+            Object::RoundHeight(_) => self.to_bytes().len() as u64,
+            Object::RoundState(_) => self.to_bytes().len() as u64,
+            Object::RoundFile(round) => round.len() as u64,
+            Object::ContributionFile(contribution) => contribution.len() as u64,
+            Object::ContributionFileSignature(_) => self.to_bytes().len() as u64,
+            Object::ContributionInfoFile(_) => self.to_bytes().len() as u64,
+            Object::ContributionsInfoSummary(_) => self.to_bytes().len() as u64,
+        }
     }
 
     /// Returns the expected file size of an aggregated round.
