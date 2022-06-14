@@ -6,7 +6,7 @@ use crate::{
     storage::{ContributionLocator, ContributionSignatureLocator, Locator},
     ContributionFileSignature,
     CoordinatorError,
-    Participant
+    Participant,
 };
 
 use rocket::{
@@ -532,7 +532,10 @@ pub async fn get_contributor_queue_status(
 
 /// Write [`ContributionInfo`] to disk
 #[post("/contributor/contribution_info", format = "json", data = "<request>")]
-pub async fn post_contribution_info(coordinator: &State<Coordinator>, request: Json<SignedRequest<ContributionInfo>>) -> Result<()> {
+pub async fn post_contribution_info(
+    coordinator: &State<Coordinator>,
+    request: Json<SignedRequest<ContributionInfo>>,
+) -> Result<()> {
     let signed_request = request.into_inner();
 
     // Check signature
@@ -545,34 +548,49 @@ pub async fn post_contribution_info(coordinator: &State<Coordinator>, request: J
 
     if !task::spawn_blocking(move || read_lock.is_current_contributor(&contributor_clone)).await? {
         // Only the current contributor can upload this file
-        return Err(ResponseError::UnauthorizedParticipant(contributor, String::from("/contributor/contribution_info")));
+        return Err(ResponseError::UnauthorizedParticipant(
+            contributor,
+            String::from("/contributor/contribution_info"),
+        ));
     }
 
     // Write contribution info to file
     let contribution_info = signed_request.request.clone().unwrap();
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || {write_lock.write_contribution_info(contribution_info)}).await?.map_err(|e| ResponseError::CoordinatorError(e))?;
+    task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     // Append summary to file
     let contribution_summary = signed_request.request.unwrap().into();
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || {write_lock.update_contribution_summary(contribution_summary)}).await?.map_err(|e| ResponseError::CoordinatorError(e))?;
+    task::spawn_blocking(move || write_lock.update_contribution_summary(contribution_summary))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     Ok(())
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible only by the coordinator itself.
 #[get("/contribution_info", format = "json", data = "<request>")]
-pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<Json<Vec<TrimmedContributionInfo>>> { 
+pub async fn get_contributions_info(
+    coordinator: &State<Coordinator>,
+    request: Json<SignedRequest<()>>,
+) -> Result<Json<Vec<TrimmedContributionInfo>>> {
     let signed_request = request.into_inner();
 
     // Verify request
-    signed_request.check_coordinator_request(coordinator, "/contribution_info").await?;
-  
+    signed_request
+        .check_coordinator_request(coordinator, "/contribution_info")
+        .await?;
+
     let read_lock = (*coordinator).clone().read_owned().await;
-    let summary = match task::spawn_blocking(move || {read_lock.storage().get(&Locator::ContributionsInfoSummary)}).await?.map_err(|e| ResponseError::CoordinatorError(e))? {
+    let summary = match task::spawn_blocking(move || read_lock.storage().get(&Locator::ContributionsInfoSummary))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?
+    {
         crate::storage::Object::ContributionsInfoSummary(summary) => summary,
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     Ok(Json(summary))

@@ -1,9 +1,9 @@
 use crate::authentication::KeyPair;
-use regex::Regex;
 use bip39::{Language, Mnemonic};
+use rand::prelude::SliceRandom;
+use regex::Regex;
 use thiserror::Error;
 use tracing::debug;
-use rand::prelude::SliceRandom;
 
 const MNEMONIC_LEN: usize = 24;
 const MNEMONIC_CHECK_LEN: usize = 3;
@@ -39,7 +39,7 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
                 if re.is_match(response.as_str()) {
                     break;
                 }
-            },
+            }
             None => break,
         }
 
@@ -53,8 +53,12 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
 /// Generates a new [`KeyPair`] from a mnemonic provided by the user
 pub fn generate_keypair() -> Result<KeyPair> {
     // Request mnemonic to the user
-    let mnemonic_str = get_user_input(format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(), Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?))?;
-    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str()).map_err(|e| {IOError::MnemonicError(e)})?;
+    let mnemonic_str = get_user_input(
+        format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
+        Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
+    )?;
+    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
+        .map_err(|e| IOError::MnemonicError(e))?;
 
     // Check if the user has correctly stored the mnemonic
     #[cfg(not(debug_assertions))]
@@ -78,8 +82,11 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
     for i in indexes[..MNEMONIC_CHECK_LEN].iter() {
-       let response = get_user_input(format!("Enter the word at index {} of your mnemonic:", i).as_str(), Some(&Regex::new(r"[[:alpha:]]+")?))?;
- 
+        let response = get_user_input(
+            format!("Enter the word at index {} of your mnemonic:", i).as_str(),
+            Some(&Regex::new(r"[[:alpha:]]+")?),
+        )?;
+
         if response != mnemonic_slice[i - 1] {
             debug!("Expected: {}, answer: {}", mnemonic_slice[i - 1], response);
             return Err(IOError::CheckMnemonicError);

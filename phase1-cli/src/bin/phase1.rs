@@ -17,9 +17,9 @@ use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
-    io::{Read, Write},
     fs::{self, File},
-    time::Instant
+    io::{Read, Write},
+    time::Instant,
 };
 
 use chrono::Utc;
@@ -54,16 +54,29 @@ macro_rules! pretty_hash {
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
     println!("Welcome to the Namada trusted setup ceremony!\nBefore starting, a couple of questions:");
-    let incentivization  = io::get_user_input("Do you want to participate in the incentivised trusted setup? [y/n]", Some(&Regex::new(r"(?i)[yn]")?))?.to_lowercase();
+    let incentivization = io::get_user_input(
+        "Do you want to participate in the incentivised trusted setup? [y/n]",
+        Some(&Regex::new(r"(?i)[yn]")?),
+    )?
+    .to_lowercase();
 
     if incentivization == "y" {
         // Ask for personal info
         contrib_info.full_name = Some(io::get_user_input("Please enter your full name:", None)?);
-        contrib_info.email = Some(io::get_user_input("Please enter your email address:", Some(&Regex::new(r".+[@].+[.].+")?))?);
+        contrib_info.email = Some(io::get_user_input(
+            "Please enter your email address:",
+            Some(&Regex::new(r".+[@].+[.].+")?),
+        )?);
         contrib_info.is_incentivized = true;
     };
 
-    if io::get_user_input("Do you want to take part in the contest? [y/n]", Some(&Regex::new(r"(?i)[yn]")?))?.to_lowercase() == "y" {
+    if io::get_user_input(
+        "Do you want to take part in the contest? [y/n]",
+        Some(&Regex::new(r"(?i)[yn]")?),
+    )?
+    .to_lowercase()
+        == "y"
+    {
         contrib_info.is_contest_participant = true;
     };
 
@@ -119,7 +132,12 @@ fn compute_contribution(
     Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
 }
 
-async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, mut contrib_info: ContributionInfo) -> Result<()> {
+async fn contribute(
+    client: &Client,
+    coordinator: &mut Url,
+    keypair: &KeyPair,
+    mut contrib_info: ContributionInfo,
+) -> Result<()> {
     // Get the necessary info to compute the contribution
     let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
@@ -134,7 +152,8 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself
-    let mut challenge_writer = async_fs::File::create(String::from(format!("namada_challenge_round_{}.params", round_height))).await?;
+    let mut challenge_writer =
+        async_fs::File::create(String::from(format!("namada_challenge_round_{}.params", round_height))).await?;
     challenge_writer.write_all(&challenge.as_slice()).await?;
 
     let challenge_hash = calculate_hash(challenge.as_ref());
@@ -162,16 +181,14 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     debug!("Contribution hash is {}", contribution_file_hash_str);
     debug!("Contribution length: {}", contribution.len());
     contrib_info.contribution_file_hash = contribution_file_hash_str;
-    contrib_info.contribution_file_signature = Production.sign(keypair.sigkey(), contrib_info.contribution_file_hash.as_str())?;
-     let challenge_hash_len = challenge_hash.len();
-     contrib_info.contribution_hash = pretty_hash!(&calculate_hash(&contribution[challenge_hash_len..]));
-     contrib_info.contribution_hash_signature = Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?; 
+    contrib_info.contribution_file_signature =
+        Production.sign(keypair.sigkey(), contrib_info.contribution_file_hash.as_str())?;
+    let challenge_hash_len = challenge_hash.len();
+    contrib_info.contribution_hash = pretty_hash!(&calculate_hash(&contribution[challenge_hash_len..]));
+    contrib_info.contribution_hash_signature =
+        Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?;
 
-    let contribution_state = ContributionState::new(
-        challenge_hash.to_vec(),
-        contribution_hash.to_vec(),
-        None,
-    )?;
+    let contribution_state = ContributionState::new(challenge_hash.to_vec(), contribution_hash.to_vec(), None)?;
 
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
@@ -189,16 +206,27 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Compute signature of contributor info
-    contrib_info.try_sign(keypair).expect("Error while signing the contribution info");
+    contrib_info
+        .try_sign(keypair)
+        .expect("Error while signing the contribution info");
 
     // Write contribution info file and send it to the Coordinator
-    async_fs::write(format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round), &serde_json::to_vec(&contrib_info)?).await?;
+    async_fs::write(
+        format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round),
+        &serde_json::to_vec(&contrib_info)?,
+    )
+    .await?;
     requests::post_contribution_info(client, coordinator, keypair, contrib_info).await?;
 
     Ok(())
 }
 
-async fn contribution_loop(client: &Client, coordinator: &mut Url, keypair: &KeyPair, mut contrib_info: ContributionInfo) {
+async fn contribution_loop(
+    client: &Client,
+    coordinator: &mut Url,
+    keypair: &KeyPair,
+    mut contrib_info: ContributionInfo,
+) {
     requests::post_join_queue(client, coordinator, keypair)
         .await
         .expect("Couldn't join the queue");
@@ -208,18 +236,17 @@ async fn contribution_loop(client: &Client, coordinator: &mut Url, keypair: &Key
     let mut coordinator_clone = coordinator.clone();
     let keypair_clone = keypair.to_owned();
 
-     // Spawn heartbeat task to prevent the Coordinator from
+    // Spawn heartbeat task to prevent the Coordinator from
     // dropping the contributor out of the ceremony in the middle of a contribution.
     // Heartbeat is checked by the Coordinator every 120 seconds.
-    let heartbeat_handle =
-    tokio::task::spawn(
-        async move { loop {
+    let heartbeat_handle = tokio::task::spawn(async move {
+        loop {
             if let Err(e) = requests::post_heartbeat(&client_clone, &mut coordinator_clone, &keypair_clone).await {
                 error!("Heartbeat error: {}", e);
             }
             time::sleep(UPDATE_TIME).await;
-        } },
-     );
+        }
+    });
 
     loop {
         // Check the contributor's position in the queue
@@ -237,7 +264,9 @@ async fn contribution_loop(client: &Client, coordinator: &mut Url, keypair: &Key
                 );
             }
             ContributorStatus::Round => {
-                contribute(client, coordinator, keypair, contrib_info.clone()).await.expect("Contribution failed");
+                contribute(client, coordinator, keypair, contrib_info.clone())
+                    .await
+                    .expect("Contribution failed");
                 // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
                 //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
                 //  only gets detached from the main execution unit but keeps running in the background until the main
@@ -268,7 +297,10 @@ async fn close_ceremony(client: &Client, coordinator: &mut Url, keypair: &KeyPai
 
 async fn get_contributions(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
     match requests::get_contributions_info(client, coordinator, keypair).await {
-       Ok(contributions) => info!("Contributions:\n{}", serde_json::to_string_pretty(&contributions).unwrap()),
+        Ok(contributions) => info!(
+            "Contributions:\n{}",
+            serde_json::to_string_pretty(&contributions).unwrap()
+        ),
         Err(e) => error!("{}", e),
     }
 }
@@ -296,11 +328,17 @@ async fn main() {
     let opt = CeremonyOpt::from_args();
     let client = Client::new();
 
-    let keypair = tokio::task::spawn_blocking(io::generate_keypair).await.unwrap().expect("Error while generating the keypair");
+    let keypair = tokio::task::spawn_blocking(io::generate_keypair)
+        .await
+        .unwrap()
+        .expect("Error while generating the keypair");
 
     match opt {
         CeremonyOpt::Contribute(mut url) => {
-            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution).await.unwrap().expect("Error while initializing the contribution");
+            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
+                .await
+                .unwrap()
+                .expect("Error while initializing the contribution");
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 

@@ -329,11 +329,18 @@ async fn test_wrong_post_contribution_info() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let response = requests::post_contribution_info(&client, &mut url, &ctx.unknown_participant.keypair, contrib_info.clone()).await;
+    let response = requests::post_contribution_info(
+        &client,
+        &mut url,
+        &ctx.unknown_participant.keypair,
+        contrib_info.clone(),
+    )
+    .await;
     assert!(response.is_err());
 
     // Non-current-contributor participant
-    let response = requests::post_contribution_info(&client, &mut url, &ctx.contributors[1].keypair, contrib_info).await;
+    let response =
+        requests::post_contribution_info(&client, &mut url, &ctx.contributors[1].keypair, contrib_info).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -452,13 +459,22 @@ async fn test_contribution() {
     contrib_info.full_name = Some(String::from("Test Name"));
     contrib_info.email = Some(String::from("test@mail.dev"));
     contrib_info.public_key = ctx.contributors[0].keypair.pubkey().to_owned();
-    contrib_info.ceremony_round = ctx.contributors[0].locked_locators.as_ref().unwrap().current_contribution().round_height();
+    contrib_info.ceremony_round = ctx.contributors[0]
+        .locked_locators
+        .as_ref()
+        .unwrap()
+        .current_contribution()
+        .round_height();
     contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
 
-    requests::post_contribution_info(&client, &mut url, &ctx.contributors[0].keypair, contrib_info).await.unwrap();
+    requests::post_contribution_info(&client, &mut url, &ctx.contributors[0].keypair, contrib_info)
+        .await
+        .unwrap();
 
     // Get contributions info
-    let summary = requests::get_contributions_info(&client, &mut url, &ctx.coordinator.keypair).await.unwrap();
+    let summary = requests::get_contributions_info(&client, &mut url, &ctx.coordinator.keypair)
+        .await
+        .unwrap();
     assert_eq!(summary.len(), 1);
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());

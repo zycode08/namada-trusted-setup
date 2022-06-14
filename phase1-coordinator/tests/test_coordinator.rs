@@ -608,7 +608,12 @@ fn test_contribution() {
     contrib_info.full_name = Some(String::from("Test Name"));
     contrib_info.email = Some(String::from("test@mail.dev"));
     contrib_info.public_key = ctx.contributors[0].keypair.pubkey().to_owned();
-    contrib_info.ceremony_round = ctx.contributors[0].locked_locators.as_ref().unwrap().current_contribution().round_height();
+    contrib_info.ceremony_round = ctx.contributors[0]
+        .locked_locators
+        .as_ref()
+        .unwrap()
+        .current_contribution()
+        .round_height();
     contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
 
     let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(contrib_info)).unwrap();

@@ -571,7 +571,12 @@ impl Testing {
     fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::Namada { number_of_chunks: 1, power: 6, batch_size: 16 }.to_settings(),
+                parameters: Parameters::Namada {
+                    number_of_chunks: 1,
+                    power: 6,
+                    batch_size: 16,
+                }
+                .to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -693,7 +698,12 @@ impl Development {
     fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::Namada { number_of_chunks: 1, power: 6, batch_size: 16 }.to_settings(),
+                parameters: Parameters::Namada {
+                    number_of_chunks: 1,
+                    power: 6,
+                    batch_size: 16,
+                }
+                .to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -826,7 +836,12 @@ impl Production {
     fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::Namada { number_of_chunks: 1, power: 6, batch_size: 16 }.to_settings(),
+                parameters: Parameters::Namada {
+                    number_of_chunks: 1,
+                    power: 6,
+                    batch_size: 16,
+                }
+                .to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -855,7 +870,7 @@ impl Production {
                 local_base_directory: "./transcript".to_string(),
 
                 disable_reliability_zeroing: false,
-            }
+            },
         }
     }
 

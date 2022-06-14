@@ -1,11 +1,18 @@
 use crate::{
     environment::Environment,
-    objects::{ContributionFileSignature, Round, ContributionInfo, TrimmedContributionInfo},
+    objects::{ContributionFileSignature, ContributionInfo, Round, TrimmedContributionInfo},
     storage::{
-        ContributionLocator, ContributionSignatureLocator, Locator, Object, ObjectReader, ObjectWriter, StorageLocator,
+        ContributionLocator,
+        ContributionSignatureLocator,
+        Locator,
+        Object,
+        ObjectReader,
+        ObjectWriter,
+        StorageLocator,
         StorageObject,
     },
-    CoordinatorError, CoordinatorState,
+    CoordinatorError,
+    CoordinatorState,
 };
 
 use anyhow::Result;
@@ -61,7 +68,10 @@ impl Disk {
 
         // Create the contributions summary locator if it does not exist yet.
         if !storage.exists(&Locator::ContributionsInfoSummary) {
-            storage.insert(Locator::ContributionsInfoSummary, Object::ContributionsInfoSummary(vec![]))?;
+            storage.insert(
+                Locator::ContributionsInfoSummary,
+                Object::ContributionsInfoSummary(vec![]),
+            )?;
         }
 
         trace!("Loaded disk storage");
@@ -204,11 +214,11 @@ impl Disk {
 
                 let contribution_file_signature: ContributionFileSignature = serde_json::from_slice(&file_bytes)?;
                 Ok(Object::ContributionFileSignature(contribution_file_signature))
-            },
+            }
             Locator::ContributionInfoFile { round_height: _ } => {
                 let contribution_info: ContributionInfo = serde_json::from_slice(&file_bytes)?;
                 Ok(Object::ContributionInfoFile(contribution_info))
-            },
+            }
             Locator::ContributionsInfoSummary => {
                 let summary: Vec<TrimmedContributionInfo> = serde_json::from_slice(&file_bytes)?;
                 Ok(Object::ContributionsInfoSummary(summary))
@@ -647,8 +657,11 @@ impl StorageLocator for DiskResolver {
                     ),
                 }
             }
-            Locator::ContributionInfoFile { round_height } => format!("{}/contributors/namada_contributor_info_round_{}.json", self.base, round_height),
-            Locator::ContributionsInfoSummary => format!("{}/contributors.json", self.base)
+            Locator::ContributionInfoFile { round_height } => format!(
+                "{}/contributors/namada_contributor_info_round_{}.json",
+                self.base, round_height
+            ),
+            Locator::ContributionsInfoSummary => format!("{}/contributors.json", self.base),
         };
         // Sanitize the path.
         LocatorPath::try_from(Path::new(&path))

@@ -107,7 +107,7 @@ pub enum Locator {
     ContributionFile(ContributionLocator),
     ContributionFileSignature(ContributionSignatureLocator),
     ContributionInfoFile { round_height: u64 },
-    ContributionsInfoSummary
+    ContributionsInfoSummary,
 }
 
 impl From<ContributionLocator> for Locator {
@@ -132,7 +132,7 @@ pub enum Object {
     ContributionFile(Vec<u8>),
     ContributionFileSignature(ContributionFileSignature),
     ContributionInfoFile(ContributionInfo),
-    ContributionsInfoSummary(Vec<TrimmedContributionInfo>)
+    ContributionsInfoSummary(Vec<TrimmedContributionInfo>),
 }
 
 impl Object {
@@ -148,8 +148,12 @@ impl Object {
             Object::ContributionFileSignature(signature) => {
                 serde_json::to_vec_pretty(signature).expect("contribution file signature to bytes failed")
             }
-            Object::ContributionInfoFile(info) => serde_json::to_vec(info).expect("Contribution info file to bytes failed"),
-            Object::ContributionsInfoSummary(summary) => serde_json::to_vec(summary).expect("Contribution info summary to bytes failed")
+            Object::ContributionInfoFile(info) => {
+                serde_json::to_vec(info).expect("Contribution info file to bytes failed")
+            }
+            Object::ContributionsInfoSummary(summary) => {
+                serde_json::to_vec(summary).expect("Contribution info summary to bytes failed")
+            }
         }
     }
 

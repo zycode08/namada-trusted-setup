@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     io,
-    rest::{self , UPDATE_TIME},
+    rest::{self, UPDATE_TIME},
     Coordinator,
 };
 
@@ -46,7 +46,10 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
 
     // Set the environment
-    let keypair = tokio::task::spawn_blocking(io::generate_keypair).await.unwrap().expect("Error while generating the keypair");
+    let keypair = tokio::task::spawn_blocking(io::generate_keypair)
+        .await
+        .unwrap()
+        .expect("Error while generating the keypair");
 
     #[cfg(debug_assertions)]
     let environment: Testing = {
@@ -55,9 +58,7 @@ pub async fn main() {
     };
 
     #[cfg(not(debug_assertions))]
-    let environment: Production = {
-        Production::new(&keypair)
-    };
+    let environment: Production = { Production::new(&keypair) };
 
     // Instantiate and start the coordinator
     let coordinator =
