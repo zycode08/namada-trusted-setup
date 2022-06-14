@@ -5,8 +5,6 @@ use setup_utils::{CheckForCorrectness, UseCompression};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use std::fs;
-
 type BatchSize = usize;
 type ChunkSize = usize;
 type NumberOfChunks = usize;

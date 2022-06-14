@@ -2,16 +2,19 @@ use crate::authentication::{Production, Signature, KeyPair};
 
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use sha2::{Sha256, Digest};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ContributionInfoError {
+    #[error("Keypair doesn't match the pubkey")]
+    InvalidSigKey,
     #[error("Error while serializing ContributionInfo: {0}")]
     SerdeError(#[from] serde_json::Error),
+    #[error("Error while signing ContributionInfo: {0}")]
+    SignatureError(String),
     #[error("Expected ContributionInfo to be serialized as a Map")]
     UnexpectedSerializationFormat,
-    #[error("Error while signing ContributionInfo: {0}")]
-    SignatureError(String)
 }
 
 /// Timestamps of the contribution 
@@ -92,32 +95,43 @@ pub struct ContributionInfo {
 }
 
 impl ContributionInfo {
-    /// Computes the signature of a json string encoding the struct.
-    pub fn try_sign(&mut self, sigkey: &str) -> Result<(), ContributionInfoError> {
-        // FIXME: sign the hash of the json
+    /// Calculates the hash of the json string encoding all the fields of the struct
+    /// expect for the signature itself.
+    fn hash_for_signature(&self) -> Result<String, ContributionInfoError> {
         let mut serde_contrib_info = serde_json::to_value(self.clone())?;
 
         // Remove contributor_info_signature from json
-        let mut map = serde_contrib_info.as_object_mut().ok_or(ContributionInfoError::UnexpectedSerializationFormat)?;
+        let map = serde_contrib_info.as_object_mut().ok_or(ContributionInfoError::UnexpectedSerializationFormat)?;
         map.remove("contributor_info_signature");
+        let serialized_contrib_info = serde_contrib_info.to_string();
+
+        // Compute digest
+        let mut hasher = Sha256::new();
+        hasher.update(serialized_contrib_info);
+
+        Ok(format!("{:x?}", hasher.finalize()))
+    }
+
+    /// Computes the signature of a json string encoding the struct. 
+    pub fn try_sign(&mut self, keypair: &KeyPair) -> Result<(), ContributionInfoError> {
+        let digest = self.hash_for_signature()?;
 
         // Compute signature
-        let serialized_contrib_info = serde_contrib_info.to_string();
-        let contrib_info_signature = Production.sign(sigkey, serialized_contrib_info.as_str()).map_err(|e| ContributionInfoError::SignatureError(format!("{}", e)))?;
+        if keypair.pubkey() != self.public_key {
+            // Keypair must match the pubkey of self
+            return Err(ContributionInfoError::InvalidSigKey);
+        }
+
+        let contrib_info_signature = Production.sign(keypair.sigkey(), digest.as_str()).map_err(|e| ContributionInfoError::SignatureError(format!("{}", e)))?;
         self.contributor_info_signature = contrib_info_signature;
 
         Ok(())
     }
 
     /// Verifies the signature.
+    #[cfg(debug_assertions)]
     fn verify_signature(&self) -> Result<bool, ContributionInfoError> {
-        let mut serde_contrib_info = serde_json::to_value(self.clone())?; //FIXME: first part in common with try_sign
-
-        // Remove contributor_info_signature from json
-        let mut map = serde_contrib_info.as_object_mut().expect("Expected ContributionInfo to be a Map");
-        map.remove("contributor_info_signature");
-
-        let serialized_contrib_info = serde_contrib_info.to_string();
+        let serialized_contrib_info = self.hash_for_signature()?;
         
         Ok(Production.verify(self.public_key.as_str(), serialized_contrib_info.as_str(), self.contributor_info_signature.as_str()))
     }
@@ -149,6 +163,25 @@ impl From<ContributionInfo> for TrimmedContributionInfo {
     }
 }
 
+#[cfg(debug_assertions)]
+impl TrimmedContributionInfo {
+    pub fn public_key(&self) -> &str {
+        self.public_key.as_ref()
+    }
+
+    pub fn is_another_machine(&self) -> bool {
+        self.is_another_machine
+    }
+
+    pub fn is_own_seed_of_randomness(&self) -> bool {
+        self.is_own_seed_of_randomness
+    }
+
+    pub fn ceremony_round(&self) -> u64 {
+        self.ceremony_round
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::authentication::KeyPair;
@@ -157,12 +190,25 @@ mod tests {
 
     #[test]
     fn sign_and_verify() {
+        // Test default
         let keypair = KeyPair::new();
         let mut test_info = ContributionInfo::default();
         test_info.public_key = keypair.pubkey().to_owned();
 
-        test_info.try_sign(keypair.sigkey()).unwrap();
+        test_info.try_sign(&keypair).unwrap();
+        assert!(test_info.verify_signature().unwrap());
 
+        // Test custom
+        test_info.full_name = Some(String::from("Test Name"));
+        test_info.email = Some(String::from("test_name@test.dev"));
+        test_info.is_incentivized = true;
+        test_info.ceremony_round = 12;
+        test_info.contribution_hash = String::from("Not a valid hash");
+        test_info.contribution_hash_signature = String::from("Not a valid signature");
+        test_info.contribution_file_hash = String::from("Not a valid file hash");
+        test_info.contribution_file_signature = String::from("Not a valid file signature");
+
+        test_info.try_sign(&keypair).unwrap();
         assert!(test_info.verify_signature().unwrap());
     }
 }

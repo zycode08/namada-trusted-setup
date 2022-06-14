@@ -9,8 +9,8 @@ use std::{io::Write, net::IpAddr, sync::Arc};
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
-    environment::{Parameters, Testing},
-    objects::{LockedLocators, Task},
+    environment::Testing,
+    objects::{ContributionInfo, LockedLocators, Task},
     rest::{self, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
@@ -310,7 +310,6 @@ async fn test_wrong_contribute_chunk() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-
     let response = requests::post_contribute_chunk(&client, &mut url, &ctx.unknown_participant.keypair, 0).await;
     assert!(response.is_err());
 
@@ -318,13 +317,55 @@ async fn test_wrong_contribute_chunk() {
     handle.abort()
 }
 
-/// To test a full contribution we need to test the 5 involved endpoints sequentially:
+#[tokio::test]
+async fn test_wrong_post_contribution_info() {
+    let client = Client::new();
+    // Spawn the server and get the test context
+    let (ctx, handle) = test_prelude().await;
+    // Wait for server startup
+    time::sleep(Duration::from_millis(1000)).await;
+
+    let contrib_info = ContributionInfo::default();
+
+    // Non-existing contributor key
+    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let response = requests::post_contribution_info(&client, &mut url, &ctx.unknown_participant.keypair, contrib_info.clone()).await;
+    assert!(response.is_err());
+
+    // Non-current-contributor participant
+    let response = requests::post_contribution_info(&client, &mut url, &ctx.contributors[1].keypair, contrib_info).await;
+    assert!(response.is_err());
+
+    // Drop the server
+    handle.abort()
+}
+
+#[tokio::test]
+async fn test_wrong_get_contributions_info() {
+    let client = Client::new();
+    // Spawn the server and get the test context
+    let (ctx, handle) = test_prelude().await;
+    // Wait for server startup
+    time::sleep(Duration::from_millis(1000)).await;
+
+    // Wrong, request from non-coordinator participant
+    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let response = requests::get_contributions_info(&client, &mut url, &ctx.contributors[0].keypair).await;
+    assert!(response.is_err());
+
+    // Drop the server
+    handle.abort()
+}
+
+/// To test a full contribution we need to test the 7 involved endpoints sequentially:
 ///
 /// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
+/// - post_contributor_info
+/// - get_contributions_info
 ///
 #[tokio::test]
 async fn test_contribution() {
@@ -405,6 +446,24 @@ async fn test_contribution() {
     requests::get_verify_chunks(&client, &mut url, &ctx.coordinator.keypair)
         .await
         .unwrap();
+
+    // Post contribution info
+    let mut contrib_info = ContributionInfo::default();
+    contrib_info.full_name = Some(String::from("Test Name"));
+    contrib_info.email = Some(String::from("test@mail.dev"));
+    contrib_info.public_key = ctx.contributors[0].keypair.pubkey().to_owned();
+    contrib_info.ceremony_round = ctx.contributors[0].locked_locators.as_ref().unwrap().current_contribution().round_height();
+    contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
+
+    requests::post_contribution_info(&client, &mut url, &ctx.contributors[0].keypair, contrib_info).await.unwrap();
+
+    // Get contributions info
+    let summary = requests::get_contributions_info(&client, &mut url, &ctx.coordinator.keypair).await.unwrap();
+    assert_eq!(summary.len(), 1);
+    assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
+    assert!(!summary[0].is_another_machine());
+    assert!(!summary[0].is_own_seed_of_randomness());
+    assert_eq!(summary[0].ceremony_round(), 1);
 
     // Drop the server
     handle.abort()

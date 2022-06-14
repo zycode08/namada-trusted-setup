@@ -1,6 +1,5 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
-    environment::Parameters,
     io,
     rest::{self , UPDATE_TIME},
     Coordinator,
@@ -21,7 +20,7 @@ use rocket::{
 use anyhow::Result;
 use std::sync::Arc;
 
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {

@@ -2,9 +2,11 @@
 
 use crate::{
     authentication::{KeyPair, Production, Signature},
-    objects::{ContributionInfo, Task, TrimmedContributionInfo},
+    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
     storage::{ContributionLocator, ContributionSignatureLocator, Locator},
     ContributionFileSignature,
+    CoordinatorError,
+    Participant
 };
 
 use rocket::{
@@ -24,9 +26,7 @@ use rocket::{
     State,
 };
 
-use crate::{objects::LockedLocators, CoordinatorError, Participant};
-
-use std::{collections::{LinkedList, HashMap}, io::Cursor, fs, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
 use tracing::debug;
@@ -111,6 +111,7 @@ impl<T: Serialize> SignedRequest<T> {
             request.push_str(json::to_string(r)?.as_str());
         }
 
+        // FIXME: verify the hash of the request
         if Production.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
             Ok(())
         } else {
@@ -138,7 +139,7 @@ impl<T: Serialize> SignedRequest<T> {
     pub fn try_sign(keypair: &KeyPair, request: Option<T>) -> Result<Self> {
         let mut message = json::to_string(&keypair.pubkey().to_owned())?;
         // FIXME: is it correct to concatenate the strings? Better to create a Value?
-        // FIXME: sign the hash of the json encoding string
+        // FIXME: sign the hash of the json encoding string (use sha2)
         // If body is non-empty add it to the message to be signed
         if let Some(ref r) = request {
             message.push_str(json::to_string(r)?.as_str());
@@ -576,8 +577,6 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>, request: J
 
     Ok(Json(summary))
 }
-
-// FIXME: test new endpoints
 
 #[cfg(test)]
 mod tests_signed_request {

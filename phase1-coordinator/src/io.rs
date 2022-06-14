@@ -1,5 +1,4 @@
 use crate::authentication::KeyPair;
-use rand::Rng;
 use regex::Regex;
 use bip39::{Language, Mnemonic};
 use thiserror::Error;

@@ -189,7 +189,7 @@ async fn contribute(client: &Client, coordinator: &mut Url, keypair: &KeyPair, m
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Compute signature of contributor info
-    contrib_info.try_sign(keypair.sigkey()).expect("Error while signing the contribution info");
+    contrib_info.try_sign(keypair).expect("Error while signing the contribution info");
 
     // Write contribution info file and send it to the Coordinator
     async_fs::write(format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round), &serde_json::to_vec(&contrib_info)?).await?;
@@ -322,5 +322,3 @@ async fn main() {
         }
     }
 }
-
-// FIXME: fix unused imports
