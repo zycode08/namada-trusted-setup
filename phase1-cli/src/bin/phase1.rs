@@ -443,14 +443,15 @@ async fn main() {
                 .unwrap()
                 .expect("Error while generating the keypair");
 
-            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
-                .await
-                .unwrap()
-                .expect("Error while initializing the contribution");
-            contrib_info.timestamps.start_contribution = Utc::now();
-            contrib_info.public_key = keypair.pubkey().to_string();
+                let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
+                    .await
+                    .unwrap()
+                    .expect("Error while initializing the contribution");
+                contrib_info.timestamps.start_contribution = Utc::now();
+                contrib_info.public_key = keypair.pubkey().to_string();
 
-            contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
+                contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
+            }
         }
         CeremonyOpt::CloseCeremony(mut url) => {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
