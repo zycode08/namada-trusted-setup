@@ -50,19 +50,33 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
     Ok(response)
 }
 
-/// Generates a new [`KeyPair`] from a mnemonic provided by the user
-pub fn generate_keypair() -> Result<KeyPair> {
-    // Request mnemonic to the user
-    let mnemonic_str = get_user_input(
-        format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
-        Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
-    )?;
-    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
-        .map_err(|e| IOError::MnemonicError(e))?;
+/// Generates a new [`KeyPair`] from a mnemonic. If argument `from_mnemonic` is set
+/// then the keypair is generated from the mnemonic provided by the user, otherwise
+/// it's generated randomly.
+pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
+    let mnemonic = if from_mnemonic {
+        let mnemonic_str = get_user_input(
+            format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
+            Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
+        )?;
 
-    // Check if the user has correctly stored the mnemonic
-    #[cfg(not(debug_assertions))]
-    check_mnemonic(&mnemonic)?;
+        Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
+            .map_err(|e| IOError::MnemonicError(e))?
+    } else {
+        // Generate random mnemonic
+        let mut rng = rand_06::thread_rng();
+        let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN).map_err(|e| IOError::MnemonicError(e))?;
+
+        // Print mnemonic to the user
+        println!("Safely store your 24 words mnemonic: {}", mnemonic);
+        get_user_input(format!("Press any key when you've done it...").as_str(), None)?;
+
+        // Check if the user has correctly stored the mnemonic
+        #[cfg(not(debug_assertions))]
+        check_mnemonic(&mnemonic)?;
+
+        mnemonic
+    };
 
     let seed = mnemonic.to_seed_normalized("");
     Ok(KeyPair::try_from_seed(&seed)?)
@@ -93,7 +107,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
         }
     }
 
-    println!("Verification passed. Be sure to safely store your mnemonic phrase!");
+    println!("Verification passed");
 
     Ok(())
 }

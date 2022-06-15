@@ -267,17 +267,14 @@ pub async fn post_contribution_info(
 pub async fn get_contributions_info(
     client: &Client,
     coordinator_address: &mut Url,
-    keypair: &KeyPair,
 ) -> Result<Vec<TrimmedContributionInfo>> {
-    let response = submit_request::<()>(
-        client,
-        coordinator_address,
-        "/contribution_info",
-        keypair,
-        None,
-        &Method::GET,
-    )
-    .await?;
+    coordinator_address.set_path("/contribution_info");
+    let req = client.get(coordinator_address.to_owned());
+    let response = req.send().await?;
 
-    Ok(response.json::<Vec<TrimmedContributionInfo>>().await?)
+    if response.status().is_success() {
+        Ok(response.json::<Vec<TrimmedContributionInfo>>().await?)
+    } else {
+        Err(RequestError::Server(response.text().await?))
+    }
 }

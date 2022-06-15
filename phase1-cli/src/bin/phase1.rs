@@ -177,18 +177,18 @@ async fn contribute(
 
     // Update contribution info
     let contribution_file_hash = calculate_hash(contribution.as_ref());
-    let contribution_file_hash_str = pretty_hash!(&contribution_file_hash);
+    let contribution_file_hash_str = hex::encode(contribution_file_hash);
     debug!("Contribution hash is {}", contribution_file_hash_str);
     debug!("Contribution length: {}", contribution.len());
     contrib_info.contribution_file_hash = contribution_file_hash_str;
     contrib_info.contribution_file_signature =
         Production.sign(keypair.sigkey(), contrib_info.contribution_file_hash.as_str())?;
     let challenge_hash_len = challenge_hash.len();
-    contrib_info.contribution_hash = pretty_hash!(&calculate_hash(&contribution[challenge_hash_len..]));
+    contrib_info.contribution_hash = hex::encode(calculate_hash(&contribution[challenge_hash_len..]));
     contrib_info.contribution_hash_signature =
         Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?;
 
-    let contribution_state = ContributionState::new(challenge_hash.to_vec(), contribution_hash.to_vec(), None)?;
+    let contribution_state = ContributionState::new(challenge_hash.to_vec(), contribution_file_hash.to_vec(), None)?;
 
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
@@ -295,8 +295,8 @@ async fn close_ceremony(client: &Client, coordinator: &mut Url, keypair: &KeyPai
     }
 }
 
-async fn get_contributions(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
-    match requests::get_contributions_info(client, coordinator, keypair).await {
+async fn get_contributions(client: &Client, coordinator: &mut Url) {
+    match requests::get_contributions_info(client, coordinator).await {
         Ok(contributions) => info!(
             "Contributions:\n{}",
             serde_json::to_string_pretty(&contributions).unwrap()
@@ -328,13 +328,13 @@ async fn main() {
     let opt = CeremonyOpt::from_args();
     let client = Client::new();
 
-    let keypair = tokio::task::spawn_blocking(io::generate_keypair)
+    match opt {
+        CeremonyOpt::Contribute(mut url) => {
+            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
         .await
         .unwrap()
         .expect("Error while generating the keypair");
 
-    match opt {
-        CeremonyOpt::Contribute(mut url) => {
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
                 .unwrap()
@@ -345,17 +345,32 @@ async fn main() {
             contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
         }
         CeremonyOpt::CloseCeremony(mut url) => {
+            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
+        .await
+        .unwrap()
+        .expect("Error while generating the keypair");
+    
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         CeremonyOpt::GetContributions(mut url) => {
-            get_contributions(&client, &mut url.coordinator, &keypair).await;
+            get_contributions(&client, &mut url.coordinator).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(mut url) => {
+            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
+        .await
+        .unwrap()
+        .expect("Error while generating the keypair");
+    
             verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::UpdateCoordinator(mut url) => {
+            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
+        .await
+        .unwrap()
+        .expect("Error while generating the keypair");
+    
             update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
     }

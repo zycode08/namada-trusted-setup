@@ -347,23 +347,6 @@ async fn test_wrong_post_contribution_info() {
     handle.abort()
 }
 
-#[tokio::test]
-async fn test_wrong_get_contributions_info() {
-    let client = Client::new();
-    // Spawn the server and get the test context
-    let (ctx, handle) = test_prelude().await;
-    // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
-
-    // Wrong, request from non-coordinator participant
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let response = requests::get_contributions_info(&client, &mut url, &ctx.contributors[0].keypair).await;
-    assert!(response.is_err());
-
-    // Drop the server
-    handle.abort()
-}
-
 /// To test a full contribution we need to test the 7 involved endpoints sequentially:
 ///
 /// - get_chunk
@@ -472,7 +455,7 @@ async fn test_contribution() {
         .unwrap();
 
     // Get contributions info
-    let summary = requests::get_contributions_info(&client, &mut url, &ctx.coordinator.keypair)
+    let summary = requests::get_contributions_info(&client, &mut url)
         .await
         .unwrap();
     assert_eq!(summary.len(), 1);

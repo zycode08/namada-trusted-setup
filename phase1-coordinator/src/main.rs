@@ -46,7 +46,7 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
 
     // Set the environment
-    let keypair = tokio::task::spawn_blocking(io::generate_keypair)
+    let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
         .await
         .unwrap()
         .expect("Error while generating the keypair");

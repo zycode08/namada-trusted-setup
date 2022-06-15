@@ -500,19 +500,6 @@ fn test_wrong_post_contribution_info() {
     assert!(response.body().is_some());
 }
 
-#[test]
-fn test_wrong_get_contributions_info() {
-    let ctx = build_context();
-    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
-
-    // Wrong, request from non-coordinator participant
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    let req = client.get("/contribution_info").json(&sig_req);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
-    assert!(response.body().is_some());
-}
-
 /// To test a full contribution we need to test the 7 involved endpoints sequentially:
 ///
 /// - get_chunk
@@ -623,8 +610,7 @@ fn test_contribution() {
     assert!(response.body().is_none());
 
     // Get contributions info
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.coordinator.keypair, None).unwrap();
-    req = client.get("/contribution_info").json(&sig_req);
+    req = client.get("/contribution_info");
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
