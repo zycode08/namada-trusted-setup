@@ -11,6 +11,9 @@ check:
 contribution: # Run contributor against a local coordinator (127.0.0.1:8000)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute
 
+offline-contribution: # Computes offline contribution
+	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute --offline
+
 close-ceremony: # Stop local coordinator (127.0.0.1:8000)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) close-ceremony
 

@@ -44,13 +44,11 @@ pub struct CoordinatorUrl {
 pub enum CeremonyOpt {
     #[structopt(about = "Contribute to the ceremony")]
     Contribute {
-        #[structopt(subcommand)]
+        #[structopt(flatten)]
         url: CoordinatorUrl,
         #[structopt(
+            long,
             help = "Perform only the randomness computation step skipping all communication",
-            required = true,
-            default_value = "false",
-            parse(try_from_str)
         )]
         offline: bool
     },
