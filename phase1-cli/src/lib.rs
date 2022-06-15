@@ -43,7 +43,17 @@ pub struct CoordinatorUrl {
 #[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
 pub enum CeremonyOpt {
     #[structopt(about = "Contribute to the ceremony")]
-    Contribute(CoordinatorUrl),
+    Contribute {
+        #[structopt(subcommand)]
+        url: CoordinatorUrl,
+        #[structopt(
+            help = "Perform only the randomness computation step skipping all communication",
+            required = true,
+            default_value = "false",
+            parse(try_from_str)
+        )]
+        offline: bool
+    },
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),
     #[structopt(about = "Get a list of all the contributions received")]
