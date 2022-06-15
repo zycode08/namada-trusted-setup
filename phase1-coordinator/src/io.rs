@@ -65,7 +65,8 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
     } else {
         // Generate random mnemonic
         let mut rng = rand_06::thread_rng();
-        let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN).map_err(|e| IOError::MnemonicError(e))?;
+        let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
+            .map_err(|e| IOError::MnemonicError(e))?;
 
         // Print mnemonic to the user
         println!("Safely store your 24 words mnemonic: {}", mnemonic);

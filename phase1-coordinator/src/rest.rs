@@ -573,9 +573,7 @@ pub async fn post_contribution_info(
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
 #[get("/contribution_info", format = "json")]
-pub async fn get_contributions_info(
-    coordinator: &State<Coordinator>,
-) -> Result<Json<Vec<TrimmedContributionInfo>>> {
+pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Json<Vec<TrimmedContributionInfo>>> {
     let read_lock = (*coordinator).clone().read_owned().await;
     let summary = match task::spawn_blocking(move || read_lock.storage().get(&Locator::ContributionsInfoSummary))
         .await?

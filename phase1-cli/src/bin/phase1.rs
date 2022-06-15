@@ -330,10 +330,10 @@ async fn main() {
 
     match opt {
         CeremonyOpt::Contribute(mut url) => {
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
+            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
+                .await
+                .unwrap()
+                .expect("Error while generating the keypair");
 
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
@@ -345,11 +345,11 @@ async fn main() {
             contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
         }
         CeremonyOpt::CloseCeremony(mut url) => {
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
-    
+            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+                .await
+                .unwrap()
+                .expect("Error while generating the keypair");
+
             close_ceremony(&client, &mut url.coordinator, &keypair).await;
         }
         CeremonyOpt::GetContributions(mut url) => {
@@ -357,20 +357,20 @@ async fn main() {
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(mut url) => {
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
-    
+            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+                .await
+                .unwrap()
+                .expect("Error while generating the keypair");
+
             verify_contributions(&client, &mut url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::UpdateCoordinator(mut url) => {
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
-    
+            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+                .await
+                .unwrap()
+                .expect("Error while generating the keypair");
+
             update_coordinator(&client, &mut url.coordinator, &keypair).await;
         }
     }
