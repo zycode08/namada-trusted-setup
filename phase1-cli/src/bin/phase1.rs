@@ -101,43 +101,14 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
     Ok(buffer)
 }
 
-/// Generates randomness offline. This funxtion expects two files, the challenge hash and the challenge, to exist in the current workig
-/// directory. It produces
-/// the randomness in a file called `contribution.params`.
-fn compute_offline_contribution() -> Result<()> { //FIXME: refactor together with compute_contribution
-    let mut response_writer = File::create("contribution.params")?;
-    fs::copy("challenge_hash.params", response_writer)?;
-    let challenge = fs::read("challenge.params")?;
-    let start = Instant::now();
-
-    #[cfg(debug_assertions)]
-    Computation::contribute_test_masp(challenge.as_slice(), &mut response_writer);
-    #[cfg(not(debug_assertions))]
-    Computation::contribute_masp(challenge, &mut response_writer);
-
-    trace!("response writer {:?}", response_writer);
-    println!("Completed contribution in {:?}", start.elapsed());
-
-    Ok(())
-}
-
 /// Generates randomness for the ceremony
 fn compute_contribution(
-    pubkey: &str,
-    round_height: u64,
+    filename: &str,
     challenge: &[u8],
     challenge_hash: &[u8],
-    contribution_id: u64,
-) -> Result<Vec<u8>> {
-    // Pubkey contains special chars that aren't writable to the filename. Encode it in base58
-    let base58_pubkey = bs58::encode(base64::decode(pubkey)?).into_string();
-    let filename: String = String::from(format!(
-        "namada_contribution_round_{}_public_key_{}.params",
-        round_height, base58_pubkey
-    ));
-    let mut response_writer = File::create(filename.as_str())?;
+) -> Result<()> {
+    let mut response_writer = File::create(filename)?;
     response_writer.write_all(challenge_hash)?;
-
     let start = Instant::now();
 
     #[cfg(debug_assertions)]
@@ -148,7 +119,7 @@ fn compute_contribution(
     trace!("response writer {:?}", response_writer);
     println!("Completed contribution in {:?}", start.elapsed());
 
-    Ok(get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)?)
+    Ok(())
 }
 
 async fn contribute(
@@ -180,19 +151,24 @@ async fn contribute(
     debug!("Challenge length {}", challenge.len());
 
     // Compute randomness
-    let keypair_owned = keypair.to_owned();
+    let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
+    let filename = format!(
+        "namada_contribution_round_{}_public_key_{}.params",
+        round_height, base58_pubkey
+    );
+
     contrib_info.timestamps.start_computation = Utc::now();
-    let contribution = tokio::task::spawn_blocking(move || {
+    let filename_copy = filename.clone();
+    tokio::task::spawn_blocking(move || {
         compute_contribution(
-            keypair_owned.pubkey(),
-            round_height,
+            filename_copy.as_str(),
             &challenge,
             challenge_hash.to_vec().as_ref(),
-            contribution_id,
         )
     })
     .await??;
     contrib_info.timestamps.end_computation = Utc::now();
+    let contribution = tokio::task::spawn_blocking(move || get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)).await??;
 
     // Update contribution info
     let contribution_file_hash = calculate_hash(contribution.as_ref());
@@ -351,7 +327,10 @@ async fn main() {
         CeremonyOpt::Contribute{mut url, offline} => {
             if offline {
                 // Only compute randomness
-                tokio::task::spawn_blocking(compute_offline_contribution).await.unwrap().expect("Error in computing randomness");
+                let challenge = async_fs::read("challenge.params").await.expect("Couldn't read the challenge file");
+                let challenge_hash = async_fs::read("challenge_hash.params").await.expect("Couldn't read the challenge hash file");
+
+                tokio::task::spawn_blocking(move || compute_contribution("contribution.params", &challenge, &challenge_hash)).await.unwrap().expect("Error in computing randomness");
             } else {
                 // Perform entire contribution cycle
                 let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
