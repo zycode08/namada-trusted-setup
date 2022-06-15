@@ -101,6 +101,26 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
     Ok(buffer)
 }
 
+/// Generates randomness offline. This funxtion expects two files, the challenge hash and the challenge, to exist in the current workig
+/// directory. It produces
+/// the randomness in a file called `contribution.params`.
+fn compute_offline_contribution() -> Result<()> { //FIXME: refactor together with compute_contribution
+    let mut response_writer = File::create("contribution.params")?;
+    fs::copy("challenge_hash.params", response_writer)?;
+    let challenge = fs::read("challenge.params")?;
+    let start = Instant::now();
+
+    #[cfg(debug_assertions)]
+    Computation::contribute_test_masp(challenge.as_slice(), &mut response_writer);
+    #[cfg(not(debug_assertions))]
+    Computation::contribute_masp(challenge, &mut response_writer);
+
+    trace!("response writer {:?}", response_writer);
+    println!("Completed contribution in {:?}", start.elapsed());
+
+    Ok(())
+}
+
 /// Generates randomness for the ceremony
 fn compute_contribution(
     pubkey: &str,
@@ -122,7 +142,6 @@ fn compute_contribution(
 
     #[cfg(debug_assertions)]
     Computation::contribute_test_masp(challenge, &mut response_writer);
-
     #[cfg(not(debug_assertions))]
     Computation::contribute_masp(challenge, &mut response_writer);
 
@@ -329,20 +348,26 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        CeremonyOpt::Contribute(mut url) => {
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
+        CeremonyOpt::Contribute{mut url, offline} => {
+            if offline {
+                // Only compute randomness
+                tokio::task::spawn_blocking(compute_offline_contribution).await.unwrap().expect("Error in computing randomness");
+            } else {
+                // Perform entire contribution cycle
+                let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
+            .await
+            .unwrap()
+            .expect("Error while generating the keypair");
 
-            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
-                .await
-                .unwrap()
-                .expect("Error while initializing the contribution");
-            contrib_info.timestamps.start_contribution = Utc::now();
-            contrib_info.public_key = keypair.pubkey().to_string();
+                let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
+                    .await
+                    .unwrap()
+                    .expect("Error while initializing the contribution");
+                contrib_info.timestamps.start_contribution = Utc::now();
+                contrib_info.public_key = keypair.pubkey().to_string();
 
-            contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
+                contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
+            }
         }
         CeremonyOpt::CloseCeremony(mut url) => {
             let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(true)})
