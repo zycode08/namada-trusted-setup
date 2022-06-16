@@ -546,7 +546,11 @@ pub async fn post_contribution_info(
     let contributor_clone = contributor.clone();
     let read_lock = (*coordinator).clone().read_owned().await;
 
-    if !task::spawn_blocking(move || read_lock.is_current_contributor(&contributor_clone)).await? {
+    if !task::spawn_blocking(move || {
+        read_lock.is_current_contributor(&contributor_clone) || read_lock.is_finished_contributor(&contributor_clone)
+    })
+    .await?
+    {
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(
             contributor,
