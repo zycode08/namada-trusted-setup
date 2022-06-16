@@ -1523,7 +1523,7 @@ impl Coordinator {
                     .to_path(&Locator::ContributionFile(response_file_locator))?
             );
             debug!("Response is {}", pretty_hash!(&response_reader));
-            debug!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
+            info!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
 
             // Fetch the challenge hash from the response file.
             let challenge_hash_in_response = &response_reader
@@ -1800,7 +1800,7 @@ impl Coordinator {
                 "Response is located in {}",
                 self.storage.to_path(&response_file_locator)?
             );
-            debug!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
+            info!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
 
             // Fetch the challenge hash from the response file.
             let challenge_hash_in_response = &response_reader

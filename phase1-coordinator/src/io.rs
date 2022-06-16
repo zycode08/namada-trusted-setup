@@ -69,7 +69,7 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
 
         // Print mnemonic to the user
         println!("Safely store your 24 words mnemonic: {}", mnemonic);
-        get_user_input(format!("Press any key when you've done it...").as_str(), None)?;
+        get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
 
         // Check if the user has correctly stored the mnemonic
         #[cfg(not(debug_assertions))]
