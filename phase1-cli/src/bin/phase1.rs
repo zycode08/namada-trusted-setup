@@ -107,6 +107,7 @@ fn compute_contribution(
     challenge: &[u8],
     challenge_hash: &[u8],
 ) -> Result<()> {
+    // FIXME: challenge hash must be written before this function
     let mut response_writer = File::create(filename)?;
     response_writer.write_all(challenge_hash)?;
     let start = Instant::now();
@@ -127,7 +128,7 @@ async fn contribute(
     coordinator: &mut Url,
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
-) -> Result<()> {
+) -> Result<()> { // FIXME: refactor into different functions
     // Get the necessary info to compute the contribution
     let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
@@ -157,18 +158,42 @@ async fn contribute(
         round_height, base58_pubkey
     );
 
-    contrib_info.timestamps.start_computation = Utc::now();
-    let filename_copy = filename.clone();
-    tokio::task::spawn_blocking(move || {
-        compute_contribution(
-            filename_copy.as_str(),
-            &challenge,
-            challenge_hash.to_vec().as_ref(),
-        )
-    })
-    .await??;
+    // FIXME: manage executions path
+    let offline = io::get_user_input(
+        "Do you want to contribute on another machine? [y/n]",
+        Some(&Regex::new(r"(?i)[yn]")?),
+    )?
+    .to_lowercase();
+
+    if offline == "y" {
+        // FIXME: wait for file to be produced
+    } else {
+        let custom_seed = io::get_user_input(
+            "Do you want to input your own seed of randomness? [y/n]",
+            Some(&Regex::new(r"(?i)[yn]")?),
+        )?
+        .to_lowercase();
+    }
+
+    contrib_info.timestamps.start_computation = Utc::now(); //FIXME: correct place?
+
+    let contribution = if contrib_info.is_contest_participant {
+        // FIXME: whait for the file to be produced
+        //FIXME: print to the user the name of the file
+    } else {
+        let filename_copy = filename.clone();
+        tokio::task::spawn_blocking(move || {
+            compute_contribution(
+                filename_copy.as_str(),
+                &challenge,
+                challenge_hash.to_vec().as_ref(),
+            )
+        })
+        .await??;
+
+        tokio::task::spawn_blocking(move || get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)).await??;
+    };
     contrib_info.timestamps.end_computation = Utc::now();
-    let contribution = tokio::task::spawn_blocking(move || get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)).await??;
 
     // Update contribution info
     let contribution_file_hash = calculate_hash(contribution.as_ref());
@@ -216,6 +241,7 @@ async fn contribute(
     Ok(())
 }
 
+/// Waits in line until its time to contribute
 async fn contribution_loop(
     client: &Client,
     coordinator: &mut Url,

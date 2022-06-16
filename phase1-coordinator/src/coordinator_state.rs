@@ -1507,6 +1507,10 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
+        // FIXME: add ban if IP address has already been seen
+
+        // FIXME: add pubkey check
+
         match &participant {
             Participant::Contributor(_) => {
                 // Check if the contributor is authorized.

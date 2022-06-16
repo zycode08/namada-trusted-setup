@@ -80,8 +80,8 @@ type Result<T> = std::result::Result<T, ResponseError>;
 
 /// A signed incoming request. Contains the pubkey to check the signature. If the
 /// request is None the signature is computed on the pubkey itself.
-/// Signature must be computed on the Json encoding of request and relies on
-/// the [`Production`] signature scheme  
+/// Signature must be computed on the hash of the Json encoding of request and relies on
+/// the [`Production`] signature scheme
 #[derive(Deserialize, Serialize)]
 pub struct SignedRequest<T>
 where
@@ -104,7 +104,7 @@ impl<T: Serialize> Deref for SignedRequest<T> {
 }
 
 impl<T: Serialize> SignedRequest<T> {
-    fn verify(&self) -> Result<()> {
+    fn verify(&self) -> Result<()> { //FIXME: could this take the entire Json<SignedRequest> to prevent the need of reserialization?
         let mut request = json::to_string(&self.pubkey)?;
 
         if let Some(ref r) = self.request {
@@ -548,9 +548,7 @@ pub async fn post_contribution_info(
 
     if !task::spawn_blocking(move || {
         read_lock.is_current_contributor(&contributor_clone) || read_lock.is_finished_contributor(&contributor_clone)
-    })
-    .await?
-    {
+    }).await? {
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(
             contributor,
