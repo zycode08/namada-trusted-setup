@@ -12,7 +12,7 @@ use std::{
 
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    commands::Computation,
+    commands::{Computation, RandomSource},
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
     rest::{self, ContributorStatus, PostChunkRequest, SignedRequest},
@@ -543,7 +543,8 @@ fn test_contribution() {
 
     let mut contribution: Vec<u8> = Vec::new();
     contribution.write_all(challenge_hash.as_slice()).unwrap();
-    Computation::contribute_test_masp(&challenge, &mut contribution);
+    let entropy = RandomSource::Entropy(String::from("entropy"));
+    Computation::contribute_test_masp(&challenge, &mut contribution, &entropy);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
     let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());

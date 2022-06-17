@@ -194,6 +194,8 @@ impl PostChunkRequest {
 // -- REST API ENDPOINTS --
 //
 
+// FIXME: review which spawn_blocking are necessary
+
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<request>")]
 pub async fn join_queue(
@@ -543,18 +545,16 @@ pub async fn post_contribution_info(
 
     // Check participant is registered in the ceremony
     let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
-    let contributor_clone = contributor.clone();
-    let read_lock = (*coordinator).clone().read_owned().await;
+    let read_lock = coordinator.read().await;
 
-    if !task::spawn_blocking(move || {
-        read_lock.is_current_contributor(&contributor_clone) || read_lock.is_finished_contributor(&contributor_clone)
-    }).await? {
+    if !(read_lock.is_current_contributor(&contributor) || read_lock.is_finished_contributor(&contributor)) {
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(
             contributor,
             String::from("/contributor/contribution_info"),
         ));
     }
+    drop(read_lock);
 
     // Write contribution info to file
     let contribution_info = signed_request.request.clone().unwrap();
