@@ -53,7 +53,7 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
 /// Generates a new [`KeyPair`] from a mnemonic. If argument `from_mnemonic` is set
 /// then the keypair is generated from the mnemonic provided by the user, otherwise
 /// it's generated randomly.
-pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
+pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> { // FIXME: split into two functions
     let mnemonic = if from_mnemonic {
         let mnemonic_str = get_user_input(
             format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
@@ -73,6 +73,7 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
         get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
 
         // Check if the user has correctly stored the mnemonic
+        // FIXME: clear terminal before calling this function
         #[cfg(not(debug_assertions))]
         check_mnemonic(&mnemonic)?;
 

@@ -8,7 +8,7 @@ use std::{io::Write, net::IpAddr, sync::Arc};
 
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    commands::Computation,
+    commands::{Computation, RandomSource},
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, Task},
     rest::{self, PostChunkRequest},
@@ -359,6 +359,7 @@ async fn test_wrong_post_contribution_info() {
 ///
 #[tokio::test]
 async fn test_contribution() {
+    use rand::Rng;
     use setup_utils::calculate_hash;
 
     let client = Client::new();
@@ -396,7 +397,8 @@ async fn test_contribution() {
 
     let mut contribution: Vec<u8> = Vec::new();
     contribution.write_all(challenge_hash.as_slice()).unwrap();
-    Computation::contribute_test_masp(&challenge, &mut contribution);
+    let seed = RandomSource::Seed(rand::thread_rng().gen::<[u8; 32]>());
+    Computation::contribute_test_masp(&challenge, &mut contribution, &seed);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
     let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
