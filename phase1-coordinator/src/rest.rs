@@ -197,6 +197,8 @@ impl PostChunkRequest {
 // -- REST API ENDPOINTS --
 //
 
+// FIXME: review which spawn_blocking are necessary
+
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<request>")]
 pub async fn join_queue(
