@@ -159,7 +159,7 @@ impl Computation {
 
     #[cfg(not(debug_assertions))]
     pub fn contribute_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W, rand_source: &RandomSource) {
-        // Create an RNG as following: FIXME: correct logic?
+        // Create an RNG as following:
         //  - if the user provides a seed, create the rng from that seed
         //  - if the user provides entropy, create the rng from the combination of OS randomness and user entropy
         let mut rng = {
@@ -258,7 +258,7 @@ impl Computation {
     }
 
     #[cfg(debug_assertions)]
-    pub fn contribute_test_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W, rand_source: &RandomSource) { //FIXME: update calls to this funciton
+    pub fn contribute_test_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W, rand_source: &RandomSource) {
         // Create an RNG as following:
         //  - if the user provides a seed, create the rng from that seed
         //  - if the user provides entropy, create the rng from the combination of OS randomness and user entropy

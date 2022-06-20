@@ -147,6 +147,7 @@ pub enum CoordinatorError {
     ParticipantHasNoRemainingTasks,
     ParticipantHasRemainingTasks,
     ParticipantInCurrentRoundCannotJoinQueue,
+    ParticipantIpAlreadyAdded,
     ParticipantLockedChunkWithManyContributions,
     ParticipantMissing,
     ParticipantMissingDisposingTask,
