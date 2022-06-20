@@ -34,6 +34,7 @@ serde-aux = { version = "3.0" }
 serde-diff = { version = "0.4" }
 serde_json = { version = "1.0" }
 serde_with = { version = "1.8", features = ["macros"] }
+termion = "1.5.6"
 thiserror = { version = "1.0" }
 time = { version = "0.3", features = ["serde-human-readable", "macros"] }
 tracing = { version = "0.1" }

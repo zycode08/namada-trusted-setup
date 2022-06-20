@@ -1502,14 +1502,26 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
+        // Check that the participant hasn't been already seen in the past.
+        for (k, v) in &self.finished_contributors {
+            for (p, _) in v {
+                if &participant == p {
+                    return Err(CoordinatorError::ParticipantAlreadyAdded);
+                }
+            }
+        }
+
         // Check that the participant is not in precommit for the next round.
         if self.next.contains_key(&participant) {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
-        // FIXME: add ban if IP address has already been seen
-
-        // FIXME: add pubkey check
+        // Check that the pariticipant IP is not known.
+        if let Some(ip) = participant_ip {
+            if self.is_duplicate_ip(&ip) {
+                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+            }
+        }
 
         match &participant {
             Participant::Contributor(_) => {
@@ -1527,22 +1539,6 @@ impl CoordinatorState {
             }
             Participant::Verifier(_) => {
                 return Err(CoordinatorError::ExpectedContributor);
-            }
-        }
-
-        if !self.environment.disable_reliability_zeroing() {
-            // Zero the reliability score if the participant is joining with a known IP.
-            if let Some(ip) = participant_ip {
-                if self.is_duplicate_ip(&ip) {
-                    reliability_score = 0;
-
-                    // Also zero the reliability scores of existing participants in the queue with the
-                    // same IP.
-                    self.zero_duplicate_ips(&ip);
-                }
-                // Map the new IP to the address.
-                let participants = self.contributor_ips.entry(ip).or_insert(HashSet::new());
-                participants.insert(participant.clone());
             }
         }
 

@@ -270,6 +270,7 @@ pub async fn get_contributions_info(
     coordinator_address: &mut Url,
 ) -> Result<Vec<TrimmedContributionInfo>> {
     coordinator_address.set_path("/contribution_info");
+    // FIXME: manage accept-encoding header with compression only in production build (create a feature aws)
     let req = client.get(coordinator_address.to_owned());
     let response = req.send().await?;
 
