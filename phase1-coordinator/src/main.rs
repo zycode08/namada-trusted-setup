@@ -43,7 +43,8 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
 /// Rocket main function using the [`tokio`] runtime
 #[rocket::main]
 pub async fn main() {
-    tracing_subscriber::fmt::init();
+    let tracing_enable_color = std::env::var("RUST_LOG_COLOR").is_ok();
+    tracing_subscriber::fmt().with_ansi(tracing_enable_color).init();
 
     // Set the environment
     let parameters = Parameters::TestAnoma {
