@@ -1510,15 +1510,24 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
+        // Check that the participant hasn't been already seen in the past.
+        for (k, v) in &self.finished_contributors {
+            for (p, _) in v {
+                if &participant == p {
+                    return Err(CoordinatorError::ParticipantAlreadyAdded);
+                }
+            }
+        }
+
         // Check that the participant is not in precommit for the next round.
         if self.next.contains_key(&participant) {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
-        // Check that the participant hasn't been already seen in the past.
-        for (_, inner) in &self.finished_contributors {
-            if inner.contains_key(&participant) {
-                return Err(CoordinatorError::ParticipantAlreadyAdded);
+        // Check that the pariticipant IP is not known.
+        if let Some(ip) = participant_ip {
+            if self.is_duplicate_ip(&ip) {
+                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
             }
         }
 
@@ -1549,7 +1558,7 @@ impl CoordinatorState {
 
         // Add ip (if any) to the set of known addresses
         if let Some(ip) = participant_ip {
-            self.contributors_ips.insert(ip, participant.clone());
+            self.contributors_ips.insert(ip, participant);
         }
 
         Ok(())

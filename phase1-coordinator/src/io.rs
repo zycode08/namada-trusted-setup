@@ -7,6 +7,7 @@ use regex::Regex;
 use termion::screen::AlternateScreen;
 use thiserror::Error;
 use tracing::debug;
+use termion::screen::AlternateScreen;
 
 const MNEMONIC_LEN: usize = 24;
 const MNEMONIC_CHECK_LEN: usize = 3;
@@ -56,7 +57,7 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
 /// Generates a new [`KeyPair`] from a mnemonic. If argument `from_mnemonic` is set
 /// then the keypair is generated from the mnemonic provided by the user, otherwise
 /// it's generated randomly.
-pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> { // FIXME: split into two functions
+pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
     let mnemonic = if from_mnemonic {
         let mnemonic_str = get_user_input(
             format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
@@ -79,7 +80,6 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> { // FIXME: spli
         } // End scope, get back to stdin/stdout
 
         // Check if the user has correctly stored the mnemonic
-        // FIXME: clear terminal before calling this function
         #[cfg(not(debug_assertions))]
         check_mnemonic(&mnemonic)?;
 
