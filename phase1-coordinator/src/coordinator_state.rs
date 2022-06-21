@@ -1492,6 +1492,15 @@ impl CoordinatorState {
         mut reliability_score: u8,
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
+        // Check that the pariticipant IP is not known.
+        if let Some(ip) = participant_ip {
+            println!("I'M IN IP CHECK"); // FIXME: remove
+            println!("IPs: {:#?}", self.contributor_ips); //FIXME: remove
+            if self.is_duplicate_ip(&ip) {
+                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+            }
+        }
+
         // Check that the participant is not banned from participating.
         if self.banned.contains(&participant) {
             return Err(CoordinatorError::ParticipantBanned);
@@ -1502,24 +1511,15 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
-        // Check that the participant hasn't been already seen in the past.
-        for (k, v) in &self.finished_contributors {
-            for (p, _) in v {
-                if &participant == p {
-                    return Err(CoordinatorError::ParticipantAlreadyAdded);
-                }
-            }
-        }
-
         // Check that the participant is not in precommit for the next round.
         if self.next.contains_key(&participant) {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
-        // Check that the pariticipant IP is not known.
-        if let Some(ip) = participant_ip {
-            if self.is_duplicate_ip(&ip) {
-                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+        // Check that the participant hasn't been already seen in the past.
+        for (_, inner) in &self.finished_contributors {
+            if inner.contains_key(&participant) {
+                return Err(CoordinatorError::ParticipantAlreadyAdded);
             }
         }
 
@@ -1545,6 +1545,8 @@ impl CoordinatorState {
         // Add the participant to the queue.
         self.queue
             .insert(participant, (reliability_score, None, time.now_utc(), time.now_utc()));
+
+        self.contributor_ips.insert(k, v)
 
         Ok(())
     }

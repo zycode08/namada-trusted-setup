@@ -81,6 +81,7 @@ version = "0.3.4"
 
 [dev-dependencies]
 serial_test = {version = "0.5"}
+tempfile = "3.3.0"
 
 [features]
 default = []

@@ -109,7 +109,8 @@ fn build_context() -> TestCtx {
             rest::verify_chunks,
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
-            rest::get_contributions_info
+            rest::get_contributions_info,
+            rest::get_healthcheck
         ])
         .manage(coordinator);
 
@@ -160,6 +161,30 @@ fn test_stop_coordinator() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
+}
+
+#[test]
+fn test_get_healthcheck() {
+    // Create status file
+    let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
+    let file_content = "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
+    status_file.write_all(file_content.as_bytes());
+    std::env::set_var("HEALTH_PATH", status_file.path());
+
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    let req = client.get("/healthcheck");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+
+    // It's impossible to extract the String out of the Body struct of the response, need to pass through serde
+    let response_body: serde_json::Value = response.into_json().unwrap();
+    let response_str = serde_json::to_string(&response_body).unwrap();
+    if response_str != file_content {
+        panic!("JSON status content does'nt match the expected one")
+    }
 }
 
 #[test]
@@ -321,10 +346,20 @@ fn test_join_queue() {
         .json(&sig_req)
         .remote(socket_address);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
+    assert_eq!(response.status(), Status::Ok); //FIXME: this souldn't pass the ip test
     assert!(response.body().is_none());
 
     // Wrong request, already existing contributor
+    req = client
+        .post("/contributor/join_queue")
+        .json(&sig_req)
+        .remote(socket_address);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+
+    // FIXME: Wrong request, already seen IP
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
         .json(&sig_req)

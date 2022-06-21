@@ -112,7 +112,8 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
             rest::verify_chunks,
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
-            rest::get_contributions_info
+            rest::get_contributions_info,
+            rest::get_healthcheck
         ])
         .manage(coordinator);
 

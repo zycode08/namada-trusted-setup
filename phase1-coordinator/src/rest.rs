@@ -20,7 +20,7 @@ use rocket::{
         Deserialize,
         Serialize,
     },
-    tokio::{sync::RwLock, task},
+    tokio::{fs, sync::RwLock, task},
     Request,
     Shutdown,
     State,
@@ -61,6 +61,8 @@ pub enum ResponseError {
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
     UnknownTask(Task),
+    #[error("Error with env variable: {0}")]
+    VarEnv(#[from] std::env::VarError),
     #[error("Error while verifying a contribution: {0}")]
     VerificationError(String),
 }
@@ -194,8 +196,6 @@ impl PostChunkRequest {
 // -- REST API ENDPOINTS --
 //
 
-// FIXME: review which spawn_blocking are necessary
-
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<request>")]
 pub async fn join_queue(
@@ -256,15 +256,13 @@ pub async fn get_chunk(
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
 
-    let read_lock = (*coordinator).clone().read_owned().await;
-
-    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await? {
+    match coordinator.read().await.state().current_participant_info(&contributor) {
         Some(info) => {
             if !info.pending_tasks().contains(&task) {
                 return Err(ResponseError::UnknownTask(task));
             }
             Ok(Json(task))
-        }
+        },
         None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
     }
 }
@@ -414,9 +412,7 @@ pub async fn get_tasks_left(
 
     let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
 
-    let read_lock = (*coordinator).clone().read_owned().await;
-
-    match task::spawn_blocking(move || read_lock.state().current_participant_info(&contributor).cloned()).await? {
+    match coordinator.read().await.state().current_participant_info(&contributor) {
         Some(info) => Ok(Json(info.pending_tasks().to_owned())),
         None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
     }
@@ -493,38 +489,23 @@ pub async fn get_contributor_queue_status(
 
     let read_lock = (*coordinator).clone().read_owned().await;
     // Check that the contributor is authorized to lock a chunk in the current round.
-    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor)).await? {
+    if task::spawn_blocking(move || read_lock.is_current_contributor(&contrib)).await? {
         return Ok(Json(ContributorStatus::Round));
     }
 
-    let read_lock = (*coordinator).clone().read_owned().await;
-    let coordinator_state = task::spawn_blocking(move || read_lock.state()).await?;
+    if coordinator.read().await.is_queue_contributor(&contributor) {
+        let queue_size = coordinator.read().await.number_of_queue_contributors() as u64;
 
-    let read_lock = (*coordinator).clone().read_owned().await;
-    let contributor = contrib.clone();
-
-    if task::spawn_blocking(move || read_lock.is_queue_contributor(&contributor)).await? {
-        let state = coordinator_state.clone();
-        let queue_size = task::spawn_blocking(move || state.number_of_queue_contributors()).await? as u64;
-        let contributor = contrib.clone();
-
-        let state = coordinator_state.clone();
-        let queue_position =
-            match task::spawn_blocking(move || state.queue_contributor_info(&contributor).cloned()).await? {
-                Some((_, Some(round), _, _)) => {
-                    let state = coordinator_state.clone();
-                    round - task::spawn_blocking(move || state.current_round_height()).await?
-                }
-                Some((_, None, _, _)) => queue_size,
-                None => return Ok(Json(ContributorStatus::Other)),
-            };
+        let queue_position = match coordinator.read().await.state().queue_contributor_info(&contributor) {
+            Some((_, Some(round), _, _)) => round - coordinator.read().await.state().current_round_height(),
+            Some((_, None, _, _)) => queue_size,
+            None => return Ok(Json(ContributorStatus::Other)),
+        };
 
         return Ok(Json(ContributorStatus::Queue(queue_position, queue_size)));
     }
 
-    let read_lock = (*coordinator).clone().read_owned().await;
-    let contributor = contrib.clone();
-    if task::spawn_blocking(move || read_lock.is_finished_contributor(&contributor)).await? {
+    if coordinator.read().await.is_finished_contributor(&contributor) {
         return Ok(Json(ContributorStatus::Finished));
     }
 
@@ -586,6 +567,15 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
     };
 
     Ok(Json(summary))
+}
+
+/// Retrieve healthcheck info. This endpoint is accessible by anyone and does not require a signed request.
+#[get("/healthcheck", format = "json")]
+pub async fn get_healthcheck() -> Result<String> {
+    let path = std::env::var("HEALTH_PATH")?;
+    let content = fs::read_to_string(path).await?;
+
+    Ok(content)
 }
 
 #[cfg(test)]

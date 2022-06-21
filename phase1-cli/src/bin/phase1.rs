@@ -27,13 +27,11 @@ use bs58;
 
 use regex::Regex;
 
-use tokio::{fs as async_fs, io::AsyncWriteExt, time};
+use tokio::{fs as async_fs, io::AsyncWriteExt, time, task::JoinHandle};
 
 use tracing::{debug, error, info, trace};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
-
-// FIXME: move non cli functions to different file?
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -150,7 +148,7 @@ fn compute_contribution_offline(filename: &str) -> Result<()> {
  /// Online execution branch
 fn compute_contribution_online(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
-        let seed_str = io::get_user_input("Enter your own seed of randomness, 32 bytes hex encoded", r"[[:xdigit:]]{64}")?;
+        let seed_str = io::get_user_input("Enter your own seed of randomness, 32 bytes hex encoded", Some(&Regex::new(r"[[:xdigit:]]{64}")?))?;
         let mut seed = [0u8; SEED_LENGTH];
 
         for (i, val) in hex::decode(seed_str)?.into_iter().enumerate() {
@@ -172,12 +170,14 @@ fn compute_contribution_online(custom_seed: bool, challenge: &[u8], filename: &s
     Ok(())
 }
 
+/// Performs the contribution sequence
 async fn contribute(
     client: &Client,
     coordinator: &mut Url,
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
-) -> Result<()> { // FIXME: refactor into smaller functions
+    heartbeat_handle: &JoinHandle<()>
+) -> Result<()> {
     // Get the necessary info to compute the contribution
     let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
@@ -211,7 +211,7 @@ async fn contribute(
 
     // Ask more questions to the user (only if not contest participant)
     if !contrib_info.is_contest_participant {
-        contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await?? // FIXME: execution stalls here
+        contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??
     }
 
     let filename_copy = filename.clone();
@@ -225,7 +225,7 @@ async fn contribute(
     let contribution = tokio::task::spawn_blocking(move || get_file_as_byte_vec(filename.as_str(), round_height, contribution_id)).await??;
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
-    debug!("Completed contribution in {:?}", contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation); //FIXME: check that it prints a Duration
+    info!("Completed contribution in {} seconds", (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds());
 
     // Update contribution info
     let contribution_file_hash = calculate_hash(contribution.as_ref());
@@ -257,6 +257,14 @@ async fn contribute(
     requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
     contrib_info.timestamps.end_contribution = Utc::now();
 
+    // Interrupt heartbeat, to prevent heartbeating during verification
+    // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
+    //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
+    //  only gets detached from the main execution unit but keeps running in the background until the main
+    //  function returns. This would cause the contributor to send heartbeats even after it has been removed
+    //  from the list of current contributors, causing an error
+    heartbeat_handle.abort();
+
     // Compute signature of contributor info
     contrib_info
         .try_sign(keypair)
@@ -273,7 +281,7 @@ async fn contribute(
     Ok(())
 }
 
-/// Waits in line until its time to contribute
+/// Waits in line until it's time to contribute
 async fn contribution_loop(
     client: &Client,
     coordinator: &mut Url,
@@ -317,15 +325,9 @@ async fn contribution_loop(
                 );
             }
             ContributorStatus::Round => {
-                contribute(client, coordinator, keypair, contrib_info.clone())
+                contribute(client, coordinator, keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
-                // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
-                //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
-                //  only gets detached from the main execution unit but keeps running in the background until the main
-                //  function returns. This would cause the contributor to send heartbeats even after it has been removed
-                //  from the list of current contributors, causing an error
-                heartbeat_handle.abort();
             }
             ContributorStatus::Finished => {
                 println!("Contribution done!");
@@ -437,3 +439,7 @@ async fn main() {
         }
     }
 }
+
+// FIXME: run tests
+// FIXME: manual tests of contribution paths
+// FIXME: format
