@@ -2725,9 +2725,8 @@ impl Coordinator {
     /// coordinator is using.
     ///
     #[inline]
-    pub fn state(&self) -> CoordinatorState {
-        // Clone the state struct.
-        self.state.clone()
+    pub fn state(&self) -> &CoordinatorState {
+        &self.state
     }
 
     ///
