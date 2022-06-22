@@ -27,7 +27,7 @@ use bs58;
 
 use regex::Regex;
 
-use tokio::{fs as async_fs, io::AsyncWriteExt, time};
+use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 
 use tracing::{debug, error, info, trace};
 
@@ -442,16 +442,6 @@ async fn main() {
                 .await
                 .unwrap()
                 .expect("Error while generating the keypair");
-
-                tokio::task::spawn_blocking(move || compute_contribution_online(get_seed_of_randomness().unwrap(), &challenge, OFFLINE_CONTRIBUTION_FILE_NAME)).await.unwrap().expect("Error in computing randomness");
-                return;
-            } 
-
-            // Perform the entire contribution cycle 
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
 
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await

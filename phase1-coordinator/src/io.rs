@@ -7,7 +7,6 @@ use regex::Regex;
 use termion::screen::AlternateScreen;
 use thiserror::Error;
 use tracing::debug;
-use termion::screen::AlternateScreen;
 
 const MNEMONIC_LEN: usize = 24;
 const MNEMONIC_CHECK_LEN: usize = 3;
