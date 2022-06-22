@@ -21,12 +21,12 @@ use rocket::{
         Serialize,
     },
     tokio::{fs, sync::RwLock, task},
-    Request,
+    request::{self, Request, FromRequest, Outcome},
     Shutdown,
     State,
 };
 
-use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{collections::LinkedList, io::Cursor, net::{SocketAddr, IpAddr}, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
 use tracing::debug;
@@ -35,6 +35,11 @@ use tracing::debug;
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
+
+// FIXME: complete FIXME: need these?
+const BODY_DIGEST_HEADER: &str = "";
+const PUBKEY_HEADER: &str = "";
+const SIGNATURE_HEADER: &str = "";
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
 
@@ -47,6 +52,8 @@ pub enum ResponseError {
     InvalidSignature,
     #[error("Io Error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("The required {0} header was missing from the incoming request")]
+    MissingRequiredHeader(String),
     #[error("Thread panicked: {0}")]
     RuntimeError(#[from] task::JoinError),
     #[error("Error with Serde: {0}")]
@@ -79,6 +86,41 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 }
 
 type Result<T> = std::result::Result<T, ResponseError>;
+
+// FIXME: how to verify coordinator endpoints? I need to access the Coordinator managed state for that
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for Participant { //FIXME: add this request guard to all the endpoint except the last two
+    type Error = ResponseError;
+
+    async fn from_request(request: & 'r Request<'_>) -> Outcome<Self, Self::Error> {
+        // Retrieve mandatory headers
+        let headers = request.headers();
+        // let signature = headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?; // FIXME: header name?
+        // let pubkey = headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?; //FIXME: header name?
+        let headers_sig_list = headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?; //FIXME: header name?
+        let misc_headers = headers_sig_list.split(' ').collect(); //FIXME: what's the separator here?
+        // FIXME: which headers to add in the message to sign? "Host date digest content-length"
+        // FIXME: digest in GET request?
+
+
+        // If post request also get the hash of body from header
+        let body_hash = match request.method() {
+            rocket::http::Method::Post => Some(headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?), //FIXME: header name?
+            _ => None,
+        };
+
+        // FIXME: Reconstruct the message to sign 
+        // FIXME: prepare a function to share with the client to do this
+        let message = ();
+
+        // Check the signature of the request
+        if Production.verify(pubkey, message, signature) {
+            Outcome::Success(Self::new_contributor(pubkey))
+        } else {
+            Outcome::Failure((Status::BadRequest, ResponseError::InvalidSignature))
+        }
+    }
+}
 
 /// A signed incoming request. Contains the pubkey to check the signature. If the
 /// request is None the signature is computed on the pubkey itself.
@@ -204,7 +246,7 @@ impl PostChunkRequest {
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
     request: Json<SignedRequest<()>>,
-    contributor_ip: SocketAddr,
+    contributor_ip: IpAddr, //FIXME: check this, could be None, probably should take parameter as Option<IpAddr>. Or use SocketAddr?
 ) -> Result<()> {
     let signed_request = request.into_inner();
 
@@ -215,7 +257,7 @@ pub async fn join_queue(
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.add_to_queue(contributor, Some(contributor_ip.ip()), 10)).await? {
+    match task::spawn_blocking(move || write_lock.add_to_queue(contributor, Some(contributor_ip), 10)).await? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -246,7 +288,7 @@ pub async fn lock_chunk(
 #[get("/download/chunk", format = "json", data = "<get_chunk_request>")]
 pub async fn get_chunk(
     coordinator: &State<Coordinator>,
-    get_chunk_request: Json<SignedRequest<LockedLocators>>,
+    get_chunk_request: Json<SignedRequest<LockedLocators>>, //FIXME: body -> POST
 ) -> Result<Json<Task>> {
     let signed_request = get_chunk_request.into_inner();
 
@@ -274,7 +316,7 @@ pub async fn get_chunk(
 #[get("/contributor/challenge", format = "json", data = "<locked_locators>")]
 pub async fn get_challenge(
     coordinator: &State<Coordinator>,
-    locked_locators: Json<SignedRequest<LockedLocators>>,
+    locked_locators: Json<SignedRequest<LockedLocators>>,  //FIXME: body -> POST
 ) -> Result<Json<Vec<u8>>> {
     let signed_request = locked_locators.into_inner();
 
@@ -376,7 +418,7 @@ pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> 
 /// Update the [Coordinator](`crate::Coordinator`) state. This endpoint is accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
 #[get("/update", format = "json", data = "<request>")]
-pub async fn update_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
+pub async fn update_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> { //FIXME: no body, request guards
     let signed_request = request.into_inner();
 
     // Verify request
@@ -406,7 +448,7 @@ pub async fn heartbeat(coordinator: &State<Coordinator>, request: Json<SignedReq
 #[get("/contributor/get_tasks_left", format = "json", data = "<request>")]
 pub async fn get_tasks_left(
     coordinator: &State<Coordinator>,
-    request: Json<SignedRequest<()>>,
+    request: Json<SignedRequest<()>>, //FIXME: no body, request guards
 ) -> Result<Json<LinkedList<Task>>> {
     let signed_request = request.into_inner();
 
@@ -425,7 +467,7 @@ pub async fn get_tasks_left(
 #[get("/stop", format = "json", data = "<request>")]
 pub async fn stop_coordinator(
     coordinator: &State<Coordinator>,
-    request: Json<SignedRequest<()>>,
+    request: Json<SignedRequest<()>>, //FIXME: no body, request guards
     shutdown: Shutdown,
 ) -> Result<()> {
     let signed_request = request.into_inner();
@@ -467,7 +509,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 /// Verify all the pending contributions. This endpoint is accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
 #[get("/verify", format = "json", data = "<request>")]
-pub async fn verify_chunks(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
+pub async fn verify_chunks(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> { //FIXME: no body, request guards
     let signed_request = request.into_inner();
 
     // Verify request
@@ -480,7 +522,7 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, request: Json<Signe
 #[get("/contributor/queue_status", format = "json", data = "<request>")]
 pub async fn get_contributor_queue_status(
     coordinator: &State<Coordinator>,
-    request: Json<SignedRequest<()>>,
+    request: Json<SignedRequest<()>>, //FIXME: no body, request guards
 ) -> Result<Json<ContributorStatus>> {
     let signed_request = request.into_inner();
 
