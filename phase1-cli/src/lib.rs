@@ -48,9 +48,9 @@ pub enum CeremonyOpt {
         url: CoordinatorUrl,
         #[structopt(
             long,
-            help = "Perform only the randomness computation step skipping all communication",
+            help = "Perform only the randomness computation step skipping all communication"
         )]
-        offline: bool
+        offline: bool,
     },
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),

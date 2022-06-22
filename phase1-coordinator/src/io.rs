@@ -1,12 +1,12 @@
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
 use rand::prelude::SliceRandom;
 use regex::Regex;
+use termion::screen::AlternateScreen;
 use thiserror::Error;
 use tracing::debug;
-use termion::screen::AlternateScreen;
 
 const MNEMONIC_LEN: usize = 24;
 const MNEMONIC_CHECK_LEN: usize = 3;
@@ -29,7 +29,7 @@ type Result<T> = std::result::Result<T, IOError>;
 
 /// Helper function to get input from the user. Accept an optional [`Regex`] to
 /// check the validity of the reply.
-pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>{
+pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String> {
     let mut response = String::new();
 
     loop {
@@ -68,7 +68,8 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
     } else {
         // Generate random mnemonic
         let mut rng = rand_06::thread_rng();
-        let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN).map_err(|e| IOError::MnemonicError(e))?;
+        let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
+            .map_err(|e| IOError::MnemonicError(e))?;
 
         // Print mnemonic to the user in a different terminal
         {

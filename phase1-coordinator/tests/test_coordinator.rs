@@ -81,7 +81,7 @@ fn build_context() -> TestCtx {
         keypair: coordinator_keypair,
         locked_locators: None,
     };
- 
+
     coordinator
         .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
         .unwrap();
@@ -167,7 +167,8 @@ fn test_stop_coordinator() {
 fn test_get_healthcheck() {
     // Create status file
     let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
-    let file_content = "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
+    let file_content =
+        "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
     status_file.write_all(file_content.as_bytes());
     std::env::set_var("HEALTH_PATH", status_file.path());
 

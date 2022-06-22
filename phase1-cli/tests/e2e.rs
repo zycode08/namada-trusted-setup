@@ -458,9 +458,7 @@ async fn test_contribution() {
         .unwrap();
 
     // Get contributions info
-    let summary = requests::get_contributions_info(&client, &mut url)
-        .await
-        .unwrap();
+    let summary = requests::get_contributions_info(&client, &mut url).await.unwrap();
     assert_eq!(summary.len(), 1);
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());

@@ -106,7 +106,8 @@ impl<T: Serialize> Deref for SignedRequest<T> {
 }
 
 impl<T: Serialize> SignedRequest<T> {
-    fn verify(&self) -> Result<()> { //FIXME: could this take the entire Json<SignedRequest> to prevent the need of reserialization?
+    fn verify(&self) -> Result<()> {
+        //FIXME: could this take the entire Json<SignedRequest> to prevent the need of reserialization?
         let mut request = json::to_string(&self.pubkey)?;
 
         if let Some(ref r) = self.request {
@@ -262,7 +263,7 @@ pub async fn get_chunk(
                 return Err(ResponseError::UnknownTask(task));
             }
             Ok(Json(task))
-        },
+        }
         None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
     }
 }
@@ -556,9 +557,7 @@ pub async fn post_contribution_info(
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
 #[get("/contribution_info", format = "json")]
-pub async fn get_contributions_info(
-    coordinator: &State<Coordinator>,
-) -> Result<Json<Vec<TrimmedContributionInfo>>> {
+pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Json<Vec<TrimmedContributionInfo>>> {
     let read_lock = (*coordinator).clone().read_owned().await;
     let summary = match task::spawn_blocking(move || read_lock.storage().get(&Locator::ContributionsInfoSummary))
         .await?
