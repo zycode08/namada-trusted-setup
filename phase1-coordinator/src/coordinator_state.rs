@@ -950,8 +950,8 @@ pub struct CoordinatorState {
     current_round_height: Option<u64>,
     /// The map of unique contributors for the current round.
     current_contributors: HashMap<Participant, ParticipantInfo>,
-    /// The map of unique contributor IPs to participants.
-    contributor_ips: HashMap<IpAddr, HashSet<Participant>>,
+    /// The map of unique contributors and their IPs.
+    contributor_ips: HashSet<IpAddr>,
     /// The map of unique verifiers for the current round.
     current_verifiers: HashMap<Participant, ParticipantInfo>,
     /// The map of tasks pending verification in the current round.
@@ -982,7 +982,7 @@ impl CoordinatorState {
             current_metrics: None,
             current_round_height: None,
             current_contributors: HashMap::default(),
-            contributor_ips: HashMap::default(),
+            contributor_ips: HashSet::default(),
             current_verifiers: HashMap::default(),
             pending_verification: HashMap::default(),
             finished_contributors: HashMap::default(),
@@ -1186,7 +1186,7 @@ impl CoordinatorState {
     /// Returns `true` if a contributor has already entered the queue with this IP.
     ///
     pub fn is_duplicate_ip(&self, ip: &IpAddr) -> bool {
-        self.contributor_ips.contains_key(ip)
+        self.contributor_ips.contains(ip)
     }
 
     ///
@@ -1493,9 +1493,8 @@ impl CoordinatorState {
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
+        #[cfg(not(debug_assertions))]
         if let Some(ip) = participant_ip {
-            println!("I'M IN IP CHECK"); // FIXME: remove
-            println!("IPs: {:#?}", self.contributor_ips); //FIXME: remove
             if self.is_duplicate_ip(&ip) {
                 return Err(CoordinatorError::ParticipantIpAlreadyAdded);
             }
@@ -1544,9 +1543,12 @@ impl CoordinatorState {
 
         // Add the participant to the queue.
         self.queue
-            .insert(participant, (reliability_score, None, time.now_utc(), time.now_utc()));
+            .insert(participant.clone(), (reliability_score, None, time.now_utc(), time.now_utc()));
 
-        self.contributor_ips.insert(k, v)
+        // Add ip (if any) to the set of known addresses
+        if let Some(ip) = participant_ip {
+            self.contributor_ips.insert(ip);
+        }
 
         Ok(())
     }
@@ -2120,26 +2122,9 @@ impl CoordinatorState {
                 self.rollback_next_round(time);
             }
 
-            // Update the IP map, there are two cases:
-            // 1. The IP is associated only with the dropped participant, remove it.
-            // 2. The IP associated with the dropped participant is also associated with other participants, in
-            //    which case only remove the first relevant mapping.
-            let ips: Vec<_> = self
-                .contributor_ips
-                .iter()
-                .filter(|(_ip, participants)| participants.contains(&participant))
-                .map(|(&ip, participants)| (ip, participants.clone()))
-                .collect();
-
-            for (ip, participants) in ips {
-                if participants.len() == 1 {
-                    // Remove the IP address entirely.
-                    self.contributor_ips.remove(&ip);
-                } else if let Some(participants) = self.contributor_ips.get_mut(&ip) {
-                    // Remove only the associated participant, leaving the others and the IP in place.
-                    participants.remove(&participant);
-                }
-            }
+            // NOTE: we don't remove the ip address from the list of known one to
+            //  prevent a malicious contributor from constantly interrupting his contribution
+            //  and rejoyining the ceremony from the same IP
 
             return Ok(DropParticipant::DropQueue(DropQueueParticipantData {
                 participant: participant.clone(),
@@ -3256,30 +3241,6 @@ impl CoordinatorState {
         }
     }
 
-    ///
-    /// Updates the coordinator's state by zeroing the reliability score for participants using
-    /// the same IP.
-    ///
-    pub fn zero_duplicate_ips(&mut self, ip: &IpAddr) {
-        for participants in self.contributor_ips.get(ip) {
-            for participant in participants {
-                if let Some((reliability_score, _, _, _)) = self.queue.get_mut(participant) {
-                    *reliability_score = 0;
-                }
-
-                // Update the current contributors.
-                if let Some(participant_info) = self.current_contributors.get_mut(participant) {
-                    participant_info.reliability = 0;
-                }
-
-                // Update the next contributors.
-                if let Some(participant_info) = self.next.get_mut(participant) {
-                    participant_info.reliability = 0;
-                }
-            }
-        }
-    }
-
     /// Save the coordinator state in storage.
     #[inline]
     pub(crate) fn save(&self, storage: &mut Disk) -> Result<(), CoordinatorError> {
@@ -3484,13 +3445,13 @@ mod tests {
         state.drop_participant(&contributor_1, &time).unwrap();
 
         // Verify the IP still exists as one participant associated with it is left in the queue.
-        assert!(state.contributor_ips.contains_key(&contributor_ip));
+        assert!(state.contributor_ips.contains(&contributor_ip));
 
         // Drop the second participant.
         state.drop_participant(&contributor_2, &time).unwrap();
 
         // Verify the IP has been deleted.
-        assert!(!state.contributor_ips.contains_key(&contributor_ip));
+        assert!(!state.contributor_ips.contains(&contributor_ip));
     }
 
     #[test]
