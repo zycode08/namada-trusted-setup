@@ -3,7 +3,13 @@ use crate::{
     commands::SigningKey,
     environment::Environment,
     storage::{
-        ContributionLocator, ContributionSignatureLocator, Disk, Locator, Object, StorageLocator, StorageObject,
+        ContributionLocator,
+        ContributionSignatureLocator,
+        Disk,
+        Locator,
+        Object,
+        StorageLocator,
+        StorageObject,
     },
     CoordinatorError,
 };
