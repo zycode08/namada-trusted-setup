@@ -167,7 +167,7 @@ impl Computation {
             use rand_chacha::ChaChaRng;
             use std::convert::TryInto;
 
-            let h = match rand_source {
+            match rand_source {
                 RandomSource::Entropy(e) => {
                     let mut system_rng = rand::rngs::OsRng;
                     let mut h = Blake2b512::new();
@@ -180,12 +180,14 @@ impl Computation {
 
                     // Hash it all up to make a seed
                     h.update(e.as_bytes());
-                    h.finalize()
-                },
-               RandomSource::Seed(s) => GenericArray::from_slice(s).to_owned()
-            };
+                    let digest = h.finalize();
 
-            ChaChaRng::from_seed(h[0..32].try_into().unwrap())
+                    ChaChaRng::from_seed(digest[0..32].try_into().unwrap())
+                },
+               RandomSource::Seed(s) => {
+                    ChaChaRng::from_seed(*s)
+               }
+            }
         };
 
         let mut masp_challenge_reader = &challenge_reader[64..];
@@ -267,7 +269,7 @@ impl Computation {
             use rand_chacha::ChaChaRng;
             use std::convert::TryInto;
 
-            let h = match rand_source {
+            match rand_source {
                 RandomSource::Entropy(e) => {
                     let mut system_rng = rand::rngs::OsRng;
                     let mut h = Blake2b512::new();
@@ -280,12 +282,14 @@ impl Computation {
 
                     // Hash it all up to make a seed
                     h.update(e.as_bytes());
-                    h.finalize()
-                },
-               RandomSource::Seed(s) => GenericArray::from_slice(s).to_owned()
-            };
+                    let digest = h.finalize();
 
-            ChaChaRng::from_seed(h[0..32].try_into().unwrap())
+                    ChaChaRng::from_seed(digest[0..32].try_into().unwrap())
+                },
+               RandomSource::Seed(s) => {
+                    ChaChaRng::from_seed(*s)
+               }
+            }
         };
 
         let mut test_params =

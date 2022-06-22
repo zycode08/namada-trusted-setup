@@ -81,7 +81,7 @@ fn build_context() -> TestCtx {
         keypair: coordinator_keypair,
         locked_locators: None,
     };
-
+ 
     coordinator
         .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
         .unwrap();
@@ -183,7 +183,7 @@ fn test_get_healthcheck() {
     let response_body: serde_json::Value = response.into_json().unwrap();
     let response_str = serde_json::to_string(&response_body).unwrap();
     if response_str != file_content {
-        panic!("JSON status content does'nt match the expected one")
+        panic!("JSON status content doesn't match the expected one")
     }
 }
 
@@ -321,7 +321,7 @@ fn test_join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
+    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
     // Wrong request, non-json body
     let mut req = client.post("/contributor/join_queue");
@@ -346,10 +346,11 @@ fn test_join_queue() {
         .json(&sig_req)
         .remote(socket_address);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok); //FIXME: this souldn't pass the ip test
+    assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
-    // Wrong request, already existing contributor
+    // Wrong request, already seen IP
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
         .json(&sig_req)
@@ -358,8 +359,9 @@ fn test_join_queue() {
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
-    // FIXME: Wrong request, already seen IP
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
+    // Wrong request, already existing contributor
+    let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
         .json(&sig_req)
