@@ -1542,8 +1542,10 @@ impl CoordinatorState {
         }
 
         // Add the participant to the queue.
-        self.queue
-            .insert(participant.clone(), (reliability_score, None, time.now_utc(), time.now_utc()));
+        self.queue.insert(
+            participant.clone(),
+            (reliability_score, None, time.now_utc(), time.now_utc()),
+        );
 
         // Add ip (if any) to the set of known addresses
         if let Some(ip) = participant_ip {

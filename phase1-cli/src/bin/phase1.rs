@@ -27,7 +27,7 @@ use bs58;
 
 use regex::Regex;
 
-use tokio::{fs as async_fs, io::AsyncWriteExt, time, task::JoinHandle};
+use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 
 use tracing::{debug, error, info, trace};
 
@@ -92,11 +92,7 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    if custom_seed == "y" { Ok(true) } else { Ok(false) }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -112,7 +108,7 @@ fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<Contrib
     } else {
         if get_seed_of_randomness()? {
             contrib_info.is_own_seed_of_randomness = true;
-        } 
+        }
     }
 
     Ok(contrib_info)
@@ -137,12 +133,27 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 /// Contest and offline execution branches
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
     // Print instructions to the user
-    println!("Instructions:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony", contribution_filename, challenge_filename);
+    println!(
+        "Instructions:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
+        contribution_filename, challenge_filename
+    );
     println!("If you want to use the provided \"contribute --offline\" command follow these steps:");
-    println!("{:4}1- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"", "", challenge_filename, OFFLINE_CHALLENGE_FILE_NAME);
-    println!("{:4}2- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"", "", contribution_filename, OFFLINE_CONTRIBUTION_FILE_NAME);
-    println!("{:4}3- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"", "",);
-    println!("{:4}4- Copy the content of file \"{}\" back to this directory in the original file \"{}\" (overwrite the entire file)", "", OFFLINE_CONTRIBUTION_FILE_NAME, contribution_filename);
+    println!(
+        "{:4}1- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"",
+        "", challenge_filename, OFFLINE_CHALLENGE_FILE_NAME
+    );
+    println!(
+        "{:4}2- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"",
+        "", contribution_filename, OFFLINE_CONTRIBUTION_FILE_NAME
+    );
+    println!(
+        "{:4}3- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"",
+        "",
+    );
+    println!(
+        "{:4}4- Copy the content of file \"{}\" back to this directory in the original file \"{}\" (overwrite the entire file)",
+        "", OFFLINE_CONTRIBUTION_FILE_NAME, contribution_filename
+    );
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
@@ -151,10 +162,13 @@ fn compute_contribution_offline(contribution_filename: &str, challenge_filename:
     Ok(())
 }
 
- /// Computes randomness
+/// Computes randomness
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
-        let seed_str = io::get_user_input("Enter your own seed of randomness, 32 bytes hex encoded", Some(&Regex::new(r"[[:xdigit:]]{64}")?))?;
+        let seed_str = io::get_user_input(
+            "Enter your own seed of randomness, 32 bytes hex encoded",
+            Some(&Regex::new(r"[[:xdigit:]]{64}")?),
+        )?;
         let mut seed = [0u8; SEED_LENGTH];
 
         for (i, val) in hex::decode(seed_str)?.into_iter().enumerate() {
@@ -183,7 +197,7 @@ async fn contribute(
     coordinator: &mut Url,
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
-    heartbeat_handle: &JoinHandle<()>
+    heartbeat_handle: &JoinHandle<()>,
 ) -> Result<()> {
     // Get the necessary info to compute the contribution
     let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
@@ -200,8 +214,7 @@ async fn contribute(
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
     let challenge_filename = format!("namada_challenge_round_{}.params", round_height);
-    let mut challenge_writer = 
-        async_fs::File::create(challenge_filename.as_str()).await?;
+    let mut challenge_writer = async_fs::File::create(challenge_filename.as_str()).await?;
     challenge_writer.write_all(&challenge.as_slice()).await?;
 
     let challenge_hash = calculate_hash(challenge.as_ref());
@@ -225,15 +238,27 @@ async fn contribute(
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_contest_participant || contrib_info.is_another_machine {
-        tokio::task::spawn_blocking(move || compute_contribution_offline(contrib_filename_copy.as_str(), challenge_filename.as_str())).await??;
+        tokio::task::spawn_blocking(move || {
+            compute_contribution_offline(contrib_filename_copy.as_str(), challenge_filename.as_str())
+        })
+        .await??;
     } else {
         let custom_seed = contrib_info.is_own_seed_of_randomness;
-        tokio::task::spawn_blocking(move || compute_contribution(custom_seed, challenge.as_ref(), contrib_filename_copy.as_str())).await??;
+        tokio::task::spawn_blocking(move || {
+            compute_contribution(custom_seed, challenge.as_ref(), contrib_filename_copy.as_str())
+        })
+        .await??;
     }
-    let contribution = tokio::task::spawn_blocking(move || get_file_as_byte_vec(contrib_filename.as_str(), round_height, contribution_id)).await??;
+    let contribution = tokio::task::spawn_blocking(move || {
+        get_file_as_byte_vec(contrib_filename.as_str(), round_height, contribution_id)
+    })
+    .await??;
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
-    info!("Completed contribution in {} seconds", (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds());
+    info!(
+        "Completed contribution in {} seconds",
+        (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()
+    );
 
     // Update contribution info
     let contribution_file_hash = calculate_hash(contribution.as_ref());
@@ -392,20 +417,31 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        CeremonyOpt::Contribute{mut url, offline} => {
+        CeremonyOpt::Contribute { mut url, offline } => {
             if offline {
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
-                let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME).await.expect("Couldn't read the challenge file");
+                let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
+                    .await
+                    .expect("Couldn't read the challenge file");
 
-                tokio::task::spawn_blocking(move || compute_contribution(get_seed_of_randomness().unwrap(), &challenge, OFFLINE_CONTRIBUTION_FILE_NAME)).await.unwrap().expect("Error in computing randomness");
+                tokio::task::spawn_blocking(move || {
+                    compute_contribution(
+                        get_seed_of_randomness().unwrap(),
+                        &challenge,
+                        OFFLINE_CONTRIBUTION_FILE_NAME,
+                    )
+                })
+                .await
+                .unwrap()
+                .expect("Error in computing randomness");
                 return;
-            } 
+            }
 
-            // Perform the entire contribution cycle 
-            let keypair = tokio::task::spawn_blocking(|| {io::generate_keypair(false)})
-        .await
-        .unwrap()
-        .expect("Error while generating the keypair");
+            // Perform the entire contribution cycle
+            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
+                .await
+                .unwrap()
+                .expect("Error while generating the keypair");
 
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await

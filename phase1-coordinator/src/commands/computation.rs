@@ -15,7 +15,7 @@ use tracing::{debug, error, info, trace};
 pub const SEED_LENGTH: usize = 32;
 pub type Seed = [u8; SEED_LENGTH];
 
-use blake2::{Blake2b512, Digest, digest::generic_array::ArrayLength};
+use blake2::{digest::generic_array::ArrayLength, Blake2b512, Digest};
 use itertools::Itertools;
 use masp_phase2::MPCParameters;
 
@@ -24,7 +24,7 @@ pub enum RandomSource {
     /// A string to be used as entropy
     Entropy(String),
     /// A [`Seed`] of 32 bytes for rng
-    Seed(Seed)
+    Seed(Seed),
 }
 
 pub struct Computation;
@@ -183,10 +183,8 @@ impl Computation {
                     let digest = h.finalize();
 
                     ChaChaRng::from_seed(digest[0..32].try_into().unwrap())
-                },
-               RandomSource::Seed(s) => {
-                    ChaChaRng::from_seed(*s)
-               }
+                }
+                RandomSource::Seed(s) => ChaChaRng::from_seed(*s),
             }
         };
 
@@ -285,10 +283,8 @@ impl Computation {
                     let digest = h.finalize();
 
                     ChaChaRng::from_seed(digest[0..32].try_into().unwrap())
-                },
-               RandomSource::Seed(s) => {
-                    ChaChaRng::from_seed(*s)
-               }
+                }
+                RandomSource::Seed(s) => ChaChaRng::from_seed(*s),
             }
         };
 

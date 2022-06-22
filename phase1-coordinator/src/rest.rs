@@ -106,7 +106,8 @@ impl<T: Serialize> Deref for SignedRequest<T> {
 }
 
 impl<T: Serialize> SignedRequest<T> {
-    fn verify(&self) -> Result<()> { //FIXME: could this take the entire Json<SignedRequest> to prevent the need of reserialization?
+    fn verify(&self) -> Result<()> {
+        //FIXME: could this take the entire Json<SignedRequest> to prevent the need of reserialization?
         let mut request = json::to_string(&self.pubkey)?;
 
         if let Some(ref r) = self.request {
@@ -262,7 +263,7 @@ pub async fn get_chunk(
                 return Err(ResponseError::UnknownTask(task));
             }
             Ok(Json(task))
-        },
+        }
         None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
     }
 }
