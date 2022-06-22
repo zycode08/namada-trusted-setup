@@ -2122,7 +2122,7 @@ impl CoordinatorState {
                 self.rollback_next_round(time);
             }
 
-            // NOTE: we don't remove the ip address from the list of known one to
+            // NOTE: we don't remove the ip address from the list of known ones to
             //  prevent a malicious contributor from constantly interrupting his contribution
             //  and rejoyining the ceremony from the same IP
 
