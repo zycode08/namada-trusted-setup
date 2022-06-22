@@ -50,4 +50,4 @@ update:
 clean:
 	$(CARGO) clean --release
 
-.PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt get-contributions run-coordinator test-coordinator test-e2e update verify
+.PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt get-contributions offline-contribution run-coordinator test-coordinator test-e2e update verify
