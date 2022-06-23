@@ -9,6 +9,7 @@ use crate::{
     Participant,
 };
 
+use base64::encode;
 use rocket::{
     error,
     get,
@@ -23,10 +24,13 @@ use rocket::{
     tokio::{fs, sync::RwLock, task},
     request::{self, Request, FromRequest, Outcome},
     Shutdown,
-    State,
+    State, outcome::IntoOutcome,
 };
+use sha2::Sha256;
+use blake2::Digest;
+use tracing_subscriber::fmt::format;
 
-use std::{collections::LinkedList, io::Cursor, net::{SocketAddr, IpAddr}, ops::Deref, sync::Arc, time::Duration};
+use std::{collections::LinkedList, io::Cursor, net::{SocketAddr, IpAddr}, ops::Deref, sync::Arc, time::Duration, convert::TryFrom};
 use thiserror::Error;
 
 use tracing::debug;
@@ -36,10 +40,12 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
-// FIXME: complete FIXME: need these?
-const BODY_DIGEST_HEADER: &str = "";
-const PUBKEY_HEADER: &str = "";
-const SIGNATURE_HEADER: &str = "";
+// Headers FIXME: this should be included in SignatureHeaders (associated type)?
+const BODY_DIGEST_HEADER: &str = "Digest";
+const PUBKEY_HEADER: &str = "ATS-Pubkey";
+const SIGNATURE_HEADER: &str = "ATS-Signature";
+const CONTENT_LENGTH_HEADER: &str = "Content-Length";
+const DATE_HEADER: &str = "Date";
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
 
@@ -48,12 +54,16 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
+    #[error("Header {0} is badly formatted")]
+    InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
     InvalidSignature,
     #[error("Io Error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
+    MismatchingChecksum(String, String),
     #[error("The required {0} header was missing from the incoming request")]
-    MissingRequiredHeader(String),
+    MissingRequiredHeader(&'static str),
     #[error("Thread panicked: {0}")]
     RuntimeError(#[from] task::JoinError),
     #[error("Error with Serde: {0}")]
@@ -72,6 +82,8 @@ pub enum ResponseError {
     VarEnv(#[from] std::env::VarError),
     #[error("Error while verifying a contribution: {0}")]
     VerificationError(String),
+    #[error("Digest of request's body is not base64 encoded")]
+    WrongDigestEncoding
 }
 
 impl<'r> Responder<'r, 'static> for ResponseError {
@@ -87,38 +99,153 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 
 type Result<T> = std::result::Result<T, ResponseError>;
 
-// FIXME: how to verify coordinator endpoints? I need to access the Coordinator managed state for that
+/// Implements the signature verification on the incoming client request via [`FromRequest`]. Carries the 
+/// participant and optionally the digest of the body of the request to be used in the
+/// request handler.
+struct ClientAuth {
+    /// The authenticated contributor
+    contributor: Participant,
+    /// The optional digest [`sha2::Sha256`] of the body, [`base64`] encoded
+    body_digest: Option<String>
+}
+
+impl ClientAuth {
+    /// Checks whether the digest of the body in the header of the request matches the one computed on the body received.
+    fn verify_body_checksum<T>(&self, body: &T) -> Result<()>
+    where T: Serialize {
+        match self.body_digest.take() {
+            Some(expected_digest) => {
+                let mut hasher = Sha256::new();
+                hasher.update(serde_json::to_string(body)?);
+                let digest = base64::encode(hasher.finalize());
+
+                if expected_digest == digest {
+                    Ok(())
+                } else {
+                    Err(ResponseError::MismatchingChecksum(expected_digest, digest))
+                }
+            },
+            None => unreachable!("No body was expetected in the request"),
+        } 
+    }
+}
+
+/// The headers involved in the signature of the request.
+#[derive(Default)]
+struct SignatureHeaders<'request> { //FIXME: more useful types? Like including also the header name? Maybe with an enum?
+    pubkey: &'request str,
+    content_length: &'request str,
+    date: &'request str,
+    body_digest: Option<&'request str>,
+    signature: &'request str
+}
+
+impl<'r> SignatureHeaders<'r> {
+    /// Produces the message on which to compute the signature
+    fn to_string(&self) -> String {
+        let mut str = format!("{}{}{}", self.pubkey, self.content_length, self.date);
+        if let Some(digest) = self.body_digest {
+            str += digest
+        }
+
+        str
+    }
+
+    fn new(pubkey: &'r str, content_length: &'r str, date: &'r str, body_digest: Option<&'r str>, signature: &'r str) -> Self {
+        Self { pubkey, content_length, date, body_digest, signature }
+    }
+
+    fn verify_signature(&self) -> bool {
+        Production.verify(self.pubkey, self.to_string().as_str(), self.signature)
+    }
+
+    // FIXME: method to produce the signature? For the client could come in handy
+
+    //FIXME: method to generate the headers?? Or directly to produce a request struct?
+}
+
+impl<'r> TryFrom<&'r Request<'_>> for SignatureHeaders<'r> {
+    type Error = ResponseError;
+
+    fn try_from(request: &'r Request<'_>) -> std::result::Result<Self, Self::Error> {
+        let headers = request.headers();
+        let mut values = [""; 4]; //FIXME: bad logic, not explicit enough?
+        let mut body_digest: Option<&str> = None;
+
+        for (i, &header) in [PUBKEY_HEADER, CONTENT_LENGTH_HEADER, DATE_HEADER, SIGNATURE_HEADER].iter().enumerate() {
+            values[i] = headers.get_one(header).ok_or(ResponseError::InvalidHeader(header))?;
+        }
+
+        // If post request, also get the hash of body from header (if any and if base64 encoded)
+        if request.method() == rocket::http::Method::Post {
+            if let Some(s) = headers.get_one(BODY_DIGEST_HEADER) {
+                let d = s.split_once('=').ok_or(ResponseError::InvalidHeader(BODY_DIGEST_HEADER))?.1;
+                
+                if base64::decode(d).is_err() {
+                    return Err(ResponseError::WrongDigestEncoding);
+                }
+                
+                body_digest = Some(d);
+            }
+        }
+
+        Ok(SignatureHeaders::new(values[0], values[1], values[2], body_digest, values[3]))
+    }
+}
+
+trait VerifySignature<'r> {
+    fn verify_signature(&'r self) -> Result<SignatureHeaders<'r>>;
+}
+
+impl<'r> VerifySignature<'r> for Request<'_> {
+    /// Check signature of request
+    fn verify_signature(&'r self) -> Result<SignatureHeaders<'r>> {
+        let headers = SignatureHeaders::try_from(self)?;
+
+        match headers.verify_signature() {
+            true => Ok(headers),
+            false => Err(ResponseError::InvalidSignature)
+        }
+    }
+}
+
 #[rocket::async_trait]
-impl<'r> FromRequest<'r> for Participant { //FIXME: add this request guard to all the endpoint except the last two
+impl<'r> FromRequest<'r> for ClientAuth { //FIXME: add this request guard to all the endpoint except the last two
     type Error = ResponseError;
 
     async fn from_request(request: & 'r Request<'_>) -> Outcome<Self, Self::Error> {
-        // Retrieve mandatory headers
-        let headers = request.headers();
-        // let signature = headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?; // FIXME: header name?
-        // let pubkey = headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?; //FIXME: header name?
-        let headers_sig_list = headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?; //FIXME: header name?
-        let misc_headers = headers_sig_list.split(' ').collect(); //FIXME: what's the separator here?
-        // FIXME: which headers to add in the message to sign? "Host date digest content-length"
-        // FIXME: digest in GET request?
-
-
-        // If post request also get the hash of body from header
-        let body_hash = match request.method() {
-            rocket::http::Method::Post => Some(headers.get_one(name).ok_or(ResponseError::MissingRequiredHeader(()))?), //FIXME: header name?
-            _ => None,
-        };
-
-        // FIXME: Reconstruct the message to sign 
-        // FIXME: prepare a function to share with the client to do this
-        let message = ();
-
-        // Check the signature of the request
-        if Production.verify(pubkey, message, signature) {
-            Outcome::Success(Self::new_contributor(pubkey))
-        } else {
-            Outcome::Failure((Status::BadRequest, ResponseError::InvalidSignature))
+        match request.verify_signature() {
+            Ok(headers) => Outcome::Success(Self {
+                contributor: Participant::new_contributor(headers.pubkey),
+                body_digest: headers.body_digest.map(str::to_string)
+            }),
+            Err(e) => Outcome::Failure((Status::BadRequest, e))
         }
+    }
+}
+
+/// Implements the signature verification on the incoming server request via [`FromRequest`].
+struct ServerAuth;
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for ServerAuth { //FIXME: add this request guard to all the endpoint reserved to coordiantor
+    type Error = ResponseError;
+
+    async fn from_request(request: & 'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let headers = match request.verify_signature() {
+            Ok(h) => h,
+            Err(e) => return Outcome::Failure((Status::BadRequest, e))
+        };
+ 
+        // Check that the signature comes from the coordinator by matching the default verifier key
+        let coordinator = request.guard::<&State<Coordinator>>().await.succeeded().expect("Managed state should always be retrievable");
+        let verifier = Participant::new_verifier(headers.pubkey);
+
+        if verifier != coordinator.read().await.environment().coordinator_verifiers()[0] {
+            return Outcome::Failure((Status::BadRequest, ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string())));
+        }
+
+        Outcome::Success(Self)
     }
 }
 
@@ -242,88 +369,77 @@ impl PostChunkRequest {
 // FIXME: review which spawn_blocking are necessary
 
 /// Add the incoming contributor to the queue of contributors.
-#[post("/contributor/join_queue", format = "json", data = "<request>")]
+#[post("/contributor/join_queue")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
-    request: Json<SignedRequest<()>>,
+    client: ClientAuth,
     contributor_ip: IpAddr, //FIXME: check this, could be None, probably should take parameter as Option<IpAddr>. Or use SocketAddr?
 ) -> Result<()> {
-    let signed_request = request.into_inner();
-
-    // Check signature
-    signed_request.verify()?;
-
-    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
-
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.add_to_queue(contributor, Some(contributor_ip), 10)).await? {
+    match task::spawn_blocking(move || write_lock.add_to_queue(client.contributor, Some(contributor_ip), 10)).await? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
-#[post("/contributor/lock_chunk", format = "json", data = "<request>")]
+#[post("/contributor/lock_chunk")]
 pub async fn lock_chunk(
     coordinator: &State<Coordinator>,
-    request: Json<SignedRequest<()>>,
+    client: ClientAuth,
 ) -> Result<Json<LockedLocators>> {
-    let signed_request = request.into_inner();
-
-    // Check signature
-    signed_request.verify()?;
-
-    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
-
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.try_lock(&contributor)).await? {
+    match task::spawn_blocking(move || write_lock.try_lock(&client.contributor)).await? {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
 
 /// Download a chunk from the [Coordinator](`crate::Coordinator`), which should be contributed to upon receipt.
-#[get("/download/chunk", format = "json", data = "<get_chunk_request>")]
+#[post("/download/chunk", format = "json", data = "<get_chunk_request>")]
 pub async fn get_chunk(
     coordinator: &State<Coordinator>,
-    get_chunk_request: Json<SignedRequest<LockedLocators>>, //FIXME: body -> POST
+    client: ClientAuth,
+    get_chunk_request: Json<LockedLocators>,
 ) -> Result<Json<Task>> {
-    let signed_request = get_chunk_request.into_inner();
+    // Verify body checksum
+    client.verify_body_checksum(&get_chunk_request)?;
 
-    // Check signature
-    signed_request.verify()?;
-
-    let contributor = Participant::new_contributor(signed_request.pubkey.as_ref());
-    let next_contribution = signed_request.next_contribution();
+    let next_contribution = get_chunk_request.next_contribution();
 
     // Build and check next Task
     let task = Task::new(next_contribution.chunk_id(), next_contribution.contribution_id());
 
-    match coordinator.read().await.state().current_participant_info(&contributor) {
+    match coordinator.read().await.state().current_participant_info(&client.contributor) {
         Some(info) => {
             if !info.pending_tasks().contains(&task) {
                 return Err(ResponseError::UnknownTask(task));
             }
             Ok(Json(task))
         }
-        None => Err(ResponseError::UnknownContributor(signed_request.pubkey)),
+        None => {
+            let pubkey = match client.contributor {
+                Participant::Contributor(id) => id,
+                Participant::Verifier(_) => unreachable!("Expected contributor, not verifier"),
+            };
+            Err(ResponseError::UnknownContributor(pubkey))
+        },
     }
 }
 
 /// Download the challenge from the [Coordinator](`crate::Coordinator`) accordingly to the [`LockedLocators`] received from the Contributor.
-#[get("/contributor/challenge", format = "json", data = "<locked_locators>")]
+#[post("/contributor/challenge", format = "json", data = "<locked_locators>")]
 pub async fn get_challenge(
     coordinator: &State<Coordinator>,
-    locked_locators: Json<SignedRequest<LockedLocators>>,  //FIXME: body -> POST
+    client: ClientAuth,
+    locked_locators: Json<LockedLocators>,
 ) -> Result<Json<Vec<u8>>> {
-    let signed_request = locked_locators.into_inner();
+    // Verify body checksum
+    client.verify_body_checksum(&locked_locators)?;
 
-    // Check signature
-    signed_request.verify()?;
-
-    let challenge_locator = signed_request.current_contribution();
+    let challenge_locator = locked_locators.current_contribution();
     let round_height = challenge_locator.round_height();
     let chunk_id = challenge_locator.chunk_id();
 
@@ -345,7 +461,7 @@ pub async fn get_challenge(
 /// Upload a [Chunk](`crate::objects::Chunk`) contribution to the [Coordinator](`crate::Coordinator`). Write the contribution bytes to
 /// disk at the provided [Locator](`crate::storage::Locator`). Also writes the corresponding [`ContributionFileSignature`]
 #[post("/upload/chunk", format = "json", data = "<post_chunk_request>")]
-pub async fn post_contribution_chunk(
+pub async fn post_contribution_chunk( //FIXME: restart from here
     coordinator: &State<Coordinator>,
     post_chunk_request: Json<SignedRequest<PostChunkRequest>>,
 ) -> Result<()> {
