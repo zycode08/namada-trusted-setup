@@ -196,7 +196,7 @@ async fn contribute(
     client: &Client,
     coordinator: &mut Url,
     keypair: &KeyPair,
-    mut contrib_info: ContributionInfo,
+    contrib_info: &mut ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
 ) -> Result<()> {
     // Get the necessary info to compute the contribution
@@ -326,6 +326,7 @@ async fn contribution_loop(
         .expect("Couldn't join the queue");
     contrib_info.timestamps.joined_queue = Utc::now();
 
+    // FIXME: client and url lifetimes are technically static, can I avoid the clone to pass them to the spawn?
     let client_clone = client.clone();
     let mut coordinator_clone = coordinator.clone();
     let keypair_clone = keypair.to_owned();
@@ -358,7 +359,7 @@ async fn contribution_loop(
                 );
             }
             ContributorStatus::Round => {
-                contribute(client, coordinator, keypair, contrib_info.clone(), &heartbeat_handle)
+                contribute(client, coordinator, keypair, &mut contrib_info, &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
             }

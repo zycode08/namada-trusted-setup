@@ -1,36 +1,77 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
+use anyhow::Ok;
 use phase1_coordinator::{
     authentication::KeyPair,
     objects::{ContributionInfo, TrimmedContributionInfo},
-    rest::SignedRequest,
+    rest::{
+        PUBKEY_HEADER,
+        BODY_DIGEST_HEADER,
+        SIGNATURE_HEADER,
+        CONTENT_LENGTH_HEADER,
+        DATE_HEADER,
+        SignatureHeaders
+    },
 };
-use reqwest::{Client, Method, Response, Url};
+use reqwest::{Client, header::HeaderMap, Response, Url};
 use serde::Serialize;
-use std::collections::LinkedList;
+use std::{collections::LinkedList, convert::TryFrom};
 use thiserror::Error;
 
 use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkRequest, Task};
+
+#[derive(Debug, Error)]
+enum ClientError {
+    #[error("Request error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+    #[error("The required {0} header is missing")]
+    MissingRequiredHeader(&'static str),
+    #[error("Error while signing the request")]
+    SigningError,
+}
 
 /// Error returned from a request. Could be due to a Client or Server error.
 #[derive(Debug, Error)]
 pub enum RequestError {
     #[error("Client-side error: {0}")]
-    Client(#[from] reqwest::Error),
+    Client(#[from] ClientError),
     #[error("Server-side error: {0}")]
     Server(String),
 }
 
 type Result<T> = std::result::Result<T, RequestError>;
 
-/// Submit a json encoded [`SignedRequest`] to the provided enpoint
+impl TryFrom<HeaderMap> for SignatureHeaders { //FIXME: I need the other way round!
+    type Error = RequestError;
+
+    fn try_from(value: HeaderMap) -> Result<Self, Self::Error> {
+        let body_digest = match value.get(BODY_DIGEST_HEADER) {
+            Some(digest) => Some(digest.to_str()?.split_once('=').ok_or(ClientError::MissingRequiredHeader((BODY_DIGEST_HEADER)))?.1),
+            None => None,
+        };
+
+        Ok(Self::new( //FIXME: use array or better structure to reduce code redundancy
+            value.get(PUBKEY_HEADER).ok_or(ClientError::MissingRequiredHeader((PUBKEY_HEADER)))?,
+            value.get(CONTENT_LENGTH_HEADER).ok_or(ClientError::MissingRequiredHeader((CONTENT_LENGTH_HEADER)))?,
+            value.get(DATE_HEADER).ok_or(ClientError::MissingRequiredHeader((DATE_HEADER)))?,
+            body_digeset,
+            value.get(SIGNATURE_HEADER).ok_or(ClientError::MissingRequiredHeader((SIGNATURE_HEADER)))?,
+        ))
+    }
+}
+
+enum Request<T: Serialize> {
+    Get,
+    Post(Option<T>)
+}
+
+/// Submit a signed json encoded request to the provided enpoint
 async fn submit_request<T>(
     client: &Client,
     coordinator_address: &mut Url,
     endpoint: &str,
     keypair: &KeyPair,
-    request_body: Option<T>,
-    request: &Method,
+    request: &Request,
 ) -> Result<Response>
 where
     T: Serialize,
@@ -38,14 +79,21 @@ where
     coordinator_address.set_path(endpoint);
 
     let req = match request {
-        &Method::GET => client.get(coordinator_address.to_owned()),
-        &Method::POST => client.post(coordinator_address.to_owned()),
-        _ => panic!("Invalid request type"),
+        Request::Get => client.get(coordinator_address.to_owned()),
+        Request::Post(body) => {
+            match body {
+                Some(b) => client.post(coordinator_address.to_owned()).json(b),
+                None => client.post(coordinator_address.to_owned()),
+            }
+        },
     };
 
+    // Generate headers
+    let headers = SignatureHeaders::new(keypair.pubkey(), content_length, date, body_digest, signature); //FIXME:
+
     // Sign the request
-    let body = SignedRequest::try_sign(keypair, request_body).map_err(|e| RequestError::Server(format!("{}", e)))?;
-    let response = req.json(&body).send().await?;
+    let sig = headers.sign(keypair.sigkey()).map_err(|_| ClientError::SigningError)?;
+    let response = req.headers(headers).send().await?;
 
     if response.status().is_success() {
         Ok(response)
@@ -249,7 +297,7 @@ pub async fn post_contribution_info(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
-    request_body: ContributionInfo,
+    request_body: &ContributionInfo,
 ) -> Result<()> {
     submit_request::<ContributionInfo>(
         client,

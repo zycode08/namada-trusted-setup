@@ -62,7 +62,7 @@ impl ContributionLocator {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ContributionSignatureLocator {
     round_height: u64,
     chunk_id: u64,

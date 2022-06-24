@@ -13,6 +13,7 @@ use phase1_coordinator::environment::Production;
 
 use rocket::{
     self,
+    fs::FileServer,
     routes,
     tokio::{self, sync::RwLock},
 };
@@ -44,6 +45,9 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
 #[rocket::main]
 pub async fn main() {
     tracing_subscriber::fmt::init();
+
+    // Get healthcheck file path
+    let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");
 
     // Set the environment
     let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
@@ -90,7 +94,6 @@ pub async fn main() {
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
         rest::get_contributions_info,
-        rest::get_healthcheck
     ];
 
     #[cfg(not(debug_assertions))]
@@ -107,10 +110,9 @@ pub async fn main() {
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
         rest::get_contributions_info,
-        rest::get_healthcheck
     ];
 
-    let build_rocket = rocket::build().mount("/", routes).manage(coordinator);
+    let build_rocket = rocket::build().mount("/", routes).mount("/healthcheck", FileServer::from(health_path)).manage(coordinator);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically
