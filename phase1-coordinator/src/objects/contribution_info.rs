@@ -55,7 +55,7 @@ impl Default for ContributionTimeStamps {
 
 /// A summarized version of [`ContributionTimeStamps`]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TrimmedContributionTimeStamps { //FIXME: references
+pub struct TrimmedContributionTimeStamps {
     start_contribution: DateTime<Utc>,
     end_contribution: DateTime<Utc>,
 }
@@ -155,7 +155,7 @@ impl ContributionInfo {
 
 /// A summarized version of [`ContributionInfo`]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TrimmedContributionInfo { //FIXME: references
+pub struct TrimmedContributionInfo {
     public_key: String,
     is_another_machine: bool,
     is_own_seed_of_randomness: bool,
