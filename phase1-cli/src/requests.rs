@@ -156,7 +156,7 @@ pub async fn get_lock_chunk(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn post_get_chunk(
+pub async fn get_chunk(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
@@ -175,7 +175,7 @@ pub async fn post_get_chunk(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge.
-pub async fn post_get_challenge(
+pub async fn get_challenge(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,

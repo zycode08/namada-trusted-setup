@@ -207,9 +207,9 @@ async fn contribute(
     contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
-    let task = requests::post_get_chunk(client, coordinator, keypair, &locked_locators).await?;
+    let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
 
-    let challenge = requests::post_get_challenge(client, coordinator, keypair, &locked_locators).await?;
+    let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
