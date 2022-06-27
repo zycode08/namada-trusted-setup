@@ -31,7 +31,7 @@ use sha2::Sha256;
 use blake2::Digest;
 use tracing_subscriber::fmt::format;
 
-use std::{collections::LinkedList, io::Cursor, net::{SocketAddr, IpAddr}, ops::Deref, sync::Arc, time::Duration, convert::TryFrom};
+use std::{collections::{HashMap, LinkedList}, io::Cursor, net::{SocketAddr, IpAddr}, ops::Deref, sync::Arc, time::Duration, convert::TryFrom, borrow::Cow};
 use thiserror::Error;
 
 use tracing::debug;
@@ -46,7 +46,6 @@ pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
 pub const SIGNATURE_HEADER: &str = "ATS-Signature";
 pub const CONTENT_LENGTH_HEADER: &str = "Content-Length";
-pub const DATE_HEADER: &str = "Date";
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
 
@@ -66,6 +65,8 @@ pub enum ResponseError { //FIXME: all Strings coul be &str?
     MismatchingChecksum(String, String), //FIXME: no 500
     #[error("The required {0} header was missing from the incoming request")]
     MissingRequiredHeader(&'static str), // FIXME: no 500
+    #[error("Couldn't verify signature because of missing signing key")]
+    MissingSigningKey, //FIXME: 500?
     #[error("Couldn't parse string to int: {0}")]
     ParseError(#[from] std::num::ParseIntError),
     #[error("Thread panicked: {0}")]
@@ -86,8 +87,8 @@ pub enum ResponseError { //FIXME: all Strings coul be &str?
     VarEnv(#[from] std::env::VarError),
     #[error("Error while verifying a contribution: {0}")]
     VerificationError(String),
-    #[error("Digest of request's body is not base64 encoded")]
-    WrongDigestEncoding //FIXME: no 500, bad request
+    #[error("Digest of request's body is not base64 encoded: {0}")]
+    WrongDigestEncoding(#[from] base64::DecodeError) //FIXME: no 500, bad request
 }
 
 impl<'r> Responder<'r, 'static> for ResponseError {
@@ -102,41 +103,72 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 }
 
 type Result<T> = std::result::Result<T, ResponseError>;
+/// Content info
+pub struct RequestContent<'a> {
+    len: usize,
+    digest: Cow<'a, str>
+}
+
+impl<'a> RequestContent<'a> {
+    pub fn new<T>(len: usize, digest: T) -> Self
+    where T: AsRef<[u8]> {
+        Self{len, digest: base64::encode(digest).into()}
+    }
+
+    /// Returns struct correctly formatted for the http header
+    pub fn to_header(&self) -> (usize, String) {
+        (self.len, format!("sha-256={}", self.digest))
+    }
+
+    /// Constructs from request's headers
+    fn try_from_header(len: &str, digest: &'a str) -> Result<Self> {
+        let digest =  digest.split_once('=').ok_or(ResponseError::InvalidHeader(BODY_DIGEST_HEADER))?.1;
+
+        // Check encoding
+        base64::decode(digest)?;
+        let len = len.parse().map_err(|_| ResponseError::InvalidHeader(CONTENT_LENGTH_HEADER))?;
+
+        Ok(Self{len, digest: digest.into()})
+    }
+}
 
 /// The headers involved in the signature of the request.
 #[derive(Default)]
-pub struct SignatureHeaders<'r> { //FIXME: more useful types? Like including also the header name? Maybe with an enum?
-    pubkey: &'r str,
-    content_length: &'r str,
-    date: &'r str,
-    body_digest: Option<&'r str>,
-    signature: &'r str
+pub struct SignatureHeaders<'r> {
+    pub pubkey: &'r str,
+    /// Content info: (length, digest)
+    pub content: Option<RequestContent<'r>>,
+    pub signature: Option<Cow<'r, str>>
 }
 
 impl<'r> SignatureHeaders<'r> {
     /// Produces the message on which to compute the signature
-    fn to_string(&self) -> String {
-        let mut str = format!("{}{}{}", self.pubkey, self.content_length, self.date);
-        if let Some(digest) = self.body_digest {
-            str += digest
+    fn to_string(&self) -> Cow<'_, str> {
+        match &self.content {
+            Some(content) => {
+                format!("{}{}{}", self.pubkey, content.len, content.digest).into()
+            },
+            None => self.pubkey.into(),
         }
-
-        str
     }
 
-    pub fn new(pubkey: &'r str, content_length: &'r str, date: &'r str, body_digest: Option<&'r str>, signature: &'r str) -> Self {
-        Self { pubkey, content_length, date, body_digest, signature }
+    pub fn new(pubkey: &'r str, content: Option<RequestContent<'r>>, signature: Option<Cow<'r, str>>) -> Self {
+        Self { pubkey, content, signature }
     }
 
-    fn verify_signature(&self) -> bool {
-        Production.verify(self.pubkey, self.to_string().as_str(), self.signature)
+    fn try_verify_signature(&self) -> Result<bool> {
+        match &self.signature {
+            Some(sig) => Ok(Production.verify(self.pubkey, &self.to_string(), &sig)),
+            None => Err(ResponseError::MissingSigningKey),
+        }
     }
 
-    /// Produce the signature of [`SignatureHeaders`]
-    pub fn sign(&self, sigkey: &str) -> Result<String> {
+    /// Produce the signature of [`SignatureHeaders`], [`base64`] encoded
+    pub fn try_sign(&mut self, sigkey: &str) -> Result<()> {
         let msg = self.to_string();
+        self.signature = Some(Production.sign(sigkey, &msg).map_err(|_| ResponseError::SigningError(msg.into_owned()))?.into());
 
-        Ok(Production.sign(sigkey, msg.as_str()).map_err(|_| ResponseError::SigningError(msg))?)
+        Ok(())
     }
 }
 
@@ -145,42 +177,37 @@ impl<'r> TryFrom<&'r Request<'_>> for SignatureHeaders<'r> {
 
     fn try_from(request: &'r Request<'_>) -> std::result::Result<Self, Self::Error> {
         let headers = request.headers();
-        let mut values = [""; 4]; //FIXME: bad logic, not explicit enough?
-        let mut body_digest: Option<&str> = None;
+        let mut body: Option<RequestContent> = None;
 
-        for (i, &header) in [PUBKEY_HEADER, CONTENT_LENGTH_HEADER, DATE_HEADER, SIGNATURE_HEADER].iter().enumerate() {
-            values[i] = headers.get_one(header).ok_or(ResponseError::InvalidHeader(header))?;
-        }
+        let pubkey = headers.get_one(PUBKEY_HEADER).ok_or(ResponseError::InvalidHeader(PUBKEY_HEADER))?;
+        let sig = headers.get_one(SIGNATURE_HEADER).ok_or(ResponseError::InvalidHeader(SIGNATURE_HEADER))?;
 
         // If post request, also get the hash of body from header (if any and if base64 encoded)
         if request.method() == rocket::http::Method::Post {
             if let Some(s) = headers.get_one(BODY_DIGEST_HEADER) {
-                let d = s.split_once('=').ok_or(ResponseError::InvalidHeader(BODY_DIGEST_HEADER))?.1;
-                
-                if base64::decode(d).is_err() {
-                    return Err(ResponseError::WrongDigestEncoding);
-                }
-                
-                body_digest = Some(d);
+                let content_length = headers.get_one(CONTENT_LENGTH_HEADER).ok_or(ResponseError::InvalidHeader(CONTENT_LENGTH_HEADER))?;
+                let content = RequestContent::try_from_header(content_length, s)?;
+
+                body = Some(content);
             }
         }
 
-        Ok(SignatureHeaders::new(values[0], values[1], values[2], body_digest, values[3]))
+        Ok(SignatureHeaders::new(pubkey, body, Some(sig.into())))
     }
 }
 
-trait VerifySignature<'r> { // Workaround to implement a method on a foreign type
+trait VerifySignature<'r> { // Workaround to implement a single method on a foreign type instead of newtype pattern
     fn verify_signature(&'r self) -> Result<&str>;
 }
 
 impl<'r> VerifySignature<'r> for Request<'_> {
-    /// Check signature of request and return the pubkey
+    /// Check signature of request and return the pubkey of the participant
     fn verify_signature(&'r self) -> Result<&str> {
         let headers = SignatureHeaders::try_from(self)?;
 
-        match headers.verify_signature() {
+        match headers.try_verify_signature()? {
             true => Ok(headers.pubkey),
-            false => Err(ResponseError::InvalidSignature)
+            false => Err(ResponseError::InvalidSignature),
         }
     }
 }
@@ -243,7 +270,7 @@ impl<T> std::ops::DerefMut for LazyJson<T> {
 impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
     type Error = ResponseError;
 
-    async fn from_data(req: &'r Request<'_>, data: rocket::data::Data<'r>) -> rocket::data::Outcome<'r, Self> {
+    async fn from_data(req: &'r Request<'_>, data: rocket::data::Data<'r>) -> rocket::data::Outcome<'r, Self> { //FIXME: import Outcome
         // Check that digest of body is the expected one
         let expected_digest = match req.headers().get_one(BODY_DIGEST_HEADER) {
             Some(h) => h,
@@ -251,14 +278,16 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         };
 
         let content_length = match req.headers().get_one(CONTENT_LENGTH_HEADER) {
-            Some(h) => match h.parse::<usize>() {
-                Ok(len) => len,
-                Err(e) => return rocket::data::Outcome::Failure((Status::InternalServerError, ResponseError::from(e))),
-            },
+            Some(h) => h,
             None => return rocket::data::Outcome::Failure((Status::LengthRequired, ResponseError::MissingRequiredHeader(CONTENT_LENGTH_HEADER))),
         };
 
-        let body = match data.open(content_length.into()).into_string().await {
+        let expected_content = match RequestContent::try_from_header(content_length, expected_digest) {
+            Ok(c) => c,
+            Err(e) => return rocket::data::Outcome::Failure((Status::BadRequest, e)),
+        };
+
+        let body = match data.open(expected_content.len.into()).into_string().await {
             Ok(string) => string.into_inner(),
             Err(e) => return rocket::data::Outcome::Failure((Status::InternalServerError, ResponseError::from(e))),
         };
@@ -266,8 +295,8 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         let mut hasher = Sha256::new();
         hasher.update(&body);
         let digest = base64::encode(hasher.finalize());
-        if digest != expected_digest {
-            return rocket::data::Outcome::Failure((Status::BadRequest, ResponseError::MismatchingChecksum(expected_digest.to_owned(), digest)));
+        if digest != expected_content.digest {
+            return rocket::data::Outcome::Failure((Status::BadRequest, ResponseError::MismatchingChecksum(expected_digest.to_owned(), expected_content.digest.to_string())));
         }
 
         // Deserialize data and pass it to the request handler

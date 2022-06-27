@@ -1,99 +1,120 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
-use anyhow::Ok;
 use phase1_coordinator::{
     authentication::KeyPair,
     objects::{ContributionInfo, TrimmedContributionInfo},
-    rest::{
+    rest::{ //FIXME: take non custom header names from reqwest or ate least match them
+        CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         BODY_DIGEST_HEADER,
         SIGNATURE_HEADER,
-        CONTENT_LENGTH_HEADER,
-        DATE_HEADER,
-        SignatureHeaders
+        SignatureHeaders,
+        RequestContent
     },
 };
-use reqwest::{Client, header::HeaderMap, Response, Url};
+use reqwest::{Client, header::{CONTENT_TYPE, HeaderMap, HeaderValue}, Response, Url};
 use serde::Serialize;
-use std::{collections::LinkedList, convert::TryFrom};
+use std::{collections::LinkedList, convert::{TryFrom, TryInto}};
 use thiserror::Error;
+use sha2::{Digest, Sha256};
 
 use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkRequest, Task};
 
+/// Error returned from a request. Could be due to a Client or Server error.
 #[derive(Debug, Error)]
-enum ClientError {
+pub enum RequestError {
+    #[error("Digest header is missing hashgin algorithm")]
+    InvalidDigestHeaderFormat,
+    #[error("Invalid header value: {0}")]
+    InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
+    #[error("Json serialization of body failed")]
+    JsonError(#[from] serde_json::Error),
     #[error("Request error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("The required {0} header is missing")]
     MissingRequiredHeader(&'static str),
     #[error("Error while signing the request")]
     SigningError,
-}
-
-/// Error returned from a request. Could be due to a Client or Server error.
-#[derive(Debug, Error)]
-pub enum RequestError {
-    #[error("Client-side error: {0}")]
-    Client(#[from] ClientError),
     #[error("Server-side error: {0}")]
     Server(String),
 }
 
 type Result<T> = std::result::Result<T, RequestError>;
+/// Wrapper type to convert [`SignatureHeaders`] into [`HeaderMap`]
+struct HeaderWrap(HeaderMap);
 
-impl TryFrom<HeaderMap> for SignatureHeaders { //FIXME: I need the other way round!
-    type Error = RequestError;
-
-    fn try_from(value: HeaderMap) -> Result<Self, Self::Error> {
-        let body_digest = match value.get(BODY_DIGEST_HEADER) {
-            Some(digest) => Some(digest.to_str()?.split_once('=').ok_or(ClientError::MissingRequiredHeader((BODY_DIGEST_HEADER)))?.1),
-            None => None,
-        };
-
-        Ok(Self::new( //FIXME: use array or better structure to reduce code redundancy
-            value.get(PUBKEY_HEADER).ok_or(ClientError::MissingRequiredHeader((PUBKEY_HEADER)))?,
-            value.get(CONTENT_LENGTH_HEADER).ok_or(ClientError::MissingRequiredHeader((CONTENT_LENGTH_HEADER)))?,
-            value.get(DATE_HEADER).ok_or(ClientError::MissingRequiredHeader((DATE_HEADER)))?,
-            body_digeset,
-            value.get(SIGNATURE_HEADER).ok_or(ClientError::MissingRequiredHeader((SIGNATURE_HEADER)))?,
-        ))
+impl From<HeaderWrap> for HeaderMap {
+    fn from(value: HeaderWrap) -> Self {
+        value.0
     }
 }
 
-enum Request<T: Serialize> {
+impl TryFrom<SignatureHeaders<'_>> for HeaderWrap {
+    type Error = RequestError;
+
+    fn try_from(value: SignatureHeaders) -> std::result::Result<Self, Self::Error> {
+        let mut result = HeaderMap::new();
+        // FIXME: sensitive headers?
+        result.insert(PUBKEY_HEADER, HeaderValue::from_str(value.pubkey)?);
+
+        if let Some(sig) = value.signature {
+            result.insert(SIGNATURE_HEADER, HeaderValue::from_str(&sig)?);
+        }
+
+        if let Some(content) = value.content {
+            let (content_len, content_digest) = content.to_header();
+            result.insert(CONTENT_LENGTH_HEADER, content_len.into());
+            result.insert(BODY_DIGEST_HEADER, HeaderValue::from_str(content_digest.as_str())?);
+        }
+
+        Ok(Self(result))
+    }
+}
+
+enum Request<'a, T: Serialize> {
     Get,
-    Post(Option<T>)
+    Post(Option<&'a T>)
 }
 
 /// Submit a signed json encoded request to the provided enpoint
-async fn submit_request<T>(
+async fn submit_request<T: Serialize>(
     client: &Client,
     coordinator_address: &mut Url,
     endpoint: &str,
     keypair: &KeyPair,
-    request: &Request,
+    request: Request<'_, T>,
 ) -> Result<Response>
 where
     T: Serialize,
 {
     coordinator_address.set_path(endpoint);
+    let mut content: Option<RequestContent> = None;
 
     let req = match request {
         Request::Get => client.get(coordinator_address.to_owned()),
         Request::Post(body) => {
             match body {
-                Some(b) => client.post(coordinator_address.to_owned()).json(b),
+                Some(b) => {
+                    let json_body = serde_json::to_string(b)?;
+
+                    let mut hasher = Sha256::new();
+                    hasher.update(&json_body);
+                    let digest = hasher.finalize();
+                    
+                    content = Some(RequestContent::new(json_body.len(), digest));
+                    client.post(coordinator_address.to_owned()).body(json_body).header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                },
                 None => client.post(coordinator_address.to_owned()),
             }
         },
     };
 
     // Generate headers
-    let headers = SignatureHeaders::new(keypair.pubkey(), content_length, date, body_digest, signature); //FIXME:
+    let mut headers = SignatureHeaders::new(keypair.pubkey(), content, None);
+    headers.try_sign(keypair.sigkey()).map_err(|_| RequestError::SigningError)?;
+    let header_map: HeaderWrap = headers.try_into()?;
 
-    // Sign the request
-    let sig = headers.sign(keypair.sigkey()).map_err(|_| ClientError::SigningError)?;
-    let response = req.headers(headers).send().await?;
+    let response = req.headers(header_map.into()).send().await?;
 
     if response.status().is_success() {
         Ok(response)
@@ -109,8 +130,7 @@ pub async fn post_join_queue(client: &Client, coordinator_address: &mut Url, key
         coordinator_address,
         "contributor/join_queue",
         keypair,
-        None,
-        &Method::POST,
+        Request::Post(None)
     )
     .await?;
 
@@ -118,7 +138,7 @@ pub async fn post_join_queue(client: &Client, coordinator_address: &mut Url, key
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to lock the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn post_lock_chunk(
+pub async fn get_lock_chunk(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
@@ -128,8 +148,7 @@ pub async fn post_lock_chunk(
         coordinator_address,
         "contributor/lock_chunk",
         keypair,
-        None,
-        &Method::POST,
+        Request::Get
     )
     .await?;
 
@@ -137,7 +156,7 @@ pub async fn post_lock_chunk(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_chunk(
+pub async fn post_get_chunk(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
@@ -148,8 +167,7 @@ pub async fn get_chunk(
         coordinator_address,
         "download/chunk",
         keypair,
-        Some(request_body),
-        &Method::GET,
+        Request::Post(Some(request_body))
     )
     .await?;
 
@@ -157,7 +175,7 @@ pub async fn get_chunk(
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge.
-pub async fn get_challenge(
+pub async fn post_get_challenge(
     client: &Client,
     coordinator_address: &mut Url,
     keypair: &KeyPair,
@@ -168,8 +186,7 @@ pub async fn get_challenge(
         coordinator_address,
         "contributor/challenge",
         keypair,
-        Some(request_body),
-        &Method::GET,
+        Request::Post(Some(request_body))
     )
     .await?;
 
@@ -188,8 +205,7 @@ pub async fn post_chunk(
         coordinator_address,
         "upload/chunk",
         keypair,
-        Some(request_body),
-        &Method::POST,
+        Request::Post(Some(request_body))
     )
     .await?;
 
@@ -208,8 +224,7 @@ pub async fn post_contribute_chunk(
         coordinator_address,
         "contributor/contribute_chunk",
         keypair,
-        Some(request_body),
-        &Method::POST,
+        Request::Post(Some(&request_body))
     )
     .await?;
 
@@ -223,8 +238,7 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &mut Url, keyp
         coordinator_address,
         "contributor/heartbeat",
         keypair,
-        None,
-        &Method::POST,
+        Request::Post(None)
     )
     .await?;
 
@@ -242,8 +256,7 @@ pub async fn get_tasks_left(
         coordinator_address,
         "contributor/get_tasks_left",
         keypair,
-        None,
-        &Method::GET,
+        Request::Get
     )
     .await?;
 
@@ -253,14 +266,14 @@ pub async fn get_tasks_left(
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
 #[cfg(debug_assertions)]
 pub async fn get_update(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/update", keypair, None, &Method::GET).await?;
+    submit_request::<()>(client, coordinator_address, "/update", keypair, Request::Get).await?;
 
     Ok(())
 }
 
 /// Stop the [Coordinator](`phase1-coordinator::Coordinator`).
 pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/stop", keypair, None, &Method::GET).await?;
+    submit_request::<()>(client, coordinator_address, "/stop", keypair, Request::Get).await?;
 
     Ok(())
 }
@@ -268,7 +281,7 @@ pub async fn get_stop_coordinator(client: &Client, coordinator_address: &mut Url
 /// Verify the pending contributions.
 #[cfg(debug_assertions)]
 pub async fn get_verify_chunks(client: &Client, coordinator_address: &mut Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/verify", keypair, None, &Method::GET).await?;
+    submit_request::<()>(client, coordinator_address, "/verify", keypair, Request::Get).await?;
 
     Ok(())
 }
@@ -284,8 +297,7 @@ pub async fn get_contributor_queue_status(
         coordinator_address,
         "contributor/queue_status",
         keypair,
-        None,
-        &Method::GET,
+        Request::Get
     )
     .await?;
 
@@ -304,8 +316,7 @@ pub async fn post_contribution_info(
         coordinator_address,
         "contributor/contribution_info",
         keypair,
-        Some(request_body),
-        &Method::POST,
+        Request::Post(Some(request_body))
     )
     .await?;
 
