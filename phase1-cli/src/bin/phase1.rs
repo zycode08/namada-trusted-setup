@@ -196,20 +196,20 @@ async fn contribute(
     client: &Client,
     coordinator: &mut Url,
     keypair: &KeyPair,
-    contrib_info: &mut ContributionInfo,
+    mut contrib_info: ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
 ) -> Result<()> {
     // Get the necessary info to compute the contribution
-    let locked_locators = requests::post_lock_chunk(client, coordinator, keypair).await?;
+    let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
-    let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
+    let task = requests::post_get_chunk(client, coordinator, keypair, &locked_locators).await?;
 
-    let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
+    let challenge = requests::post_get_challenge(client, coordinator, keypair, &locked_locators).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
@@ -309,7 +309,7 @@ async fn contribute(
         &serde_json::to_vec(&contrib_info)?,
     )
     .await?;
-    requests::post_contribution_info(client, coordinator, keypair, contrib_info).await?;
+    requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     Ok(())
 }
@@ -359,7 +359,7 @@ async fn contribution_loop(
                 );
             }
             ContributorStatus::Round => {
-                contribute(client, coordinator, keypair, &mut contrib_info, &heartbeat_handle)
+                contribute(client, coordinator, keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
             }
