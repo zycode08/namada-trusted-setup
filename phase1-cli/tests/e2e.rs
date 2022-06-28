@@ -124,7 +124,6 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
             rest::get_contributions_info,
-            rest::get_healthcheck
         ])
         .manage(coordinator);
 
@@ -184,8 +183,8 @@ async fn test_stop_coordinator() {
     match response {
         Ok(_) => panic!("Expected error"),
         Err(e) => match e {
-            requests::RequestError::Client(_) => (),
             requests::RequestError::Server(_) => panic!("Expected client-side error"),
+            _ => ()
         },
     }
 
@@ -346,14 +345,14 @@ async fn test_wrong_post_contribution_info() {
         &client,
         &mut url,
         &ctx.unknown_participant.keypair,
-        contrib_info.clone(),
+        &contrib_info,
     )
     .await;
     assert!(response.is_err());
 
     // Non-current-contributor participant
     let response =
-        requests::post_contribution_info(&client, &mut url, &ctx.contributors[1].keypair, contrib_info).await;
+        requests::post_contribution_info(&client, &mut url, &ctx.contributors[1].keypair, &contrib_info).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -465,7 +464,7 @@ async fn test_contribution() {
         .round_height();
     contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
 
-    requests::post_contribution_info(&client, &mut url, &ctx.contributors[0].keypair, contrib_info)
+    requests::post_contribution_info(&client, &mut url, &ctx.contributors[0].keypair, &contrib_info)
         .await
         .unwrap();
 
