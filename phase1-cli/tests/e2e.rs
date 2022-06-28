@@ -184,7 +184,7 @@ async fn test_stop_coordinator() {
         Ok(_) => panic!("Expected error"),
         Err(e) => match e {
             requests::RequestError::Server(_) => panic!("Expected client-side error"),
-            _ => ()
+            _ => (),
         },
     }
 

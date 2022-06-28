@@ -10,11 +10,15 @@ use crate::{
 };
 
 use base64::encode;
+use blake2::Digest;
 use rocket::{
+    data::FromData,
     error,
     get,
     http::{ContentType, Status},
+    outcome::IntoOutcome,
     post,
+    request::{self, FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{
         json::{self, Json},
@@ -23,15 +27,22 @@ use rocket::{
         Serialize,
     },
     tokio::{fs, sync::RwLock, task},
-    request::{self, Request, FromRequest, Outcome},
     Shutdown,
-    State, outcome::IntoOutcome, data::FromData,
+    State,
 };
 use sha2::Sha256;
-use blake2::Digest;
 use tracing_subscriber::fmt::format;
 
-use std::{collections::{HashMap, LinkedList}, io::Cursor, net::{SocketAddr, IpAddr}, ops::Deref, sync::Arc, time::Duration, convert::TryFrom, borrow::Cow};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, LinkedList},
+    convert::TryFrom,
+    io::Cursor,
+    net::{IpAddr, SocketAddr},
+    ops::Deref,
+    sync::Arc,
+    time::Duration,
+};
 use thiserror::Error;
 
 use tracing::debug;
@@ -41,7 +52,7 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
-// Headers FIXME: byte strings?
+// Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
 pub const SIGNATURE_HEADER: &str = "ATS-Signature";
@@ -83,7 +94,7 @@ pub enum ResponseError {
     #[error("Error while verifying a contribution: {0}")]
     VerificationError(String),
     #[error("Digest of request's body is not base64 encoded: {0}")]
-    WrongDigestEncoding(#[from] base64::DecodeError)
+    WrongDigestEncoding(#[from] base64::DecodeError),
 }
 
 impl<'r> Responder<'r, 'static> for ResponseError {
@@ -99,10 +110,11 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::MissingSigningKey => Status::BadRequest,
             ResponseError::UnauthorizedParticipant(_, _) => Status::Unauthorized,
             ResponseError::WrongDigestEncoding(_) => Status::BadRequest,
-            _ => Status::InternalServerError
+            _ => Status::InternalServerError,
         };
 
-        builder.status(response_code)
+        builder
+            .status(response_code)
             .header(ContentType::JSON)
             .sized_body(response.len(), Cursor::new(response))
             .ok()
@@ -113,13 +125,18 @@ type Result<T> = std::result::Result<T, ResponseError>;
 /// Content info
 pub struct RequestContent<'a> {
     len: usize,
-    digest: Cow<'a, str>
+    digest: Cow<'a, str>,
 }
 
 impl<'a> RequestContent<'a> {
     pub fn new<T>(len: usize, digest: T) -> Self
-    where T: AsRef<[u8]> {
-        Self{len, digest: base64::encode(digest).into()}
+    where
+        T: AsRef<[u8]>,
+    {
+        Self {
+            len,
+            digest: base64::encode(digest).into(),
+        }
     }
 
     /// Returns struct correctly formatted for the http header
@@ -129,13 +146,21 @@ impl<'a> RequestContent<'a> {
 
     /// Constructs from request's headers
     fn try_from_header(len: &str, digest: &'a str) -> Result<Self> {
-        let digest =  digest.split_once('=').ok_or(ResponseError::InvalidHeader(BODY_DIGEST_HEADER))?.1;
+        let digest = digest
+            .split_once('=')
+            .ok_or(ResponseError::InvalidHeader(BODY_DIGEST_HEADER))?
+            .1;
 
         // Check encoding
         base64::decode(digest)?;
-        let len = len.parse().map_err(|_| ResponseError::InvalidHeader(CONTENT_LENGTH_HEADER))?;
+        let len = len
+            .parse()
+            .map_err(|_| ResponseError::InvalidHeader(CONTENT_LENGTH_HEADER))?;
 
-        Ok(Self{len, digest: digest.into()})
+        Ok(Self {
+            len,
+            digest: digest.into(),
+        })
     }
 }
 
@@ -144,22 +169,24 @@ impl<'a> RequestContent<'a> {
 pub struct SignatureHeaders<'r> {
     pub pubkey: &'r str,
     pub content: Option<RequestContent<'r>>,
-    pub signature: Option<Cow<'r, str>>
+    pub signature: Option<Cow<'r, str>>,
 }
 
 impl<'r> SignatureHeaders<'r> {
     /// Produces the message on which to compute the signature
     pub fn to_string(&self) -> Cow<'_, str> {
         match &self.content {
-            Some(content) => {
-                format!("{}{}{}", self.pubkey, content.len, content.digest).into()
-            },
+            Some(content) => format!("{}{}{}", self.pubkey, content.len, content.digest).into(),
             None => self.pubkey.into(),
         }
     }
 
     pub fn new(pubkey: &'r str, content: Option<RequestContent<'r>>, signature: Option<Cow<'r, str>>) -> Self {
-        Self { pubkey, content, signature }
+        Self {
+            pubkey,
+            content,
+            signature,
+        }
     }
 
     fn try_verify_signature(&self) -> Result<bool> {
@@ -177,13 +204,19 @@ impl<'r> TryFrom<&'r Request<'_>> for SignatureHeaders<'r> {
         let headers = request.headers();
         let mut body: Option<RequestContent> = None;
 
-        let pubkey = headers.get_one(PUBKEY_HEADER).ok_or(ResponseError::InvalidHeader(PUBKEY_HEADER))?;
-        let sig = headers.get_one(SIGNATURE_HEADER).ok_or(ResponseError::InvalidHeader(SIGNATURE_HEADER))?;
+        let pubkey = headers
+            .get_one(PUBKEY_HEADER)
+            .ok_or(ResponseError::InvalidHeader(PUBKEY_HEADER))?;
+        let sig = headers
+            .get_one(SIGNATURE_HEADER)
+            .ok_or(ResponseError::InvalidHeader(SIGNATURE_HEADER))?;
 
         // If post request, also get the hash of body from header (if any and if base64 encoded)
         if request.method() == rocket::http::Method::Post {
             if let Some(s) = headers.get_one(BODY_DIGEST_HEADER) {
-                let content_length = headers.get_one(CONTENT_LENGTH_HEADER).ok_or(ResponseError::InvalidHeader(CONTENT_LENGTH_HEADER))?;
+                let content_length = headers
+                    .get_one(CONTENT_LENGTH_HEADER)
+                    .ok_or(ResponseError::InvalidHeader(CONTENT_LENGTH_HEADER))?;
                 let content = RequestContent::try_from_header(content_length, s)?;
 
                 body = Some(content);
@@ -194,7 +227,8 @@ impl<'r> TryFrom<&'r Request<'_>> for SignatureHeaders<'r> {
     }
 }
 
-trait VerifySignature<'r> { // Workaround to implement a single method on a foreign type instead of newtype pattern
+trait VerifySignature<'r> {
+    // Workaround to implement a single method on a foreign type instead of newtype pattern
     fn verify_signature(&'r self) -> Result<&str>;
 }
 
@@ -214,10 +248,10 @@ impl<'r> VerifySignature<'r> for Request<'_> {
 impl<'r> FromRequest<'r> for Participant {
     type Error = ResponseError;
 
-    async fn from_request(request: & 'r Request<'_>) -> Outcome<Self, Self::Error> {
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match request.verify_signature() {
             Ok(pubkey) => Outcome::Success(Participant::new_contributor(pubkey)),
-            Err(e) => Outcome::Failure((Status::BadRequest, e))
+            Err(e) => Outcome::Failure((Status::BadRequest, e)),
         }
     }
 }
@@ -229,18 +263,25 @@ pub struct ServerAuth;
 impl<'r> FromRequest<'r> for ServerAuth {
     type Error = ResponseError;
 
-    async fn from_request(request: & 'r Request<'_>) -> Outcome<Self, Self::Error> {
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let pubkey = match request.verify_signature() {
             Ok(h) => h,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e))
+            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
         };
- 
+
         // Check that the signature comes from the coordinator by matching the default verifier key
-        let coordinator = request.guard::<&State<Coordinator>>().await.succeeded().expect("Managed state should always be retrievable");
+        let coordinator = request
+            .guard::<&State<Coordinator>>()
+            .await
+            .succeeded()
+            .expect("Managed state should always be retrievable");
         let verifier = Participant::new_verifier(pubkey);
 
         if verifier != coordinator.read().await.environment().coordinator_verifiers()[0] {
-            return Outcome::Failure((Status::Unauthorized, ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string())));
+            return Outcome::Failure((
+                Status::Unauthorized,
+                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string()),
+            ));
         }
 
         Outcome::Success(Self)
@@ -272,12 +313,22 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         // Check that digest of body is the expected one
         let expected_digest = match req.headers().get_one(BODY_DIGEST_HEADER) {
             Some(h) => h,
-            None => return rocket::data::Outcome::Failure((Status::BadRequest, ResponseError::MissingRequiredHeader(BODY_DIGEST_HEADER))),
+            None => {
+                return rocket::data::Outcome::Failure((
+                    Status::BadRequest,
+                    ResponseError::MissingRequiredHeader(BODY_DIGEST_HEADER),
+                ));
+            }
         };
 
         let content_length = match req.headers().get_one(CONTENT_LENGTH_HEADER) {
             Some(h) => h,
-            None => return rocket::data::Outcome::Failure((Status::LengthRequired, ResponseError::MissingRequiredHeader(CONTENT_LENGTH_HEADER))),
+            None => {
+                return rocket::data::Outcome::Failure((
+                    Status::LengthRequired,
+                    ResponseError::MissingRequiredHeader(CONTENT_LENGTH_HEADER),
+                ));
+            }
         };
 
         let expected_content = match RequestContent::try_from_header(content_length, expected_digest) {
@@ -294,7 +345,10 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         hasher.update(&body);
         let digest = base64::encode(hasher.finalize());
         if digest != expected_content.digest {
-            return rocket::data::Outcome::Failure((Status::BadRequest, ResponseError::MismatchingChecksum(expected_digest.to_owned(), expected_content.digest.to_string())));
+            return rocket::data::Outcome::Failure((
+                Status::BadRequest,
+                ResponseError::MismatchingChecksum(expected_digest.to_owned(), expected_content.digest.to_string()),
+            ));
         }
 
         // Deserialize data and pass it to the request handler
@@ -362,10 +416,7 @@ pub async fn join_queue(
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
 #[get("/contributor/lock_chunk", format = "json")]
-pub async fn lock_chunk(
-    coordinator: &State<Coordinator>,
-    participant: Participant,
-) -> Result<Json<LockedLocators>> {
+pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participant) -> Result<Json<LockedLocators>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     match task::spawn_blocking(move || write_lock.try_lock(&participant)).await? {
@@ -435,12 +486,11 @@ pub async fn post_contribution_chunk(
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     if let Err(e) =
-        task::spawn_blocking(move || write_lock.write_contribution(contribution_locator, contribution))
-            .await?
+        task::spawn_blocking(move || write_lock.write_contribution(contribution_locator, contribution)).await?
     {
         return Err(ResponseError::CoordinatorError(e));
     }
-    
+
     write_lock = (*coordinator).clone().write_owned().await;
     match task::spawn_blocking(move || {
         write_lock.write_contribution_file_signature(
@@ -516,11 +566,7 @@ pub async fn get_tasks_left(
 
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint is accessible only by the coordinator itself.
 #[get("/stop")]
-pub async fn stop_coordinator(
-    coordinator: &State<Coordinator>,
-    _auth: ServerAuth,
-    shutdown: Shutdown,
-) -> Result<()> {
+pub async fn stop_coordinator(coordinator: &State<Coordinator>, _auth: ServerAuth, shutdown: Shutdown) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
     let result = task::spawn_blocking(move || write_lock.shutdown()).await?;
 
