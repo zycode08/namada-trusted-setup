@@ -16,7 +16,15 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource},
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
-    rest::{self, ContributorStatus, PostChunkRequest, BODY_DIGEST_HEADER, PUBKEY_HEADER, SIGNATURE_HEADER, CONTENT_LENGTH_HEADER},
+    rest::{
+        self,
+        ContributorStatus,
+        PostChunkRequest,
+        BODY_DIGEST_HEADER,
+        CONTENT_LENGTH_HEADER,
+        PUBKEY_HEADER,
+        SIGNATURE_HEADER,
+    },
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -26,8 +34,8 @@ use phase1_coordinator::{
 };
 use rocket::{
     fs::FileServer,
-    http::{ContentType, Status, Header},
-    local::{blocking::Client, blocking::LocalRequest},
+    http::{ContentType, Header, Status},
+    local::blocking::{Client, LocalRequest},
     routes,
     tokio::sync::RwLock,
     Build,
@@ -150,7 +158,9 @@ fn build_context() -> TestCtx {
 
 /// Add headers and optional body to the request
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
-where T: Serialize {
+where
+    T: Serialize,
+{
     let mut msg = keypair.pubkey().to_owned();
     req.add_header(Header::new(PUBKEY_HEADER, keypair.pubkey().to_owned()));
 
@@ -176,7 +186,7 @@ where T: Serialize {
     req.add_header(Header::new(SIGNATURE_HEADER, signature));
 
     req
-} 
+}
 
 #[test]
 fn test_stop_coordinator() {
@@ -296,18 +306,14 @@ fn test_join_queue() {
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
     // Ok request
-    let mut req = client
-        .post("/contributor/join_queue")
-        .remote(socket_address);
+    let mut req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Wrong request, already seen IP
-    req = client
-        .post("/contributor/join_queue")
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.contributors[1].keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -315,9 +321,7 @@ fn test_join_queue() {
 
     // Wrong request, already existing contributor
     let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
-    req = client
-        .post("/contributor/join_queue")
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -355,7 +359,11 @@ fn test_wrong_get_chunk() {
 
     // Wrong request json body format
     req = client.post("/download/chunk");
-    req = set_request::<String>(req, &ctx.contributors[0].keypair, Some(&String::from("Unexpected string")));
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -394,7 +402,11 @@ fn test_wrong_post_contribution_chunk() {
 
     // Wrong request json body format
     req = client.post("/upload/chunk");
-    req = set_request(req, &ctx.contributors[0].keypair, Some(&String::from("Unexpected string")));
+    req = set_request(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -416,9 +428,12 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    req = client
-        .post("/contributor/contribute_chunk");
-    req = set_request(req, &ctx.unknown_participant.keypair, Some(&String::from("Unexpected string")));
+    req = client.post("/contributor/contribute_chunk");
+    req = set_request(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -459,9 +474,12 @@ fn test_wrong_post_contribution_info() {
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    req = client
-        .post("/contributor/contribution_info");
-    req = set_request::<String>(req, &ctx.contributors[0].keypair, Some(&String::from("Unexpected string")));
+    req = client.post("/contributor/contribution_info");
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());

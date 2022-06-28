@@ -17,7 +17,8 @@ use structopt::StructOpt;
 
 use std::{
     fs::{self, File, OpenOptions},
-    io::Read, sync::Arc,
+    io::Read,
+    sync::Arc,
 };
 
 use chrono::Utc;
@@ -450,7 +451,13 @@ async fn main() {
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 
-            contribution_loop(Arc::new(client), Arc::new(url.coordinator), Arc::new(keypair), contrib_info).await;
+            contribution_loop(
+                Arc::new(client),
+                Arc::new(url.coordinator),
+                Arc::new(keypair),
+                contrib_info,
+            )
+            .await;
         }
         CeremonyOpt::CloseCeremony(url) => {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
@@ -484,5 +491,4 @@ async fn main() {
     }
 }
 
-// FIXME: tests
 // FIXME: format

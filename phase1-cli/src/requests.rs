@@ -4,19 +4,28 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::{ContributionInfo, TrimmedContributionInfo},
     rest::{
+        RequestContent,
+        SignatureHeaders,
+        BODY_DIGEST_HEADER,
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
-        BODY_DIGEST_HEADER,
         SIGNATURE_HEADER,
-        SignatureHeaders,
-        RequestContent
     },
 };
-use reqwest::{Client, header::{CONTENT_TYPE, HeaderMap, HeaderValue}, Response, Url};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    Client,
+    Response,
+    Url,
+};
 use serde::Serialize;
-use std::{collections::LinkedList, convert::{TryFrom, TryInto}, ops::{Deref, DerefMut}};
-use thiserror::Error;
 use sha2::{Digest, Sha256};
+use std::{
+    collections::LinkedList,
+    convert::{TryFrom, TryInto},
+    ops::{Deref, DerefMut},
+};
+use thiserror::Error;
 
 use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkRequest, Task};
 
@@ -79,7 +88,12 @@ trait Sign {
 impl Sign for SignatureHeaders<'_> {
     fn try_sign(&mut self, sigkey: &str) -> Result<()> {
         let msg = self.to_string();
-        self.signature = Some(Production.sign(sigkey, &msg).map_err(|_| RequestError::SigningError)?.into());
+        self.signature = Some(
+            Production
+                .sign(sigkey, &msg)
+                .map_err(|_| RequestError::SigningError)?
+                .into(),
+        );
 
         Ok(())
     }
@@ -87,7 +101,7 @@ impl Sign for SignatureHeaders<'_> {
 
 enum Request<'a, T: Serialize> {
     Get,
-    Post(Option<&'a T>)
+    Post(Option<&'a T>),
 }
 
 /// Submit a signed json encoded request to the provided enpoint
@@ -101,25 +115,28 @@ async fn submit_request<T: Serialize>(
 where
     T: Serialize,
 {
-    let address = coordinator_address.join(endpoint).map_err(|_| RequestError::AddressParseError)?;
+    let address = coordinator_address
+        .join(endpoint)
+        .map_err(|_| RequestError::AddressParseError)?;
     let mut content: Option<RequestContent> = None;
 
     let req = match request {
         Request::Get => client.get(address),
-        Request::Post(body) => {
-            match body {
-                Some(b) => {
-                    let json_body = serde_json::to_string(b)?;
+        Request::Post(body) => match body {
+            Some(b) => {
+                let json_body = serde_json::to_string(b)?;
 
-                    let mut hasher = Sha256::new();
-                    hasher.update(&json_body);
-                    let digest = hasher.finalize();
-                    
-                    content = Some(RequestContent::new(json_body.len(), digest));
-                    client.post(address).body(json_body).header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-                },
-                None => client.post(address),
+                let mut hasher = Sha256::new();
+                hasher.update(&json_body);
+                let digest = hasher.finalize();
+
+                content = Some(RequestContent::new(json_body.len(), digest));
+                client
+                    .post(address)
+                    .body(json_body)
+                    .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
             }
+            None => client.post(address),
         },
     };
 
@@ -144,7 +161,7 @@ pub async fn post_join_queue(client: &Client, coordinator_address: &Url, keypair
         coordinator_address,
         "contributor/join_queue",
         keypair,
-        Request::Post(None)
+        Request::Post(None),
     )
     .await?;
 
@@ -152,17 +169,13 @@ pub async fn post_join_queue(client: &Client, coordinator_address: &Url, keypair
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to lock the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_lock_chunk(
-    client: &Client,
-    coordinator_address: &Url,
-    keypair: &KeyPair,
-) -> Result<LockedLocators> {
+pub async fn get_lock_chunk(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<LockedLocators> {
     let response = submit_request::<String>(
         client,
         coordinator_address,
         "contributor/lock_chunk",
         keypair,
-        Request::Get
+        Request::Get,
     )
     .await?;
 
@@ -181,7 +194,7 @@ pub async fn get_chunk(
         coordinator_address,
         "download/chunk",
         keypair,
-        Request::Post(Some(request_body))
+        Request::Post(Some(request_body)),
     )
     .await?;
 
@@ -200,7 +213,7 @@ pub async fn get_challenge(
         coordinator_address,
         "contributor/challenge",
         keypair,
-        Request::Post(Some(request_body))
+        Request::Post(Some(request_body)),
     )
     .await?;
 
@@ -219,7 +232,7 @@ pub async fn post_chunk(
         coordinator_address,
         "upload/chunk",
         keypair,
-        Request::Post(Some(request_body))
+        Request::Post(Some(request_body)),
     )
     .await?;
 
@@ -238,7 +251,7 @@ pub async fn post_contribute_chunk(
         coordinator_address,
         "contributor/contribute_chunk",
         keypair,
-        Request::Post(Some(&request_body))
+        Request::Post(Some(&request_body)),
     )
     .await?;
 
@@ -252,7 +265,7 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &Url, keypair:
         coordinator_address,
         "contributor/heartbeat",
         keypair,
-        Request::Post(None)
+        Request::Post(None),
     )
     .await?;
 
@@ -260,17 +273,13 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &Url, keypair:
 }
 
 /// Get pending tasks of the contributor.
-pub async fn get_tasks_left(
-    client: &Client,
-    coordinator_address: &Url,
-    keypair: &KeyPair,
-) -> Result<LinkedList<Task>> {
+pub async fn get_tasks_left(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<LinkedList<Task>> {
     let response = submit_request::<String>(
         client,
         coordinator_address,
         "contributor/get_tasks_left",
         keypair,
-        Request::Get
+        Request::Get,
     )
     .await?;
 
@@ -311,7 +320,7 @@ pub async fn get_contributor_queue_status(
         coordinator_address,
         "contributor/queue_status",
         keypair,
-        Request::Get
+        Request::Get,
     )
     .await?;
 
@@ -330,7 +339,7 @@ pub async fn post_contribution_info(
         coordinator_address,
         "contributor/contribution_info",
         keypair,
-        Request::Post(Some(request_body))
+        Request::Post(Some(request_body)),
     )
     .await?;
 
@@ -342,7 +351,9 @@ pub async fn get_contributions_info(
     client: &Client,
     coordinator_address: &Url,
 ) -> Result<Vec<TrimmedContributionInfo>> {
-    let address = coordinator_address.join("/contribution_info").map_err(|_| RequestError::AddressParseError)?;
+    let address = coordinator_address
+        .join("/contribution_info")
+        .map_err(|_| RequestError::AddressParseError)?;
     // FIXME: manage accept-encoding header with compression only in production build (create a feature aws)
     let req = client.get(address);
     let response = req.send().await?;

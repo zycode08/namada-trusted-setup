@@ -112,7 +112,10 @@ pub async fn main() {
         rest::get_contributions_info,
     ];
 
-    let build_rocket = rocket::build().mount("/", routes).mount("/healthcheck", FileServer::from(health_path)).manage(coordinator);
+    let build_rocket = rocket::build()
+        .mount("/", routes)
+        .mount("/healthcheck", FileServer::from(health_path))
+        .manage(coordinator);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically

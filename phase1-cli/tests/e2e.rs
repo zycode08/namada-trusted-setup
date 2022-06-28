@@ -172,7 +172,7 @@ async fn test_stop_coordinator() {
         Ok(_) => panic!("Expected error"),
         Err(e) => match e {
             requests::RequestError::Server(_) => panic!("Expected client-side error"),
-            _ => ()
+            _ => (),
         },
     }
 
@@ -329,13 +329,8 @@ async fn test_wrong_post_contribution_info() {
 
     // Non-existing contributor key
     let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
-    let response = requests::post_contribution_info(
-        &client,
-        &mut url,
-        &ctx.unknown_participant.keypair,
-        &contrib_info,
-    )
-    .await;
+    let response =
+        requests::post_contribution_info(&client, &mut url, &ctx.unknown_participant.keypair, &contrib_info).await;
     assert!(response.is_err());
 
     // Non-current-contributor participant
