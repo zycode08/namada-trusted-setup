@@ -41,7 +41,7 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
-// Headers
+// Headers FIXME: byte strings?
 pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
 pub const SIGNATURE_HEADER: &str = "ATS-Signature";
@@ -72,8 +72,6 @@ pub enum ResponseError {
     RuntimeError(#[from] task::JoinError),
     #[error("Error with Serde: {0}")]
     SerdeError(#[from] serde_json::error::Error),
-    #[error("Error while signing the request: {0}")]
-    SigningError(String), // FIXME: used here
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
     #[error("The participant {0} is not allowed to access the endpoint {1}")]
@@ -151,7 +149,7 @@ pub struct SignatureHeaders<'r> {
 
 impl<'r> SignatureHeaders<'r> {
     /// Produces the message on which to compute the signature
-    fn to_string(&self) -> Cow<'_, str> {
+    pub fn to_string(&self) -> Cow<'_, str> {
         match &self.content {
             Some(content) => {
                 format!("{}{}{}", self.pubkey, content.len, content.digest).into()
@@ -169,14 +167,6 @@ impl<'r> SignatureHeaders<'r> {
             Some(sig) => Ok(Production.verify(self.pubkey, &self.to_string(), &sig)),
             None => Err(ResponseError::MissingSigningKey),
         }
-    }
-
-    /// Produce the signature of [`SignatureHeaders`], [`base64`] encoded
-    pub fn try_sign(&mut self, sigkey: &str) -> Result<()> { //FIXME: this function should be moved to requests.rs
-        let msg = self.to_string();
-        self.signature = Some(Production.sign(sigkey, &msg).map_err(|_| ResponseError::SigningError(msg.into_owned()))?.into());
-
-        Ok(())
     }
 }
 
@@ -250,7 +240,7 @@ impl<'r> FromRequest<'r> for ServerAuth {
         let verifier = Participant::new_verifier(pubkey);
 
         if verifier != coordinator.read().await.environment().coordinator_verifiers()[0] {
-            return Outcome::Failure((Status::BadRequest, ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string())));
+            return Outcome::Failure((Status::Unauthorized, ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string())));
         }
 
         Outcome::Success(Self)
@@ -310,7 +300,7 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         // Deserialize data and pass it to the request handler
         match serde_json::from_str::<T>(body.as_str()) {
             Ok(obj) => rocket::data::Outcome::Success(LazyJson(obj)),
-            Err(e) => rocket::data::Outcome::Failure((Status::BadRequest, ResponseError::from(e))),
+            Err(e) => rocket::data::Outcome::Failure((Status::UnprocessableEntity, ResponseError::from(e))),
         }
     }
 }
@@ -360,7 +350,7 @@ impl PostChunkRequest {
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
     participant: Participant,
-    contributor_ip: IpAddr, //FIXME: check this, could be None, probably should take parameter as Option<IpAddr>. Or use SocketAddr?
+    contributor_ip: IpAddr, //NOTE: if ip address cannot be retrieved this request is forwarded and fails. If we want to accept requests from unknown ips we should use Option<IpAddr>
 ) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -651,23 +641,4 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
     };
 
     Ok(Json(summary))
-}
-
-#[cfg(test)]
-mod tests_signed_request { //FIXME:
-    // use super::SignedRequest;
-    // use crate::authentication::KeyPair;
-
-    // #[test]
-    // fn sign_and_verify() {
-    //     let keypair = KeyPair::new();
-
-    //     // Empty body
-    //     let request = SignedRequest::<()>::try_sign(&keypair, None).unwrap();
-    //     assert!(request.verify().is_ok());
-
-    //     // Non-empty body
-    //     let request = SignedRequest::<String>::try_sign(&keypair, Some(String::from("test_body"))).unwrap();
-    //     assert!(request.verify().is_ok());
-    // }
 }

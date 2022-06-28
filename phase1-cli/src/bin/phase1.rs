@@ -17,7 +17,7 @@ use structopt::StructOpt;
 
 use std::{
     fs::{self, File, OpenOptions},
-    io::Read,
+    io::Read, sync::Arc,
 };
 
 use chrono::Utc;
@@ -194,7 +194,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
 /// Performs the contribution sequence
 async fn contribute(
     client: &Client,
-    coordinator: &mut Url,
+    coordinator: &Url,
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
@@ -316,27 +316,26 @@ async fn contribute(
 
 /// Waits in line until it's time to contribute
 async fn contribution_loop(
-    client: &Client,
-    coordinator: &mut Url,
-    keypair: &KeyPair,
+    client: Arc<Client>,
+    coordinator: Arc<Url>,
+    keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
-    requests::post_join_queue(client, coordinator, keypair)
+    requests::post_join_queue(&client, &coordinator, &keypair)
         .await
         .expect("Couldn't join the queue");
     contrib_info.timestamps.joined_queue = Utc::now();
 
-    // FIXME: client and url lifetimes are technically static, can I avoid the clone to pass them to the spawn?
-    let client_clone = client.clone();
-    let mut coordinator_clone = coordinator.clone();
-    let keypair_clone = keypair.to_owned();
-
     // Spawn heartbeat task to prevent the Coordinator from
     // dropping the contributor out of the ceremony in the middle of a contribution.
     // Heartbeat is checked by the Coordinator every 120 seconds.
+    let client_cnt = client.clone();
+    let coordinator_cnt = coordinator.clone();
+    let keypair_cnt = keypair.clone();
+
     let heartbeat_handle = tokio::task::spawn(async move {
         loop {
-            if let Err(e) = requests::post_heartbeat(&client_clone, &mut coordinator_clone, &keypair_clone).await {
+            if let Err(e) = requests::post_heartbeat(&client_cnt, &coordinator_cnt, &keypair_cnt).await {
                 error!("Heartbeat error: {}", e);
             }
             time::sleep(UPDATE_TIME).await;
@@ -345,7 +344,7 @@ async fn contribution_loop(
 
     loop {
         // Check the contributor's position in the queue
-        let queue_status = requests::get_contributor_queue_status(client, coordinator, keypair)
+        let queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
             .await
             .expect("Couldn't get the status of contributor");
 
@@ -359,7 +358,7 @@ async fn contribution_loop(
                 );
             }
             ContributorStatus::Round => {
-                contribute(client, coordinator, keypair, contrib_info.clone(), &heartbeat_handle)
+                contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
             }
@@ -377,14 +376,14 @@ async fn contribution_loop(
     }
 }
 
-async fn close_ceremony(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
         Ok(()) => info!("Ceremony completed!"),
         Err(e) => error!("{}", e),
     }
 }
 
-async fn get_contributions(client: &Client, coordinator: &mut Url) {
+async fn get_contributions(client: &Client, coordinator: &Url) {
     match requests::get_contributions_info(client, coordinator).await {
         Ok(contributions) => info!(
             "Contributions:\n{}",
@@ -395,7 +394,7 @@ async fn get_contributions(client: &Client, coordinator: &mut Url) {
 }
 
 #[cfg(debug_assertions)]
-async fn verify_contributions(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_verify_chunks(client, coordinator, keypair).await {
         Ok(()) => info!("Verification of pending contributions completed"),
         Err(e) => error!("{}", e),
@@ -403,7 +402,7 @@ async fn verify_contributions(client: &Client, coordinator: &mut Url, keypair: &
 }
 
 #[cfg(debug_assertions)]
-async fn update_coordinator(client: &Client, coordinator: &mut Url, keypair: &KeyPair) {
+async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_update(client, coordinator, keypair).await {
         Ok(()) => info!("Coordinator updated"),
         Err(e) => error!("{}", e),
@@ -418,7 +417,7 @@ async fn main() {
     let client = Client::new();
 
     match opt {
-        CeremonyOpt::Contribute { mut url, offline } => {
+        CeremonyOpt::Contribute { url, offline } => {
             if offline {
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
@@ -451,36 +450,36 @@ async fn main() {
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 
-            contribution_loop(&client, &mut url.coordinator, &keypair, contrib_info).await;
+            contribution_loop(Arc::new(client), Arc::new(url.coordinator), Arc::new(keypair), contrib_info).await;
         }
-        CeremonyOpt::CloseCeremony(mut url) => {
+        CeremonyOpt::CloseCeremony(url) => {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
                 .expect("Error while generating the keypair");
 
-            close_ceremony(&client, &mut url.coordinator, &keypair).await;
+            close_ceremony(&client, &url.coordinator, &keypair).await;
         }
-        CeremonyOpt::GetContributions(mut url) => {
-            get_contributions(&client, &mut url.coordinator).await;
+        CeremonyOpt::GetContributions(url) => {
+            get_contributions(&client, &url.coordinator).await;
         }
         #[cfg(debug_assertions)]
-        CeremonyOpt::VerifyContributions(mut url) => {
+        CeremonyOpt::VerifyContributions(url) => {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
                 .expect("Error while generating the keypair");
 
-            verify_contributions(&client, &mut url.coordinator, &keypair).await;
+            verify_contributions(&client, &url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
-        CeremonyOpt::UpdateCoordinator(mut url) => {
+        CeremonyOpt::UpdateCoordinator(url) => {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
                 .expect("Error while generating the keypair");
 
-            update_coordinator(&client, &mut url.coordinator, &keypair).await;
+            update_coordinator(&client, &url.coordinator, &keypair).await;
         }
     }
 }
