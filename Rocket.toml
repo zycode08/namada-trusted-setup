@@ -1,6 +1,6 @@
 [default]
 address = "0.0.0.0"
-port = 8080
+port = 8000
 keep_alive = 5
 ident = "Rocket"
 log_level = "normal"
@@ -18,6 +18,3 @@ ctrlc = true
 signals = ["term", "hup"]
 grace = 5
 mercy = 5
-
-[release]
-cli_colors = false

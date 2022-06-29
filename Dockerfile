@@ -1,20 +1,16 @@
-FROM rust:1.61.0 AS base
-WORKDIR /app
-
-FROM base as builder
-RUN rustup target add x86_64-unknown-linux-musl
+FROM rust:slim as builder
+RUN apt-get update && \
+    apt-get install -y pkg-config libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /build
 COPY . .
-RUN docker/compile.sh
+RUN mkdir bin
+RUN cd phase1-cli && \
+    cargo build --release --bins && \
+    find ./target/release/ -maxdepth 1 -type f -perm /a+x -exec sh -c 'mv {} /build/bin/phase1_$(basename {})' \;
+RUN cd setup2 && \
+    cargo build --release --bins && \
+    find ./target/release/ -maxdepth 1 -type f -perm /a+x -exec sh -c 'mv {} /build/bin/phase2_$(basename {})' \;
 
-FROM debian:buster-slim AS runtime
-WORKDIR /app
-
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/phase1-coordinator /usr/local/bin
-COPY --from=builder /app/Rocket.toml /rocket/Rocket.toml
-COPY --from=builder /app/status.json /rocket/status.json
-
-ENV ROCKET_CONFIG=/rocket/Rocket.toml
-ENV RUST_LOG=info
-
-EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/phase1-coordinator"]
+FROM debian:buster-slim
+COPY --from=builder /build/bin/* /usr/bin/
