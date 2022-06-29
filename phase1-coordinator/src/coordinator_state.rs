@@ -950,8 +950,10 @@ pub struct CoordinatorState {
     current_round_height: Option<u64>,
     /// The map of unique contributors for the current round.
     current_contributors: HashMap<Participant, ParticipantInfo>,
-    /// The map of unique contributors and their IPs.
-    contributor_ips: HashSet<IpAddr>,
+    /// The map of current contributors' ips
+    contributors_ips: HashMap<Participant, IpAddr>,
+    /// The set of finished contributors' IPs.
+    finished_contributors_ips: HashSet<IpAddr>,
     /// The map of unique verifiers for the current round.
     current_verifiers: HashMap<Participant, ParticipantInfo>,
     /// The map of tasks pending verification in the current round.
@@ -982,7 +984,8 @@ impl CoordinatorState {
             current_metrics: None,
             current_round_height: None,
             current_contributors: HashMap::default(),
-            contributor_ips: HashSet::default(),
+            contributors_ips: HashMap::default(),
+            finished_contributors_ips: HashSet::default(),
             current_verifiers: HashMap::default(),
             pending_verification: HashMap::default(),
             finished_contributors: HashMap::default(),
@@ -1183,10 +1186,10 @@ impl CoordinatorState {
     }
 
     ///
-    /// Returns `true` if a contributor has already entered the queue with this IP.
+    /// Returns `true` if a contributor has already contributed with this IP.
     ///
     pub fn is_duplicate_ip(&self, ip: &IpAddr) -> bool {
-        self.contributor_ips.contains(ip)
+        self.finished_contributors_ips.contains(ip)
     }
 
     ///
@@ -1549,7 +1552,7 @@ impl CoordinatorState {
 
         // Add ip (if any) to the set of known addresses
         if let Some(ip) = participant_ip {
-            self.contributor_ips.insert(ip);
+            self.contributors_ips.insert(participant.clone(), ip);
         }
 
         Ok(())
@@ -2559,7 +2562,16 @@ impl CoordinatorState {
 
         // Update the map of finished contributors.
         match self.finished_contributors.get_mut(&current_round_height) {
-            Some(contributors) => contributors.extend(newly_finished.into_iter()),
+            Some(contributors) => {
+                // Add ip (if any) to the set of known addresses
+                for (contributor, _) in contributors.iter() {
+                    if let Some(ip) = self.contributors_ips.remove(contributor) {
+                        self.finished_contributors_ips.insert(ip);
+                    }
+                }
+
+                contributors.extend(newly_finished.into_iter())
+            }
             None => return Err(CoordinatorError::RoundCommitFailedOrCorrupted),
         };
 
@@ -3447,13 +3459,13 @@ mod tests {
         state.drop_participant(&contributor_1, &time).unwrap();
 
         // Verify the IP still exists as one participant associated with it is left in the queue.
-        assert!(state.contributor_ips.contains(&contributor_ip));
+        assert!(state.finished_contributors_ips.contains(&contributor_ip));
 
         // Drop the second participant.
         state.drop_participant(&contributor_2, &time).unwrap();
 
         // Verify the IP has been deleted.
-        assert!(!state.contributor_ips.contains(&contributor_ip));
+        assert!(!state.finished_contributors_ips.contains(&contributor_ip));
     }
 
     #[test]
