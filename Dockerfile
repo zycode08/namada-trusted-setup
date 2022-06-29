@@ -11,10 +11,11 @@ WORKDIR /app
 
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/phase1-coordinator /usr/local/bin
 COPY --from=builder /app/Rocket.toml /rocket/Rocket.toml
-COPY --from=builder /app/status.json /rocket/status.json
+COPY --from=builder /system_version.json /rocket/status.json
 
 ENV ROCKET_CONFIG=/rocket/Rocket.toml
 ENV RUST_LOG=info
+ENV HEALTH_PATH=/rocket/status.json
 
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/phase1-coordinator"]
