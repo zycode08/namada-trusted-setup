@@ -1,44 +1,36 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
 use crate::{
-    authentication::{KeyPair, Production, Signature},
-    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
-    storage::{ContributionLocator, ContributionSignatureLocator, Locator},
+    authentication::{Production, Signature},
+    objects::{ContributionInfo, LockedLocators, Task},
+    storage::{ContributionLocator, ContributionSignatureLocator},
     ContributionFileSignature,
     CoordinatorError,
     Participant,
 };
 
-use base64::encode;
 use blake2::Digest;
 use rocket::{
     data::FromData,
     error,
     get,
     http::{ContentType, Status},
-    outcome::IntoOutcome,
     post,
-    request::{self, FromRequest, Outcome, Request},
+    request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
-    serde::{
-        json::{self, Json},
-        Deserialize,
-        DeserializeOwned,
-        Serialize,
-    },
-    tokio::{fs, sync::RwLock, task},
+    serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
+    tokio::{sync::RwLock, task},
     Shutdown,
     State,
 };
 use sha2::Sha256;
-use tracing_subscriber::fmt::format;
 
 use std::{
     borrow::Cow,
-    collections::{HashMap, LinkedList},
+    collections::LinkedList,
     convert::TryFrom,
     io::Cursor,
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     ops::Deref,
     sync::Arc,
     time::Duration,
@@ -336,8 +328,8 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
             Err(e) => return rocket::data::Outcome::Failure((Status::BadRequest, e)),
         };
 
-        let body = match data.open(expected_content.len.into()).into_string().await {
-            Ok(string) => string.into_inner(),
+        let body = match data.open(expected_content.len.into()).into_bytes().await {
+            Ok(bytes) => bytes.into_inner(),
             Err(e) => return rocket::data::Outcome::Failure((Status::InternalServerError, ResponseError::from(e))),
         };
 
@@ -352,7 +344,7 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         }
 
         // Deserialize data and pass it to the request handler
-        match serde_json::from_str::<T>(body.as_str()) {
+        match serde_json::from_slice::<T>(&body) {
             Ok(obj) => rocket::data::Outcome::Success(LazyJson(obj)),
             Err(e) => rocket::data::Outcome::Failure((Status::UnprocessableEntity, ResponseError::from(e))),
         }
@@ -476,7 +468,7 @@ pub async fn get_challenge(
 #[post("/upload/chunk", format = "json", data = "<post_chunk_request>")]
 pub async fn post_contribution_chunk(
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    _participant: Participant,
     mut post_chunk_request: LazyJson<PostChunkRequest>,
 ) -> Result<()> {
     let contribution_locator = post_chunk_request.contribution_locator.clone();
@@ -612,7 +604,10 @@ pub async fn get_contributor_queue_status(
 
     let read_lock = (*coordinator).clone().read_owned().await;
     // Check that the contributor is authorized to lock a chunk in the current round.
-    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor)).await.unwrap() {
+    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor))
+        .await
+        .unwrap()
+    {
         return Json(ContributorStatus::Round);
     }
 

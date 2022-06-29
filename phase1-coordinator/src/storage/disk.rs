@@ -133,10 +133,13 @@ impl Disk {
     pub fn get_contributions_summary(&self) -> Result<Vec<u8>, CoordinatorError> {
         // Check that the given locator exists in storage.
         if !self.exists(&Locator::ContributionsInfoSummary) {
-            error!("Locator missing in call to get() in storage - {:?}", Locator::ContributionsInfoSummary);
+            error!(
+                "Locator missing in call to get() in storage - {:?}",
+                Locator::ContributionsInfoSummary
+            );
             return Err(CoordinatorError::StorageLocatorMissing);
         }
-    
+
         let path = self.to_path(&Locator::ContributionsInfoSummary)?;
 
         Ok(fs::read(path)?)

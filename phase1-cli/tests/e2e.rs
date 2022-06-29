@@ -453,7 +453,7 @@ async fn test_contribution() {
 
     // Get contributions info
     let summary_bytes = requests::get_contributions_info(&url).await.unwrap();
-    let summary: Vec<TrimmedContributionInfo>  = serde_json::from_slice(&summary_bytes).unwrap();
+    let summary: Vec<TrimmedContributionInfo> = serde_json::from_slice(&summary_bytes).unwrap();
     assert_eq!(summary.len(), 1);
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());

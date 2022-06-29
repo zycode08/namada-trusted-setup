@@ -23,7 +23,6 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::LinkedList,
     convert::{TryFrom, TryInto},
-    ops::{Deref, DerefMut},
 };
 use thiserror::Error;
 
@@ -124,7 +123,7 @@ where
         Request::Get => client.get(address),
         Request::Post(body) => match body {
             Some(b) => {
-                let json_body = serde_json::to_string(b)?; //FIXME: to_bytes?
+                let json_body = serde_json::to_vec(b)?;
 
                 let mut hasher = Sha256::new();
                 hasher.update(&json_body);
@@ -347,9 +346,7 @@ pub async fn post_contribution_info(
 }
 
 /// Retrieve the list of contributions, json encoded
-pub async fn get_contributions_info(
-    coordinator_address: &Url,
-) -> Result<Vec<u8>> {
+pub async fn get_contributions_info(coordinator_address: &Url) -> Result<Vec<u8>> {
     let client = Client::builder().brotli(true).build()?;
     let address = coordinator_address
         .join("/contribution_info")

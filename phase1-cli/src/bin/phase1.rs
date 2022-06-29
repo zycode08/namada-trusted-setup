@@ -53,6 +53,7 @@ macro_rules! pretty_hash {
 }
 
 /// Asks the user a few questions to properly setup the contribution
+#[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
     println!("Welcome to the Namada trusted setup ceremony!\nBefore starting, a couple of questions:");
@@ -97,6 +98,7 @@ fn get_seed_of_randomness() -> Result<bool> {
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
+#[inline(always)]
 fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
     let offline = io::get_user_input(
         "Do you want to contribute on another machine? [y/n]",
@@ -115,6 +117,7 @@ fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<Contrib
     Ok(contrib_info)
 }
 
+#[inline(always)]
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
     let mut f = File::open(filename)?;
     let metadata = fs::metadata(filename)?;
@@ -132,6 +135,7 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 }
 
 /// Contest and offline execution branches
+#[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
     // Print instructions to the user
     println!(
@@ -193,6 +197,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
 }
 
 /// Performs the contribution sequence
+#[inline(always)]
 async fn contribute(
     client: &Client,
     coordinator: &Url,
@@ -316,6 +321,7 @@ async fn contribute(
 }
 
 /// Waits in line until it's time to contribute
+#[inline(always)]
 async fn contribution_loop(
     client: Arc<Client>,
     coordinator: Arc<Url>,
@@ -377,6 +383,7 @@ async fn contribution_loop(
     }
 }
 
+#[inline(always)]
 async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
         Ok(()) => info!("Ceremony completed!"),
@@ -384,19 +391,19 @@ async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     }
 }
 
-async fn get_contributions(client: &Client, coordinator: &Url) {
+#[inline(always)]
+async fn get_contributions(coordinator: &Url) {
     match requests::get_contributions_info(coordinator).await {
         Ok(contributions) => {
             let contributions_str = std::str::from_utf8(&contributions).unwrap();
-            info!(
-            "Contributions:\n{}",
-            contributions_str
-        )},
+            info!("Contributions:\n{}", contributions_str)
+        }
         Err(e) => error!("{}", e),
     }
 }
 
 #[cfg(debug_assertions)]
+#[inline(always)]
 async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_verify_chunks(client, coordinator, keypair).await {
         Ok(()) => info!("Verification of pending contributions completed"),
@@ -405,6 +412,7 @@ async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyP
 }
 
 #[cfg(debug_assertions)]
+#[inline(always)]
 async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_update(client, coordinator, keypair).await {
         Ok(()) => info!("Coordinator updated"),
@@ -417,7 +425,6 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let opt = CeremonyOpt::from_args();
-    let client = Client::new();
 
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
@@ -439,6 +446,8 @@ async fn main() {
                 .expect("Error in computing randomness");
                 return;
             }
+
+            let client = Client::new();
 
             // Perform the entire contribution cycle
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
@@ -467,10 +476,11 @@ async fn main() {
                 .unwrap()
                 .expect("Error while generating the keypair");
 
+            let client = Client::new();
             close_ceremony(&client, &url.coordinator, &keypair).await;
         }
         CeremonyOpt::GetContributions(url) => {
-            get_contributions(&client, &url.coordinator).await; //FIXME: remove client
+            get_contributions(&url.coordinator).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(url) => {
@@ -479,6 +489,7 @@ async fn main() {
                 .unwrap()
                 .expect("Error while generating the keypair");
 
+            let client = Client::new();
             verify_contributions(&client, &url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
@@ -488,11 +499,8 @@ async fn main() {
                 .unwrap()
                 .expect("Error while generating the keypair");
 
+            let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
         }
     }
 }
-
-// FIXME: run tests
-// FIXME: compilation warnings
-// FIXME: fmt

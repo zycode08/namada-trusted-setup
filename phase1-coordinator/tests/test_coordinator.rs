@@ -33,7 +33,6 @@ use phase1_coordinator::{
     Participant,
 };
 use rocket::{
-    fs::FileServer,
     http::{ContentType, Header, Status},
     local::blocking::{Client, LocalRequest},
     routes,
@@ -43,7 +42,6 @@ use rocket::{
 };
 use serde::Serialize;
 use sha2::Sha256;
-use tempfile::NamedTempFile;
 
 const ROUND_HEIGHT: u64 = 1;
 
