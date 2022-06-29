@@ -13,8 +13,8 @@ use std::{
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::Computation,
-    environment::{Parameters, Testing},
-    objects::{LockedLocators, Task},
+    environment::Testing,
+    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
     rest::{self, ContributorStatus, PostChunkRequest, SignedRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
@@ -50,14 +50,8 @@ struct TestCtx {
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
-    let parameters = Parameters::TestAnoma {
-        number_of_chunks: 1,
-        power: 6,
-        batch_size: 16,
-    };
-
     // Reset storage to prevent state conflicts between tests and initialize test environment
-    let environment = coordinator::initialize_test_environment(&Testing::from(parameters).into());
+    let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
@@ -113,7 +107,9 @@ fn build_context() -> TestCtx {
             rest::get_tasks_left,
             rest::stop_coordinator,
             rest::verify_chunks,
-            rest::get_contributor_queue_status
+            rest::get_contributor_queue_status,
+            rest::post_contribution_info,
+            rest::get_contributions_info
         ])
         .manage(coordinator);
 
@@ -143,6 +139,8 @@ fn build_context() -> TestCtx {
         coordinator: coord_verifier,
     }
 }
+
+// FIXME: reduce code duplication
 
 #[test]
 fn test_stop_coordinator() {
@@ -462,13 +460,55 @@ fn test_wrong_verify() {
     assert!(response.body().is_some());
 }
 
-/// To test a full contribution we need to test the 5 involved endpoints sequentially:
+#[test]
+fn test_wrong_post_contribution_info() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong request, non-json body
+    let mut req = client
+        .post("/contributor/contribution_info")
+        .header(ContentType::Text)
+        .body("Wrong parameter type");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::NotFound);
+    assert!(response.body().is_some());
+
+    // Wrong request json body format
+    req = client
+        .post("/contributor/contribution_info")
+        .json(&String::from("Unexpected string"));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::UnprocessableEntity);
+    assert!(response.body().is_some());
+
+    // Non-existing contributor key
+    let contrib_info = ContributionInfo::default();
+    let sig_req = SignedRequest::try_sign(&ctx.unknown_participant.keypair, Some(contrib_info)).unwrap();
+    req = client.post("/contributor/contribution_info").json(&sig_req);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+
+    // Non-current-contributor participant
+    let mut contrib_info = ContributionInfo::default();
+    contrib_info.public_key = ctx.contributors[1].keypair.pubkey().to_owned();
+    let sig_req = SignedRequest::try_sign(&ctx.contributors[1].keypair, Some(contrib_info)).unwrap();
+    req = client.post("/contributor/contribution_info").json(&sig_req);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+}
+
+/// To test a full contribution we need to test the 7 involved endpoints sequentially:
 ///
 /// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
 /// - verify_chunk
+/// - post_contributor_info
+/// - get_contributions_info
 ///
 #[test]
 fn test_contribution() {
@@ -549,4 +589,36 @@ fn test_contribution() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
+
+    // Post contribution info
+    let mut contrib_info = ContributionInfo::default();
+    contrib_info.full_name = Some(String::from("Test Name"));
+    contrib_info.email = Some(String::from("test@mail.dev"));
+    contrib_info.public_key = ctx.contributors[0].keypair.pubkey().to_owned();
+    contrib_info.ceremony_round = ctx.contributors[0]
+        .locked_locators
+        .as_ref()
+        .unwrap()
+        .current_contribution()
+        .round_height();
+    contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
+
+    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(contrib_info)).unwrap();
+    req = client.post("/contributor/contribution_info").json(&sig_req);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
+
+    // Get contributions info
+    req = client.get("/contribution_info");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+
+    let summary: Vec<TrimmedContributionInfo> = response.into_json().unwrap();
+    assert_eq!(summary.len(), 1);
+    assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
+    assert!(!summary[0].is_another_machine());
+    assert!(!summary[0].is_own_seed_of_randomness());
+    assert_eq!(summary[0].ceremony_round(), 1);
 }

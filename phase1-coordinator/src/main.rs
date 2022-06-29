@@ -1,6 +1,6 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
-    environment::Parameters,
+    io,
     rest::{self, UPDATE_TIME},
     Coordinator,
 };
@@ -20,7 +20,7 @@ use rocket::{
 use anyhow::Result;
 use std::sync::Arc;
 
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
@@ -46,20 +46,19 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
 
     // Set the environment
-    let parameters = Parameters::TestAnoma {
-        number_of_chunks: 1,
-        power: 6,
-        batch_size: 16,
-    };
+    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
+        .await
+        .unwrap()
+        .expect("Error while generating the keypair");
 
     #[cfg(debug_assertions)]
     let environment: Testing = {
-        phase1_coordinator::testing::clear_test_storage(&Testing::from(parameters.clone()).into());
-        Testing::from(parameters)
+        phase1_coordinator::testing::clear_test_storage(&Testing::default().into());
+        Testing::new(&keypair)
     };
 
     #[cfg(not(debug_assertions))]
-    let environment: Production = Production::from(parameters);
+    let environment: Production = { Production::new(&keypair) };
 
     // Instantiate and start the coordinator
     let coordinator =
@@ -88,7 +87,9 @@ pub async fn main() {
         rest::get_tasks_left,
         rest::stop_coordinator,
         rest::verify_chunks,
-        rest::get_contributor_queue_status
+        rest::get_contributor_queue_status,
+        rest::post_contribution_info,
+        rest::get_contributions_info
     ];
 
     #[cfg(not(debug_assertions))]
@@ -102,7 +103,9 @@ pub async fn main() {
         rest::heartbeat,
         rest::get_tasks_left,
         rest::stop_coordinator,
-        rest::get_contributor_queue_status
+        rest::get_contributor_queue_status,
+        rest::post_contribution_info,
+        rest::get_contributions_info
     ];
 
     let build_rocket = rocket::build().mount("/", routes).manage(coordinator);

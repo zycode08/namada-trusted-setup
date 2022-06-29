@@ -1,6 +1,6 @@
 use crate::authentication::Signature as SigTrait;
 use base64;
-use ed25519_compact::{KeyPair as EdKeyPair, Noise, PublicKey, SecretKey, Signature};
+use ed25519_compact::{Error, KeyPair as EdKeyPair, Noise, PublicKey, SecretKey, Seed, Signature};
 use hex;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -13,7 +13,19 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    /// Generate a random key pair.
+    /// Generate a keypair from a seed
+    pub fn try_from_seed(seed: &[u8]) -> Result<Self, Error> {
+        let seed = Seed::from_slice(&seed[0..32])?;
+        let keypair = EdKeyPair::from_seed(seed);
+
+        Ok(KeyPair {
+            //FIXME: encode with Borsh and fix all the base64 and base58 encodings around
+            pubkey: base64::encode(keypair.pk.deref()),
+            sigkey: base64::encode(keypair.sk.deref()),
+        })
+    }
+
+    /// Generate a random keypair
     pub fn new() -> Self {
         let keypair = EdKeyPair::generate();
 

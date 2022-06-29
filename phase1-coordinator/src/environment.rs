@@ -5,10 +5,6 @@ use setup_utils::{CheckForCorrectness, UseCompression};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use std::fs;
-
-pub const COORDINATOR_KEYPAIR_FILE: &str = "coordinator.keypair";
-
 type BatchSize = usize;
 type ChunkSize = usize;
 type NumberOfChunks = usize;
@@ -98,7 +94,7 @@ pub enum Parameters {
         power: usize,
         batch_size: usize,
     },
-    TestAnoma {
+    Namada {
         number_of_chunks: usize,
         power: usize,
         batch_size: usize,
@@ -121,11 +117,11 @@ impl Parameters {
                 power,
                 batch_size,
             } => Self::test_custom(number_of_chunks, power, batch_size),
-            Parameters::TestAnoma {
+            Parameters::Namada {
                 number_of_chunks,
                 power,
                 batch_size,
-            } => Self::test_anoma(number_of_chunks, power, batch_size),
+            } => Self::namada(number_of_chunks, power, batch_size),
         }
     }
 
@@ -210,7 +206,7 @@ impl Parameters {
         )
     }
 
-    fn test_anoma(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
+    fn namada(number_of_chunks: &NumberOfChunks, power: &Power, batch_size: &BatchSize) -> Settings {
         let proving_system = ProvingSystem::Groth16;
         Settings::new(
             ContributionMode::Full,
@@ -508,14 +504,6 @@ impl From<Production> for Environment {
     }
 }
 
-/// Generate keypair for the default verifier of coordinator and writes it to file
-fn generate_keypair() -> anyhow::Result<KeyPair> {
-    let keypair = KeyPair::new();
-    fs::write(COORDINATOR_KEYPAIR_FILE, serde_json::to_vec(&keypair)?)?;
-
-    Ok(keypair)
-}
-
 // TODO (howardwu): Convert the implementation to a procedural macro.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Testing {
@@ -579,31 +567,16 @@ impl Testing {
         deployment.environment.queue_seen_timeout = queue_seen_timeout;
         deployment
     }
-}
 
-impl From<Parameters> for Testing {
-    fn from(parameters: Parameters) -> Self {
-        let mut testing = Self::default();
-        testing.environment.parameters = parameters.to_settings();
-        testing
-    }
-}
-
-impl std::ops::Deref for Testing {
-    type Target = Environment;
-
-    fn deref(&self) -> &Self::Target {
-        &self.environment
-    }
-}
-
-impl std::default::Default for Testing {
-    fn default() -> Self {
-        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
-
+    fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::Test3Chunks.to_settings(),
+                parameters: Parameters::Namada {
+                    number_of_chunks: 1,
+                    power: 6,
+                    batch_size: 16,
+                }
+                .to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -634,6 +607,35 @@ impl std::default::Default for Testing {
                 disable_reliability_zeroing: false,
             },
         }
+    }
+
+    /// Generate a new Testing env with [`Parameters::Namada`] parameters
+    pub fn new(keypair: &KeyPair) -> Self {
+        Self::generate_namada_env(keypair)
+    }
+}
+
+impl From<Parameters> for Testing {
+    fn from(parameters: Parameters) -> Self {
+        let mut testing = Self::default();
+        testing.environment.parameters = parameters.to_settings();
+        testing
+    }
+}
+
+impl std::ops::Deref for Testing {
+    type Target = Environment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.environment
+    }
+}
+
+impl std::default::Default for Testing {
+    fn default() -> Self {
+        let keypair = KeyPair::new();
+
+        Self::generate_namada_env(&keypair)
     }
 }
 
@@ -692,37 +694,16 @@ impl Development {
         deployment.environment.coordinator_verifiers = verifiers.to_vec();
         deployment
     }
-}
 
-impl From<Parameters> for Development {
-    fn from(parameters: Parameters) -> Self {
-        let mut testing = Self::default();
-        testing.environment.parameters = parameters.to_settings();
-        testing
-    }
-}
-
-impl std::ops::Deref for Development {
-    type Target = Environment;
-
-    fn deref(&self) -> &Self::Target {
-        &self.environment
-    }
-}
-
-impl std::ops::DerefMut for Development {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.environment
-    }
-}
-
-impl std::default::Default for Development {
-    fn default() -> Self {
-        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
-
+    fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::AleoInner.to_settings(),
+                parameters: Parameters::Namada {
+                    number_of_chunks: 1,
+                    power: 6,
+                    batch_size: 16,
+                }
+                .to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -753,6 +734,41 @@ impl std::default::Default for Development {
                 disable_reliability_zeroing: false,
             },
         }
+    }
+
+    /// Generate a new Development env with [`Parameters::Namada`] parameters
+    pub fn new(keypair: &KeyPair) -> Self {
+        Self::generate_namada_env(keypair)
+    }
+}
+
+impl From<Parameters> for Development {
+    fn from(parameters: Parameters) -> Self {
+        let mut testing = Self::default();
+        testing.environment.parameters = parameters.to_settings();
+        testing
+    }
+}
+
+impl std::ops::Deref for Development {
+    type Target = Environment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.environment
+    }
+}
+
+impl std::ops::DerefMut for Development {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.environment
+    }
+}
+
+impl std::default::Default for Development {
+    fn default() -> Self {
+        let keypair = KeyPair::new();
+
+        Self::generate_namada_env(&keypair)
     }
 }
 
@@ -816,31 +832,16 @@ impl Production {
         deployment.environment.coordinator_verifiers = verifiers.to_vec();
         deployment
     }
-}
 
-impl From<Parameters> for Production {
-    fn from(parameters: Parameters) -> Self {
-        let mut testing = Self::default();
-        testing.environment.parameters = parameters.to_settings();
-        testing
-    }
-}
-
-impl std::ops::Deref for Production {
-    type Target = Environment;
-
-    fn deref(&self) -> &Self::Target {
-        &self.environment
-    }
-}
-
-impl std::default::Default for Production {
-    fn default() -> Self {
-        let keypair = generate_keypair().expect("Error while generating default verifier keypair");
-
+    fn generate_namada_env(keypair: &KeyPair) -> Self {
         Self {
             environment: Environment {
-                parameters: Parameters::AleoInner.to_settings(),
+                parameters: Parameters::Namada {
+                    number_of_chunks: 1,
+                    power: 6,
+                    batch_size: 16,
+                }
+                .to_settings(),
                 compressed_inputs: UseCompression::No,
                 compressed_outputs: UseCompression::Yes,
                 check_input_for_correctness: CheckForCorrectness::No,
@@ -871,6 +872,35 @@ impl std::default::Default for Production {
                 disable_reliability_zeroing: false,
             },
         }
+    }
+
+    /// Generate a new Production env with [`Parameters::Namada`] parameters
+    pub fn new(keypair: &KeyPair) -> Self {
+        Self::generate_namada_env(keypair)
+    }
+}
+
+impl From<Parameters> for Production {
+    fn from(parameters: Parameters) -> Self {
+        let mut testing = Self::default();
+        testing.environment.parameters = parameters.to_settings();
+        testing
+    }
+}
+
+impl std::ops::Deref for Production {
+    type Target = Environment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.environment
+    }
+}
+
+impl std::default::Default for Production {
+    fn default() -> Self {
+        let keypair = KeyPair::new();
+
+        Self::generate_namada_env(&keypair)
     }
 }
 
