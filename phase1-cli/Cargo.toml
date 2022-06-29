@@ -16,14 +16,16 @@ serde = "1.0.136"
 snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
 
 anyhow = "1.0.57"
-ed25519-compact = "1.0.11"
 bs58 = "0.4.0"
 base64 = "0.13.0"
+chrono = "0.4"
+ed25519-compact = "1.0.11"
 fs-err = "2.6"
 gumdrop = { version = "0.8.0" }
 hex = { version = "0.4.2" }
 memmap = { version = "0.7.0" }
 rand = { version = "0.8" }
+regex = "1"
 reqwest = { version = "0.11", features = ["json"] }
 serde_json = "1.0.81"
 structopt = "0.3"

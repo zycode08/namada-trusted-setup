@@ -1,11 +1,18 @@
 use crate::{
     environment::Environment,
-    objects::{ContributionFileSignature, Round},
+    objects::{ContributionFileSignature, ContributionInfo, Round, TrimmedContributionInfo},
     storage::{
-        ContributionLocator, ContributionSignatureLocator, Locator, Object, ObjectReader, ObjectWriter, StorageLocator,
+        ContributionLocator,
+        ContributionSignatureLocator,
+        Locator,
+        Object,
+        ObjectReader,
+        ObjectWriter,
+        StorageLocator,
         StorageObject,
     },
-    CoordinatorError, CoordinatorState,
+    CoordinatorError,
+    CoordinatorState,
 };
 
 use anyhow::Result;
@@ -38,10 +45,11 @@ impl Disk {
     {
         trace!("Loading disk storage");
 
-        // Check the base directory exists.
-        if !Path::new(environment.local_base_directory()).exists() {
-            // Create the base directory if it does not exist.
-            fs::create_dir_all(environment.local_base_directory()).expect("unable to create the base directory");
+        // Check the base and contribution info directory exist.
+        let contributors_dir = Path::new(environment.local_base_directory()).join("contributors");
+        if !contributors_dir.exists() {
+            // Create the base and contributors directory if they do not exist.
+            fs::create_dir_all(contributors_dir).expect("unable to create the contributors directory");
         }
 
         // Create a new `Storage` instance, and set the `Environment`.
@@ -55,6 +63,14 @@ impl Disk {
             storage.insert(
                 Locator::CoordinatorState,
                 Object::CoordinatorState(CoordinatorState::new(environment.clone())),
+            )?;
+        }
+
+        // Create the contributions summary locator if it does not exist yet.
+        if !storage.exists(&Locator::ContributionsInfoSummary) {
+            storage.insert(
+                Locator::ContributionsInfoSummary,
+                Object::ContributionsInfoSummary(vec![]),
             )?;
         }
 
@@ -198,6 +214,14 @@ impl Disk {
 
                 let contribution_file_signature: ContributionFileSignature = serde_json::from_slice(&file_bytes)?;
                 Ok(Object::ContributionFileSignature(contribution_file_signature))
+            }
+            Locator::ContributionInfoFile { round_height: _ } => {
+                let contribution_info: ContributionInfo = serde_json::from_slice(&file_bytes)?;
+                Ok(Object::ContributionInfoFile(contribution_info))
+            }
+            Locator::ContributionsInfoSummary => {
+                let summary: Vec<TrimmedContributionInfo> = serde_json::from_slice(&file_bytes)?;
+                Ok(Object::ContributionsInfoSummary(summary))
             }
         };
 
@@ -633,6 +657,11 @@ impl StorageLocator for DiskResolver {
                     ),
                 }
             }
+            Locator::ContributionInfoFile { round_height } => format!(
+                "{}/contributors/namada_contributor_info_round_{}.json",
+                self.base, round_height
+            ),
+            Locator::ContributionsInfoSummary => format!("{}/contributors.json", self.base),
         };
         // Sanitize the path.
         LocatorPath::try_from(Path::new(&path))

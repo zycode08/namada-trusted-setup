@@ -2,10 +2,13 @@
 
 use crate::{
     authentication::{KeyPair, Production, Signature},
-    objects::Task,
-    storage::{ContributionLocator, ContributionSignatureLocator},
+    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
+    storage::{ContributionLocator, ContributionSignatureLocator, Locator},
     ContributionFileSignature,
+    CoordinatorError,
+    Participant,
 };
+
 use rocket::{
     error,
     get,
@@ -22,8 +25,6 @@ use rocket::{
     Shutdown,
     State,
 };
-
-use crate::{objects::LockedLocators, CoordinatorError, Participant};
 
 use std::{collections::LinkedList, io::Cursor, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -44,6 +45,8 @@ pub enum ResponseError {
     CoordinatorError(CoordinatorError),
     #[error("Request's signature is invalid")]
     InvalidSignature,
+    #[error("Io Error: {0}")]
+    IoError(#[from] std::io::Error),
     #[error("Thread panicked: {0}")]
     RuntimeError(#[from] task::JoinError),
     #[error("Error with Serde: {0}")]
@@ -108,6 +111,7 @@ impl<T: Serialize> SignedRequest<T> {
             request.push_str(json::to_string(r)?.as_str());
         }
 
+        // FIXME: verify the hash of the request
         if Production.verify(self.pubkey.as_str(), request.as_str(), self.signature.as_str()) {
             Ok(())
         } else {
@@ -134,7 +138,8 @@ impl<T: Serialize> SignedRequest<T> {
     /// Returns a signed request
     pub fn try_sign(keypair: &KeyPair, request: Option<T>) -> Result<Self> {
         let mut message = json::to_string(&keypair.pubkey().to_owned())?;
-
+        // FIXME: is it correct to concatenate the strings? Better to create a Value?
+        // FIXME: sign the hash of the json encoding string (use sha2)
         // If body is non-empty add it to the message to be signed
         if let Some(ref r) = request {
             message.push_str(json::to_string(r)?.as_str());
@@ -365,7 +370,7 @@ pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> 
     }
 }
 
-/// Update the [Coordinator](`crate::Coordinator`) state. This endpoint should be accessible only by the coordinator itself.
+/// Update the [Coordinator](`crate::Coordinator`) state. This endpoint is accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
 #[get("/update", format = "json", data = "<request>")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
@@ -415,7 +420,7 @@ pub async fn get_tasks_left(
     }
 }
 
-/// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint should be accessible only by the coordinator itself.
+/// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint is accessible only by the coordinator itself.
 #[get("/stop", format = "json", data = "<request>")]
 pub async fn stop_coordinator(
     coordinator: &State<Coordinator>,
@@ -458,7 +463,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
     Ok(())
 }
 
-/// Verify all the pending contributions. This endpoint should be accessible only by the coordinator itself.
+/// Verify all the pending contributions. This endpoint is accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
 #[get("/verify", format = "json", data = "<request>")]
 pub async fn verify_chunks(coordinator: &State<Coordinator>, request: Json<SignedRequest<()>>) -> Result<()> {
@@ -523,6 +528,66 @@ pub async fn get_contributor_queue_status(
 
     // Not in the queue, not finished, nor in the current round
     Ok(Json(ContributorStatus::Other))
+}
+
+/// Write [`ContributionInfo`] to disk
+#[post("/contributor/contribution_info", format = "json", data = "<request>")]
+pub async fn post_contribution_info(
+    coordinator: &State<Coordinator>,
+    request: Json<SignedRequest<ContributionInfo>>,
+) -> Result<()> {
+    let signed_request = request.into_inner();
+
+    // Check signature
+    signed_request.verify()?;
+
+    // Check participant is registered in the ceremony
+    let contributor = Participant::new_contributor(signed_request.pubkey.as_str());
+    let contributor_clone = contributor.clone();
+    let read_lock = (*coordinator).clone().read_owned().await;
+
+    if !task::spawn_blocking(move || {
+        read_lock.is_current_contributor(&contributor_clone) || read_lock.is_finished_contributor(&contributor_clone)
+    })
+    .await?
+    {
+        // Only the current contributor can upload this file
+        return Err(ResponseError::UnauthorizedParticipant(
+            contributor,
+            String::from("/contributor/contribution_info"),
+        ));
+    }
+
+    // Write contribution info to file
+    let contribution_info = signed_request.request.clone().unwrap();
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+    task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    // Append summary to file
+    let contribution_summary = signed_request.request.unwrap().into();
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+    task::spawn_blocking(move || write_lock.update_contribution_summary(contribution_summary))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    Ok(())
+}
+
+/// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
+#[get("/contribution_info", format = "json")]
+pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Json<Vec<TrimmedContributionInfo>>> {
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let summary = match task::spawn_blocking(move || read_lock.storage().get(&Locator::ContributionsInfoSummary))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?
+    {
+        crate::storage::Object::ContributionsInfoSummary(summary) => summary,
+        _ => unreachable!(),
+    };
+
+    Ok(Json(summary))
 }
 
 #[cfg(test)]

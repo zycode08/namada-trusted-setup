@@ -16,6 +16,6 @@ tmp_*
 
 # Contribution artifacts
 *.params
-*keypair
-
+namada_contributor_info_round_*
 status.json
+*keypair
