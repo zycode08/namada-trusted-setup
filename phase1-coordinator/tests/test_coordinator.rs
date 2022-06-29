@@ -534,7 +534,7 @@ fn test_contribution() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
-    let challenge: Vec<u8> = response.into_json().unwrap();
+    let challenge = response.into_bytes().unwrap();
 
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);

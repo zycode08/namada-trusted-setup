@@ -385,11 +385,13 @@ async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
 }
 
 async fn get_contributions(client: &Client, coordinator: &Url) {
-    match requests::get_contributions_info(client, coordinator).await {
-        Ok(contributions) => info!(
+    match requests::get_contributions_info(coordinator).await {
+        Ok(contributions) => {
+            let contributions_str = std::str::from_utf8(&contributions).unwrap();
+            info!(
             "Contributions:\n{}",
-            serde_json::to_string_pretty(&contributions).unwrap()
-        ),
+            contributions_str
+        )},
         Err(e) => error!("{}", e),
     }
 }
@@ -468,7 +470,7 @@ async fn main() {
             close_ceremony(&client, &url.coordinator, &keypair).await;
         }
         CeremonyOpt::GetContributions(url) => {
-            get_contributions(&client, &url.coordinator).await;
+            get_contributions(&client, &url.coordinator).await; //FIXME: remove client
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(url) => {
@@ -491,4 +493,6 @@ async fn main() {
     }
 }
 
-// FIXME: format
+// FIXME: run tests
+// FIXME: compilation warnings
+// FIXME: fmt

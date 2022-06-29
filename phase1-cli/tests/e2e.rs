@@ -10,7 +10,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource},
     environment::Testing,
-    objects::{ContributionInfo, LockedLocators, Task},
+    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
     rest::{self, PostChunkRequest},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
@@ -452,7 +452,8 @@ async fn test_contribution() {
         .unwrap();
 
     // Get contributions info
-    let summary = requests::get_contributions_info(&client, &mut url).await.unwrap();
+    let summary_bytes = requests::get_contributions_info(&url).await.unwrap();
+    let summary: Vec<TrimmedContributionInfo>  = serde_json::from_slice(&summary_bytes).unwrap();
     assert_eq!(summary.len(), 1);
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());

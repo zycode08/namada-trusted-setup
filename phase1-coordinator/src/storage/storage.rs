@@ -149,10 +149,10 @@ impl Object {
                 serde_json::to_vec_pretty(signature).expect("contribution file signature to bytes failed")
             }
             Object::ContributionInfoFile(info) => {
-                serde_json::to_vec(info).expect("Contribution info file to bytes failed")
+                serde_json::to_vec_pretty(info).expect("Contribution info file to bytes failed")
             }
             Object::ContributionsInfoSummary(summary) => {
-                serde_json::to_vec(summary).expect("Contribution info summary to bytes failed")
+                serde_json::to_vec_pretty(summary).expect("Contribution info summary to bytes failed")
             }
         }
     }

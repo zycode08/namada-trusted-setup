@@ -451,7 +451,7 @@ pub async fn get_challenge(
     coordinator: &State<Coordinator>,
     _participant: Participant,
     locked_locators: LazyJson<LockedLocators>,
-) -> Result<Json<Vec<u8>>> {
+) -> Result<Vec<u8>> {
     let challenge_locator = locked_locators.current_contribution();
     let round_height = challenge_locator.round_height();
     let chunk_id = challenge_locator.chunk_id();
@@ -466,7 +466,7 @@ pub async fn get_challenge(
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
     match task::spawn_blocking(move || write_lock.get_challenge(round_height, chunk_id, 0, true)).await? {
-        Ok(challenge_hash) => Ok(Json(challenge_hash)),
+        Ok(challenge_hash) => Ok(challenge_hash),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
@@ -512,7 +512,7 @@ pub async fn post_contribution_chunk(
 pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
     participant: Participant,
-    contribute_chunk_request: LazyJson<u64>,
+    contribute_chunk_request: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<ContributionLocator>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -607,13 +607,13 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
 pub async fn get_contributor_queue_status(
     coordinator: &State<Coordinator>,
     participant: Participant,
-) -> Result<Json<ContributorStatus>> {
+) -> Json<ContributorStatus> {
     let contributor = participant.clone();
 
     let read_lock = (*coordinator).clone().read_owned().await;
     // Check that the contributor is authorized to lock a chunk in the current round.
-    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor)).await? {
-        return Ok(Json(ContributorStatus::Round));
+    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor)).await.unwrap() {
+        return Json(ContributorStatus::Round);
     }
 
     if coordinator.read().await.is_queue_contributor(&participant) {
@@ -622,18 +622,18 @@ pub async fn get_contributor_queue_status(
         let queue_position = match coordinator.read().await.state().queue_contributor_info(&participant) {
             Some((_, Some(round), _, _)) => round - coordinator.read().await.state().current_round_height(),
             Some((_, None, _, _)) => queue_size,
-            None => return Ok(Json(ContributorStatus::Other)),
+            None => return Json(ContributorStatus::Other),
         };
 
-        return Ok(Json(ContributorStatus::Queue(queue_position, queue_size)));
+        return Json(ContributorStatus::Queue(queue_position, queue_size));
     }
 
     if coordinator.read().await.is_finished_contributor(&participant) {
-        return Ok(Json(ContributorStatus::Finished));
+        return Json(ContributorStatus::Finished);
     }
 
     // Not in the queue, not finished, nor in the current round
-    Ok(Json(ContributorStatus::Other))
+    Json(ContributorStatus::Other)
 }
 
 /// Write [`ContributionInfo`] to disk
@@ -674,15 +674,11 @@ pub async fn post_contribution_info(
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
 #[get("/contribution_info", format = "json")]
-pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Json<Vec<TrimmedContributionInfo>>> {
+pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
-    let summary = match task::spawn_blocking(move || read_lock.storage().get(&Locator::ContributionsInfoSummary))
+    let summary = task::spawn_blocking(move || read_lock.storage().get_contributions_summary())
         .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))?
-    {
-        crate::storage::Object::ContributionsInfoSummary(summary) => summary,
-        _ => unreachable!(),
-    };
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    Ok(Json(summary))
+    Ok(summary)
 }
