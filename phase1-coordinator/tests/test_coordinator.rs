@@ -310,9 +310,7 @@ fn test_join_queue() {
     assert!(response.body().is_none());
 
     // Wrong request, IP already in queue
-    req = client
-        .post("/contributor/join_queue")
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.contributors[1].keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
@@ -625,9 +623,7 @@ fn test_contribution() {
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
 
-    req = client
-        .post("/contributor/join_queue")
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);

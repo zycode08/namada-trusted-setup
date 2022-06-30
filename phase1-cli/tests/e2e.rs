@@ -341,13 +341,8 @@ async fn test_wrong_post_contribution_info() {
 
     // Non-existing contributor key
     let mut url = Url::parse(&ctx.coordinator_url).unwrap();
-    let response = requests::post_contribution_info(
-        &client,
-        &mut url,
-        &ctx.unknown_participant.keypair,
-        &contrib_info,
-    )
-    .await;
+    let response =
+        requests::post_contribution_info(&client, &mut url, &ctx.unknown_participant.keypair, &contrib_info).await;
     assert!(response.is_err());
 
     // Non-current-contributor participant
