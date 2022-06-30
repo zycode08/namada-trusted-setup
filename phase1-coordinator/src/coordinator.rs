@@ -1668,7 +1668,7 @@ impl Coordinator {
     ) -> Result<(), CoordinatorError> {
         let mut summary = match self.storage.get(&Locator::ContributionsInfoSummary)? {
             Object::ContributionsInfoSummary(summary) => summary,
-            _ => unreachable!(),
+            _ => return Err(CoordinatorError::StorageFailed),
         };
         summary.push(contribution_summary);
 
@@ -2019,7 +2019,7 @@ impl Coordinator {
         // Execute round aggregation and aggregate verification for the current round.
         {
             debug!("Coordinator is starting aggregation and aggregate verification");
-            // FIXME: removed aggregation and CoordinatorError::RoundFileMissing. We don't need the aggregation function. Hopefully, it doesn't break anything.
+            // NOTE: removed aggregation and CoordinatorError::RoundFileMissing. We don't need the aggregation function. Hopefully, it doesn't break anything.
             Aggregation::run(&self.environment, &mut self.storage, &round)?;
             debug!("Coordinator completed aggregation and aggregate verification");
         }

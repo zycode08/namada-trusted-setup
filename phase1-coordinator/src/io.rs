@@ -1,21 +1,22 @@
-use std::io::{Read, Write};
+use std::io::Write;
 
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
+#[cfg(not(debug_assertions))]
 use rand::prelude::SliceRandom;
 use regex::Regex;
 use termion::screen::AlternateScreen;
 use thiserror::Error;
+#[cfg(not(debug_assertions))]
 use tracing::debug;
 
 const MNEMONIC_LEN: usize = 24;
-const MNEMONIC_CHECK_LEN: usize = 3;
 
 #[derive(Debug, Error)]
 pub enum IOError {
     #[error("Wrong answer in mnemonic check")]
     CheckMnemonicError,
-    #[error("Error in user input: {0}")]
+    #[error("Error in IO: {0}")]
     InputError(#[from] std::io::Error),
     #[error("Error in KeyPair generation: {0}")]
     KeyPairError(#[from] ed25519_compact::Error),
@@ -74,7 +75,7 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
         // Print mnemonic to the user in a different terminal
         {
             let mut secret_screen = AlternateScreen::from(std::io::stdout());
-            writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic);
+            writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic)?;
             get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
         } // End scope, get back to stdin/stdout
 
@@ -90,6 +91,7 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
 }
 
 /// Interactively check if the user has correctly stored the mnemonic phrase
+#[cfg(not(debug_assertions))]
 fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     let mut rng = rand::thread_rng();
     let mut indexes = [0usize; MNEMONIC_LEN];
@@ -102,7 +104,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     println!("Mnemonic verification step");
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
-    for &i in indexes[..MNEMONIC_CHECK_LEN].iter() {
+    for &i in indexes[..3].iter() {
         let response = get_user_input(
             format!("Enter the word at index {} of your mnemonic:", i + 1).as_str(),
             Some(&Regex::new(r"[[:alpha:]]+")?),

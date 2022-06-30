@@ -201,7 +201,7 @@ impl Verification {
         trace!("Verification succeeded! Writing the next challenge file");
 
         // Fetch the compression settings.
-        // FIXME: removed the compression/decompression part, since we don't implement it
+        // NOTE: removed the compression/decompression part, since we don't implement it
         let response_is_compressed = environment.compressed_outputs();
         let next_challenge_is_compressed = environment.compressed_inputs();
 

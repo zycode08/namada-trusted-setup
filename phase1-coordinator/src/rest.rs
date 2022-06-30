@@ -1,15 +1,14 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
 use crate::{
-    authentication::{KeyPair, Production, Signature},
-    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
-    storage::{ContributionLocator, ContributionSignatureLocator, Locator},
+    authentication::{Production, Signature},
+    objects::{ContributionInfo, LockedLocators, Task},
+    storage::{ContributionLocator, ContributionSignatureLocator},
     ContributionFileSignature,
     CoordinatorError,
     Participant,
 };
 
-use base64::encode;
 use blake2::Digest;
 use rocket::{
     data::FromData,
@@ -18,27 +17,21 @@ use rocket::{
     http::{ContentType, Status},
     outcome::IntoOutcome,
     post,
-    request::{self, FromRequest, Outcome, Request},
+    request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
-    serde::{
-        json::{self, Json},
-        Deserialize,
-        DeserializeOwned,
-        Serialize,
-    },
-    tokio::{fs, sync::RwLock, task},
+    serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
+    tokio::{sync::RwLock, task},
     Shutdown,
     State,
 };
 use sha2::Sha256;
-use tracing_subscriber::fmt::format;
 
 use std::{
     borrow::Cow,
-    collections::{HashMap, LinkedList},
+    collections::LinkedList,
     convert::TryFrom,
     io::Cursor,
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     ops::Deref,
     sync::Arc,
     time::Duration,
@@ -336,8 +329,8 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
             Err(e) => return rocket::data::Outcome::Failure((Status::BadRequest, e)),
         };
 
-        let body = match data.open(expected_content.len.into()).into_string().await {
-            Ok(string) => string.into_inner(),
+        let body = match data.open(expected_content.len.into()).into_bytes().await {
+            Ok(bytes) => bytes.into_inner(),
             Err(e) => return rocket::data::Outcome::Failure((Status::InternalServerError, ResponseError::from(e))),
         };
 
@@ -352,7 +345,7 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         }
 
         // Deserialize data and pass it to the request handler
-        match serde_json::from_str::<T>(body.as_str()) {
+        match serde_json::from_slice::<T>(&body) {
             Ok(obj) => rocket::data::Outcome::Success(LazyJson(obj)),
             Err(e) => rocket::data::Outcome::Failure((Status::UnprocessableEntity, ResponseError::from(e))),
         }
@@ -396,8 +389,6 @@ impl PostChunkRequest {
 //
 // -- REST API ENDPOINTS --
 //
-
-// FIXME: review which spawn_blocking are necessary
 
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue")]
@@ -453,7 +444,7 @@ pub async fn get_challenge(
     coordinator: &State<Coordinator>,
     _participant: Participant,
     locked_locators: LazyJson<LockedLocators>,
-) -> Result<Json<Vec<u8>>> {
+) -> Result<Vec<u8>> {
     let challenge_locator = locked_locators.current_contribution();
     let round_height = challenge_locator.round_height();
     let chunk_id = challenge_locator.chunk_id();
@@ -468,7 +459,7 @@ pub async fn get_challenge(
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
     match task::spawn_blocking(move || write_lock.get_challenge(round_height, chunk_id, 0, true)).await? {
-        Ok(challenge_hash) => Ok(Json(challenge_hash)),
+        Ok(challenge_hash) => Ok(challenge_hash),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
@@ -478,7 +469,7 @@ pub async fn get_challenge(
 #[post("/upload/chunk", format = "json", data = "<post_chunk_request>")]
 pub async fn post_contribution_chunk(
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    _participant: Participant,
     mut post_chunk_request: LazyJson<PostChunkRequest>,
 ) -> Result<()> {
     let contribution_locator = post_chunk_request.contribution_locator.clone();
@@ -514,7 +505,7 @@ pub async fn post_contribution_chunk(
 pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
     participant: Participant,
-    contribute_chunk_request: LazyJson<u64>,
+    contribute_chunk_request: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<ContributionLocator>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -609,13 +600,16 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
 pub async fn get_contributor_queue_status(
     coordinator: &State<Coordinator>,
     participant: Participant,
-) -> Result<Json<ContributorStatus>> {
+) -> Json<ContributorStatus> {
     let contributor = participant.clone();
 
     let read_lock = (*coordinator).clone().read_owned().await;
     // Check that the contributor is authorized to lock a chunk in the current round.
-    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor)).await? {
-        return Ok(Json(ContributorStatus::Round));
+    if task::spawn_blocking(move || read_lock.is_current_contributor(&contributor))
+        .await
+        .unwrap()
+    {
+        return Json(ContributorStatus::Round);
     }
 
     if coordinator.read().await.is_queue_contributor(&participant) {
@@ -624,18 +618,18 @@ pub async fn get_contributor_queue_status(
         let queue_position = match coordinator.read().await.state().queue_contributor_info(&participant) {
             Some((_, Some(round), _, _)) => round - coordinator.read().await.state().current_round_height(),
             Some((_, None, _, _)) => queue_size,
-            None => return Ok(Json(ContributorStatus::Other)),
+            None => return Json(ContributorStatus::Other),
         };
 
-        return Ok(Json(ContributorStatus::Queue(queue_position, queue_size)));
+        return Json(ContributorStatus::Queue(queue_position, queue_size));
     }
 
     if coordinator.read().await.is_finished_contributor(&participant) {
-        return Ok(Json(ContributorStatus::Finished));
+        return Json(ContributorStatus::Finished);
     }
 
     // Not in the queue, not finished, nor in the current round
-    Ok(Json(ContributorStatus::Other))
+    Json(ContributorStatus::Other)
 }
 
 /// Write [`ContributionInfo`] to disk
@@ -676,15 +670,11 @@ pub async fn post_contribution_info(
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
 #[get("/contribution_info", format = "json")]
-pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Json<Vec<TrimmedContributionInfo>>> {
+pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
-    let summary = match task::spawn_blocking(move || read_lock.storage().get(&Locator::ContributionsInfoSummary))
+    let summary = task::spawn_blocking(move || read_lock.storage().get_contributions_summary())
         .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))?
-    {
-        crate::storage::Object::ContributionsInfoSummary(summary) => summary,
-        _ => unreachable!(),
-    };
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    Ok(Json(summary))
+    Ok(summary)
 }

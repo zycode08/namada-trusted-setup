@@ -33,7 +33,6 @@ use phase1_coordinator::{
     Participant,
 };
 use rocket::{
-    fs::FileServer,
     http::{ContentType, Header, Status},
     local::blocking::{Client, LocalRequest},
     routes,
@@ -43,7 +42,6 @@ use rocket::{
 };
 use serde::Serialize;
 use sha2::Sha256;
-use tempfile::NamedTempFile;
 
 const ROUND_HEIGHT: u64 = 1;
 
@@ -532,7 +530,7 @@ fn test_contribution() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
-    let challenge: Vec<u8> = response.into_json().unwrap();
+    let challenge = response.into_bytes().unwrap();
 
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
