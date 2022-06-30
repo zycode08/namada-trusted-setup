@@ -950,10 +950,8 @@ pub struct CoordinatorState {
     current_round_height: Option<u64>,
     /// The map of unique contributors for the current round.
     current_contributors: HashMap<Participant, ParticipantInfo>,
-    /// The map of contributors' IPs (queue + current contributors)
-    contributors_ips: HashMap<Participant, IpAddr>,
-    /// The set of finished contributors' IPs.
-    finished_contributors_ips: HashSet<IpAddr>, //FIXME: don't need this
+    /// The map of contributors' IPs
+    contributors_ips: HashMap<IpAddr, Participant>,
     /// The map of unique verifiers for the current round.
     current_verifiers: HashMap<Participant, ParticipantInfo>,
     /// The map of tasks pending verification in the current round.
@@ -985,7 +983,6 @@ impl CoordinatorState {
             current_round_height: None,
             current_contributors: HashMap::default(),
             contributors_ips: HashMap::default(),
-            finished_contributors_ips: HashSet::default(),
             current_verifiers: HashMap::default(),
             pending_verification: HashMap::default(),
             finished_contributors: HashMap::default(),
@@ -1186,10 +1183,10 @@ impl CoordinatorState {
     }
 
     ///
-    /// Returns `true` if a contributor has already contributed with this IP or if the same IP is already in queue.
+    /// Returns `true` if a contributor Ip is already known
     ///
     pub fn is_duplicate_ip(&self, ip: &IpAddr) -> bool {
-        self.finished_contributors_ips.contains(ip) || self.contributors_ips.iter().find(|(_, i)| ip == *i).is_some()
+        self.contributors_ips.contains_key(ip)
     }
 
     ///
@@ -1552,7 +1549,7 @@ impl CoordinatorState {
 
         // Add ip (if any) to the set of known addresses
         if let Some(ip) = participant_ip {
-            self.contributors_ips.insert(participant.clone(), ip);
+            self.contributors_ips.insert(ip, participant.clone());
         }
 
         Ok(())
@@ -2128,7 +2125,7 @@ impl CoordinatorState {
             }
 
             // Remove ip (if any) from the list of current ips to allow the participant to rejoin
-            self.contributors_ips.remove(participant);
+            self.contributors_ips = self.contributors_ips.drain().filter(|(_, contributor)| contributor != participant).collect();
 
             return Ok(DropParticipant::DropQueue(DropQueueParticipantData {
                 participant: participant.clone(),
@@ -2357,16 +2354,19 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyBanned);
         }
 
-        let participant_ip = self.contributors_ips.get(participant).cloned();
+        let participant_ip = match self.contributors_ips.iter().filter(|(ip, contributor)| *contributor == participant).next() {
+            Some((ip, contrib)) => Some((ip.clone(), contrib.clone())),
+            None => None,
+        };
 
         // Drop the participant from the queue, precommit, and current round.
         match self.drop_participant(participant, time)? {
             DropParticipant::DropCurrent(drop_data) => {
                 // Add the participant to the banned list.
                 self.banned.insert(participant.clone());
-                // Ban contributor's ip
-                if let Some(participant_ip) = participant_ip {
-                    self.finished_contributors_ips.insert(participant_ip);
+                // Ban contributor's ip, if any
+                if let Some((ip, participant)) = participant_ip {
+                    self.contributors_ips.insert(ip, participant);
                 }
 
                 debug!("{} was banned from the ceremony", participant);
@@ -2382,7 +2382,6 @@ impl CoordinatorState {
     ///
     #[inline]
     pub(super) fn unban_participant(&mut self, participant: &Participant) {
-        // FIXME: reallow the ip? Don't know the ip here
         // Remove the participant from the banned list.
         self.banned = self
             .banned
@@ -2390,6 +2389,9 @@ impl CoordinatorState {
             .into_par_iter()
             .filter(|p| p != participant)
             .collect();
+
+        // Unban ip
+        self.contributors_ips = self.contributors_ips.drain().filter(|(_, contributor)| contributor != participant).collect();
     }
 
     ///
@@ -2569,13 +2571,6 @@ impl CoordinatorState {
         // Update the map of finished contributors.
         match self.finished_contributors.get_mut(&current_round_height) {
             Some(contributors) => {
-                // Add ip (if any) to the set of finished addresses
-                for (contributor, _) in contributors.iter() {
-                    if let Some(ip) = self.contributors_ips.remove(contributor) {
-                        self.finished_contributors_ips.insert(ip);
-                    }
-                }
-
                 contributors.extend(newly_finished.into_iter())
             }
             None => return Err(CoordinatorError::RoundCommitFailedOrCorrupted),
@@ -3465,13 +3460,13 @@ mod tests {
         state.drop_participant(&contributor_1, &time).unwrap();
 
         // Verify the IP still exists as one participant associated with it is left in the queue.
-        assert!(state.finished_contributors_ips.contains(&contributor_ip));
+        assert!(state.contributors_ips.contains_key(&contributor_ip));
 
         // Drop the second participant.
         state.drop_participant(&contributor_2, &time).unwrap();
 
         // Verify the IP has been deleted.
-        assert!(!state.finished_contributors_ips.contains(&contributor_ip));
+        assert!(!state.contributors_ips.contains_key(&contributor_ip));
     }
 
     #[test]
