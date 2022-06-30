@@ -10,12 +10,21 @@ use std::{
     sync::Arc,
 };
 
+use blake2::Digest;
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource},
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
-    rest::{self, ContributorStatus, PostChunkRequest, SignedRequest},
+    rest::{
+        self,
+        ContributorStatus,
+        PostChunkRequest,
+        BODY_DIGEST_HEADER,
+        CONTENT_LENGTH_HEADER,
+        PUBKEY_HEADER,
+        SIGNATURE_HEADER,
+    },
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -24,13 +33,17 @@ use phase1_coordinator::{
     Participant,
 };
 use rocket::{
-    http::{ContentType, Status},
-    local::blocking::Client,
+    fs::FileServer,
+    http::{ContentType, Header, Status},
+    local::blocking::{Client, LocalRequest},
     routes,
     tokio::sync::RwLock,
     Build,
     Rocket,
 };
+use serde::Serialize;
+use sha2::Sha256;
+use tempfile::NamedTempFile;
 
 const ROUND_HEIGHT: u64 = 1;
 
@@ -85,9 +98,6 @@ fn build_context() -> TestCtx {
     coordinator
         .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
         .unwrap();
-    coordinator
-        .add_to_queue(contributor2.clone(), Some(contributor2_ip.clone()), 9)
-        .unwrap();
     coordinator.update().unwrap();
 
     let (_, locked_locators) = coordinator.try_lock(&contributor1).unwrap();
@@ -110,10 +120,10 @@ fn build_context() -> TestCtx {
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
             rest::get_contributions_info,
-            rest::get_healthcheck
         ])
         .manage(coordinator);
 
+    // Create participants
     let test_participant1 = TestParticipant {
         _inner: contributor1,
         address: contributor1_ip,
@@ -143,49 +153,56 @@ fn build_context() -> TestCtx {
 
 // FIXME: reduce code duplication
 
+/// Add headers and optional body to the request
+fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
+where
+    T: Serialize,
+{
+    let mut msg = keypair.pubkey().to_owned();
+    req.add_header(Header::new(PUBKEY_HEADER, keypair.pubkey().to_owned()));
+
+    if let Some(body) = body {
+        // Body digest
+        let json_body = serde_json::to_string(body).unwrap();
+        let mut hasher = Sha256::new();
+        hasher.update(&json_body);
+        let digest = base64::encode(hasher.finalize());
+        msg = format!("{}{}{}", msg, json_body.len(), &digest);
+        req.add_header(Header::new(BODY_DIGEST_HEADER, format!("sha-256={}", digest)));
+
+        // Body length
+        req.add_header(Header::new(CONTENT_LENGTH_HEADER, json_body.len().to_string()));
+
+        // Attach json serialized body
+        req.add_header(ContentType::JSON);
+        req = req.body(&json_body);
+    }
+
+    // Sign request
+    let signature = Production.sign(keypair.sigkey(), &msg).unwrap();
+    req.add_header(Header::new(SIGNATURE_HEADER, signature));
+
+    req
+}
+
 #[test]
 fn test_stop_coordinator() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Wrong, request from non-coordinator participant
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    let req = client.get("/stop").json(&sig_req);
+    let mut req = client.get("/stop");
+    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Shut the server down
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.coordinator.keypair, None).unwrap();
-    let req = client.get("/stop").json(&sig_req);
+    req = client.get("/stop");
+    req = set_request::<()>(req, &ctx.coordinator.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
-}
-
-#[test]
-fn test_get_healthcheck() {
-    // Create status file
-    let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
-    let file_content =
-        "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
-    status_file.write_all(file_content.as_bytes());
-    std::env::set_var("HEALTH_PATH", status_file.path());
-
-    let ctx = build_context();
-    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
-
-    let req = client.get("/healthcheck");
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
-
-    // It's impossible to extract the String out of the Body struct of the response, need to pass through serde
-    let response_body: serde_json::Value = response.into_json().unwrap();
-    let response_str = serde_json::to_string(&response_body).unwrap();
-    if response_str != file_content {
-        panic!("JSON status content doesn't match the expected one")
-    }
 }
 
 #[test]
@@ -193,18 +210,9 @@ fn test_get_contributor_queue_status() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Wrong request, non-json body
-    let mut req = client
-        .get("/contributor/queue_status")
-        .header(ContentType::Text)
-        .body("Wrong parameter type");
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::BadRequest);
-    assert!(response.body().is_some());
-
     // Non-existing contributor key
-    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
-    req = client.get("/contributor/queue_status").json(&sig_req);
+    let mut req = client.get("/contributor/queue_status");
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     match response.into_json::<ContributorStatus>().unwrap() {
@@ -213,8 +221,8 @@ fn test_get_contributor_queue_status() {
     }
 
     // Ok
-    sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    req = client.get("/contributor/queue_status").json(&sig_req);
+    req = client.get("/contributor/queue_status");
+    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     match response.into_json::<ContributorStatus>().unwrap() {
@@ -228,31 +236,16 @@ fn test_heartbeat() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Wrong request, non-json body
-    let mut req = client
-        .post("/contributor/heartbeat")
-        .header(ContentType::Text)
-        .body("Wrong parameter type");
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::NotFound);
-    assert!(response.body().is_some());
-
-    // Wrong request body format
-    req = client.post("/contributor/heartbeat").json(&1);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::UnprocessableEntity);
-    assert!(response.body().is_some());
-
     // Non-existing contributor key
-    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
-    req = client.post("/contributor/heartbeat").json(&sig_req);
+    let mut req = client.post("/contributor/heartbeat");
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok
-    sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    req = client.post("/contributor/heartbeat").json(&sig_req);
+    req = client.post("/contributor/heartbeat");
+    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -264,15 +257,15 @@ fn test_update_coordinator() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Wrong, request comes from normal contributor
-    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    let mut req = client.get("/update").json(&sig_req);
+    let mut req = client.get("/update");
+    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Ok, request comes from coordinator itself
-    sig_req = SignedRequest::try_sign(&ctx.coordinator.keypair, None).unwrap();
-    req = client.get("/update").json(&sig_req);
+    req = client.get("/update");
+    req = set_request::<()>(req, &ctx.coordinator.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -285,31 +278,16 @@ fn test_get_tasks_left() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Wrong request, non-json body
-    let mut req = client
-        .get("/contributor/get_tasks_left")
-        .header(ContentType::Text)
-        .body("Wrong parameter type");
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::BadRequest);
-    assert!(response.body().is_some());
-
-    // Wrong request json body format
-    req = client.get("/contributor/get_tasks_left").json(&true);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::UnprocessableEntity);
-    assert!(response.body().is_some());
-
     // Non-existing contributor key
-    let mut sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
-    req = client.get("/contributor/get_tasks_left").json(&sig_req);
+    let mut req = client.get("/contributor/get_tasks_left");
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Ok tasks left
-    sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    req = client.get("/contributor/get_tasks_left").json(&sig_req);
+    req = client.get("/contributor/get_tasks_left");
+    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -324,49 +302,24 @@ fn test_join_queue() {
 
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
-    // Wrong request, non-json body
-    let mut req = client.post("/contributor/join_queue");
-    req = req
-        .header(ContentType::Text)
-        .body("Wrong parameter type")
-        .remote(socket_address);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::NotFound);
-    assert!(response.body().is_some());
-
-    // Wrong request json body format
-    req = client.post("/contributor/join_queue").json(&1u8).remote(socket_address);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::UnprocessableEntity);
-    assert!(response.body().is_some());
-
     // Ok request
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
-    req = client
-        .post("/contributor/join_queue")
-        .json(&sig_req)
-        .remote(socket_address);
+    let mut req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Wrong request, IP already in queue
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
-    req = client
-        .post("/contributor/join_queue")
-        .json(&sig_req)
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<()>(req, &ctx.contributors[1].keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Wrong request, already existing contributor
     let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
-    req = client
-        .post("/contributor/join_queue")
-        .json(&sig_req)
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
@@ -378,19 +331,11 @@ fn test_wrong_lock_chunk() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Wrong request, non-json body
-    let mut req = client
-        .post("/contributor/lock_chunk")
-        .header(ContentType::Text)
-        .body("Wrong parameter type");
+    // Wrong request, unknown participant
+    let mut req = client.get("/contributor/lock_chunk");
+    req = set_request::<u8>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::NotFound);
-    assert!(response.body().is_some());
-
-    // Wrong request json body format
-    req = client.post("/contributor/lock_chunk").json(&1);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::UnprocessableEntity);
+    assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 }
 
@@ -402,15 +347,20 @@ fn test_wrong_get_chunk() {
 
     // Wrong request, non-json body
     let mut req = client
-        .get("/download/chunk")
+        .post("/download/chunk")
         .header(ContentType::Text)
         .body("Wrong parameter type");
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::BadRequest);
+    assert_eq!(response.status(), Status::NotFound);
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    req = client.get("/download/chunk").json(&String::from("Unexpected string"));
+    req = client.post("/download/chunk");
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -448,7 +398,12 @@ fn test_wrong_post_contribution_chunk() {
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    req = client.post("/upload/chunk").json(&String::from("Unexpected string"));
+    req = client.post("/upload/chunk");
+    req = set_request(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
@@ -470,16 +425,19 @@ fn test_wrong_contribute_chunk() {
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    req = client
-        .post("/contributor/contribute_chunk")
-        .json(&String::from("Unexpected string"));
+    req = client.post("/contributor/contribute_chunk");
+    req = set_request(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
     // Non-existing contributor key
-    let sig_req = SignedRequest::try_sign(&ctx.unknown_participant.keypair, Some(0)).unwrap();
-    req = client.post("/contributor/contribute_chunk").json(&sig_req);
+    req = client.post("/contributor/contribute_chunk");
+    req = set_request::<i32>(req, &ctx.unknown_participant.keypair, Some(&0));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
@@ -491,10 +449,10 @@ fn test_wrong_verify() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Wrong, request from non-coordinator participant
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[0].keypair, None).unwrap();
-    let req = client.get("/verify").json(&sig_req);
+    let mut req = client.get("/verify");
+    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 }
 
@@ -513,28 +471,31 @@ fn test_wrong_post_contribution_info() {
     assert!(response.body().is_some());
 
     // Wrong request json body format
-    req = client
-        .post("/contributor/contribution_info")
-        .json(&String::from("Unexpected string"));
+    req = client.post("/contributor/contribution_info");
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&String::from("Unexpected string")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
     // Non-existing contributor key
     let contrib_info = ContributionInfo::default();
-    let sig_req = SignedRequest::try_sign(&ctx.unknown_participant.keypair, Some(contrib_info)).unwrap();
-    req = client.post("/contributor/contribution_info").json(&sig_req);
+    req = client.post("/contributor/contribution_info");
+    req = set_request::<ContributionInfo>(req, &ctx.unknown_participant.keypair, Some(&contrib_info));
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Non-current-contributor participant
     let mut contrib_info = ContributionInfo::default();
     contrib_info.public_key = ctx.contributors[1].keypair.pubkey().to_owned();
-    let sig_req = SignedRequest::try_sign(&ctx.contributors[1].keypair, Some(contrib_info)).unwrap();
-    req = client.post("/contributor/contribution_info").json(&sig_req);
+    req = client.post("/contributor/contribution_info");
+    req = set_request::<ContributionInfo>(req, &ctx.contributors[1].keypair, Some(&contrib_info));
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 }
 
@@ -557,19 +518,17 @@ fn test_contribution() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Download chunk
-    let sig_req = SignedRequest::try_sign(
-        &ctx.contributors[0].keypair,
-        Some(ctx.contributors[0].locked_locators.clone().unwrap()),
-    )
-    .unwrap();
-    let mut req = client.get("/download/chunk").json(&sig_req);
+    let locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
+    let mut req = client.post("/download/chunk");
+    req = set_request::<LockedLocators>(req, &ctx.contributors[0].keypair, Some(locked_locators));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
     let task: Task = response.into_json().unwrap();
 
     // Get challenge
-    req = client.get("/contributor/challenge").json(&sig_req);
+    req = client.post("/contributor/challenge");
+    req = set_request::<LockedLocators>(req, &ctx.contributors[0].keypair, Some(locked_locators));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -577,7 +536,6 @@ fn test_contribution() {
 
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
-
     let challenge_hash = calculate_hash(challenge.as_ref());
 
     let mut contribution: Vec<u8> = Vec::new();
@@ -610,22 +568,22 @@ fn test_contribution() {
         contribution_file_signature,
     );
 
-    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(post_chunk)).unwrap();
-    req = client.post("/upload/chunk").json(&sig_req);
+    req = client.post("/upload/chunk");
+    req = set_request::<PostChunkRequest>(req, &ctx.contributors[0].keypair, Some(&post_chunk));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Contribute
-    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(task.chunk_id())).unwrap();
-    req = client.post("/contributor/contribute_chunk").json(&sig_req);
+    req = client.post("/contributor/contribute_chunk");
+    req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&task.chunk_id()));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
 
     // Verify chunk
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.coordinator.keypair, None).unwrap();
-    req = client.get("/verify").json(&sig_req);
+    req = client.get("/verify");
+    req = set_request::<()>(req, &ctx.coordinator.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -643,8 +601,8 @@ fn test_contribution() {
         .round_height();
     contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
 
-    let sig_req = SignedRequest::try_sign(&ctx.contributors[0].keypair, Some(contrib_info)).unwrap();
-    req = client.post("/contributor/contribution_info").json(&sig_req);
+    req = client.post("/contributor/contribution_info");
+    req = set_request::<ContributionInfo>(req, &ctx.contributors[0].keypair, Some(&contrib_info));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
@@ -665,11 +623,8 @@ fn test_contribution() {
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
 
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
-    req = client
-        .post("/contributor/join_queue")
-        .json(&sig_req)
-        .remote(socket_address);
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());

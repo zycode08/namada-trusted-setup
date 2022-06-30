@@ -2800,6 +2800,7 @@ dependencies = [
  "serde",
  "serde_json",
  "setup-utils",
+ "sha2 0.10.2",
  "snarkvm-curves 0.7.5 (git+https://github.com/AleoHQ/snarkVM.git?rev=fc997c)",
  "structopt",
  "thiserror",

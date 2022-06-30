@@ -12,7 +12,7 @@ use serde_diff::SerdeDiff;
 /// 2. The hash of the response file.
 /// 3. The hash of the next challenge file if the participant was a verifier.
 ///
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, SerdeDiff)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, SerdeDiff)]
 #[serde(rename_all = "camelCase")]
 pub struct ContributionState {
     /// The hash of the challenge file.
@@ -67,7 +67,7 @@ impl ContributionState {
 ///
 /// The signature and state of the contribution.
 ///
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, SerdeDiff)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, SerdeDiff)]
 pub struct ContributionFileSignature {
     /// The signature of the contribution state.
     signature: String,
