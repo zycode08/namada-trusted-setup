@@ -50,7 +50,7 @@ struct TestCtx {
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
-    coordinator_url: String
+    coordinator_url: String,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
@@ -80,7 +80,11 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     );
 
     // Parse config toml file
-    let config = tokio::fs::read_to_string("../Rocket.toml").await.unwrap().parse::<Value>().unwrap();
+    let config = tokio::fs::read_to_string("../Rocket.toml")
+        .await
+        .unwrap()
+        .parse::<Value>()
+        .unwrap();
     let default = config.get("default").unwrap();
     let coordinator_ip = IpAddr::V4(default.get("address").unwrap().as_str().unwrap().parse().unwrap());
     let coordinator_url = format!("http://{}:{}", coordinator_ip, default.get("port").unwrap());
@@ -150,7 +154,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
         coordinator: coord_verifier,
-        coordinator_url
+        coordinator_url,
     };
 
     (ctx, handle)

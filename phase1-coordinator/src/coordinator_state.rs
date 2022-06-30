@@ -1493,7 +1493,7 @@ impl CoordinatorState {
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
-        #[cfg(not(debug_assertions))]
+        #[cfg(any(not(debug_assertions), test))]
         if let Some(ip) = participant_ip {
             if self.is_duplicate_ip(&ip) {
                 return Err(CoordinatorError::ParticipantIpAlreadyAdded);
@@ -2125,7 +2125,11 @@ impl CoordinatorState {
             }
 
             // Remove ip (if any) from the list of current ips to allow the participant to rejoin
-            self.contributors_ips = self.contributors_ips.drain().filter(|(_, contributor)| contributor != participant).collect();
+            self.contributors_ips = self
+                .contributors_ips
+                .drain()
+                .filter(|(_, contributor)| contributor != participant)
+                .collect();
 
             return Ok(DropParticipant::DropQueue(DropQueueParticipantData {
                 participant: participant.clone(),
@@ -2354,7 +2358,12 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyBanned);
         }
 
-        let participant_ip = match self.contributors_ips.iter().filter(|(ip, contributor)| *contributor == participant).next() {
+        let participant_ip = match self
+            .contributors_ips
+            .iter()
+            .filter(|(ip, contributor)| *contributor == participant)
+            .next()
+        {
             Some((ip, contrib)) => Some((ip.clone(), contrib.clone())),
             None => None,
         };
@@ -2391,7 +2400,11 @@ impl CoordinatorState {
             .collect();
 
         // Unban ip
-        self.contributors_ips = self.contributors_ips.drain().filter(|(_, contributor)| contributor != participant).collect();
+        self.contributors_ips = self
+            .contributors_ips
+            .drain()
+            .filter(|(_, contributor)| contributor != participant)
+            .collect();
     }
 
     ///
@@ -2570,9 +2583,7 @@ impl CoordinatorState {
 
         // Update the map of finished contributors.
         match self.finished_contributors.get_mut(&current_round_height) {
-            Some(contributors) => {
-                contributors.extend(newly_finished.into_iter())
-            }
+            Some(contributors) => contributors.extend(newly_finished.into_iter()),
             None => return Err(CoordinatorError::RoundCommitFailedOrCorrupted),
         };
 

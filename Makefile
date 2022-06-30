@@ -8,22 +8,22 @@ build:
 check:
 	$(CARGO) check --all-targets
 
-contribution: # Run contributor against a local coordinator (127.0.0.1:8000)
+contribution: # Run contributor against a local coordinator (0.0.0.0:8080)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute
 
 offline-contribution: # Computes offline contribution
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute --offline
 
-close-ceremony: # Stop local coordinator (127.0.0.1:8000)
+close-ceremony: # Stop local coordinator (0.0.0.0:8080)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) close-ceremony
 
-verify: # Verify pending contributions on local coordinator (127.0.0.1:8000)
+verify: # Verify pending contributions on local coordinator (0.0.0.0:8080)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) verify-contributions
 
 update-coordinator: # Update manually the coordinator
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) update-coordinator
 
-get-contributions: # Get the received contributions on local coordinator (127.0.0.1:8000)
+get-contributions: # Get the received contributions on local coordinator (0.0.0.0:8080)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) get-contributions
 
 run-coordinator:

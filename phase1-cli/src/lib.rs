@@ -32,7 +32,7 @@ pub struct CoordinatorUrl {
     #[structopt(
         help = "The ip address and port of the coordinator",
         required = true,
-        default_value = "http://127.0.0.1:8000",
+        default_value = "http://0.0.0.0:8080",
         env = "NAMADA_COORDINATOR_ADDRESS",
         parse(try_from_str)
     )]

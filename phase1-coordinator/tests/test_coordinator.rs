@@ -2,7 +2,7 @@
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
-//  NOTE: these test require the phase1radix files to be placed in the phase1-coordinator folder
+//  NOTE: these tests require the phase1radix files to be placed in the phase1-coordinator folder
 
 use std::{
     io::Write,
@@ -350,7 +350,7 @@ fn test_join_queue() {
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
-    // Wrong request, already seen IP
+    // Wrong request, IP already in queue
     let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
@@ -547,6 +547,7 @@ fn test_wrong_post_contribution_info() {
 /// - verify_chunk
 /// - post_contributor_info
 /// - get_contributions_info
+/// - join_queue with already contributed Ip
 ///
 #[test]
 fn test_contribution() {
@@ -660,4 +661,16 @@ fn test_contribution() {
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
     assert_eq!(summary[0].ceremony_round(), 1);
+
+    // Join queue with already contributed Ip
+    let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
+
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
+    req = client
+        .post("/contributor/join_queue")
+        .json(&sig_req)
+        .remote(socket_address);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
 }

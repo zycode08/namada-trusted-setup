@@ -483,5 +483,3 @@ async fn main() {
         }
     }
 }
-
-// FIXME: format
