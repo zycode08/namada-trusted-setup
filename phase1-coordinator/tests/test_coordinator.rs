@@ -98,9 +98,6 @@ fn build_context() -> TestCtx {
     coordinator
         .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
         .unwrap();
-    coordinator
-        .add_to_queue(contributor2.clone(), Some(contributor2_ip.clone()), 9)
-        .unwrap();
     coordinator.update().unwrap();
 
     let (_, locked_locators) = coordinator.try_lock(&contributor1).unwrap();
@@ -628,11 +625,10 @@ fn test_contribution() {
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
 
-    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
-        .json(&sig_req)
         .remote(socket_address);
+    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
