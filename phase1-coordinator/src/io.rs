@@ -1,7 +1,10 @@
+use std::io::{Read, Write};
+
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
 use rand::prelude::SliceRandom;
 use regex::Regex;
+use termion::screen::AlternateScreen;
 use thiserror::Error;
 use tracing::debug;
 
@@ -25,7 +28,7 @@ pub enum IOError {
 type Result<T> = std::result::Result<T, IOError>;
 
 /// Helper function to get input from the user. Accept an optional [`Regex`] to
-/// check the validity of the reply
+/// check the validity of the reply.
 pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String> {
     let mut response = String::new();
 
@@ -68,9 +71,12 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
         let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
             .map_err(|e| IOError::MnemonicError(e))?;
 
-        // Print mnemonic to the user
-        println!("Safely store your 24 words mnemonic: {}", mnemonic);
-        get_user_input(format!("Press any key when you've done it...").as_str(), None)?;
+        // Print mnemonic to the user in a different terminal
+        {
+            let mut secret_screen = AlternateScreen::from(std::io::stdout());
+            writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic);
+            get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
+        } // End scope, get back to stdin/stdout
 
         // Check if the user has correctly stored the mnemonic
         #[cfg(not(debug_assertions))]
@@ -88,7 +94,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     let mut rng = rand::thread_rng();
     let mut indexes = [0usize; MNEMONIC_LEN];
 
-    for i in 1..MNEMONIC_LEN {
+    for i in 0..MNEMONIC_LEN {
         indexes[i] = i;
     }
     indexes.shuffle(&mut rng);
@@ -96,14 +102,14 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     println!("Mnemonic verification step");
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
-    for i in indexes[..MNEMONIC_CHECK_LEN].iter() {
+    for &i in indexes[..MNEMONIC_CHECK_LEN].iter() {
         let response = get_user_input(
-            format!("Enter the word at index {} of your mnemonic:", i).as_str(),
+            format!("Enter the word at index {} of your mnemonic:", i + 1).as_str(),
             Some(&Regex::new(r"[[:alpha:]]+")?),
         )?;
 
-        if response != mnemonic_slice[i - 1] {
-            debug!("Expected: {}, answer: {}", mnemonic_slice[i - 1], response);
+        if response != mnemonic_slice[i] {
+            debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
             return Err(IOError::CheckMnemonicError);
         }
     }

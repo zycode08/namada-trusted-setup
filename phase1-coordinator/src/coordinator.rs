@@ -147,6 +147,7 @@ pub enum CoordinatorError {
     ParticipantHasNoRemainingTasks,
     ParticipantHasRemainingTasks,
     ParticipantInCurrentRoundCannotJoinQueue,
+    ParticipantIpAlreadyAdded,
     ParticipantLockedChunkWithManyContributions,
     ParticipantMissing,
     ParticipantMissingDisposingTask,
@@ -415,10 +416,9 @@ impl Coordinator {
     #[inline]
     pub fn initialize(&mut self) -> Result<(), CoordinatorError> {
         // Check if the deployment is in production, that the signature scheme is secure.
-        // TODO: add again the signature check after the Signature trait is implemented
-        // if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
-        //     return Err(CoordinatorError::SignatureSchemeIsInsecure);
-        // }
+        if *self.environment.deployment() == Deployment::Production && !self.signature.is_secure() {
+            return Err(CoordinatorError::SignatureSchemeIsInsecure);
+        }
 
         info!("Coordinator is booting up");
         info!("{:#?}", self.environment.parameters());
@@ -1524,7 +1524,7 @@ impl Coordinator {
                     .to_path(&Locator::ContributionFile(response_file_locator))?
             );
             debug!("Response is {}", pretty_hash!(&response_reader));
-            debug!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
+            info!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
 
             // Fetch the challenge hash from the response file.
             let challenge_hash_in_response = &response_reader
@@ -1801,7 +1801,7 @@ impl Coordinator {
                 "Response is located in {}",
                 self.storage.to_path(&response_file_locator)?
             );
-            debug!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
+            info!("Response hash is {}", pretty_hash!(&response_hash.as_slice()));
 
             // Fetch the challenge hash from the response file.
             let challenge_hash_in_response = &response_reader
@@ -2725,9 +2725,8 @@ impl Coordinator {
     /// coordinator is using.
     ///
     #[inline]
-    pub fn state(&self) -> CoordinatorState {
-        // Clone the state struct.
-        self.state.clone()
+    pub fn state(&self) -> &CoordinatorState {
+        &self.state
     }
 
     ///

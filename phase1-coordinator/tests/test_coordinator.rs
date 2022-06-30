@@ -2,7 +2,7 @@
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
-//  NOTE: these test require the phase1radix files to be placed in the phase1-coordinator folder
+//  NOTE: these tests require the phase1radix files to be placed in the phase1-coordinator folder
 
 use std::{
     io::Write,
@@ -12,7 +12,7 @@ use std::{
 
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    commands::Computation,
+    commands::{Computation, RandomSource},
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
     rest::{self, ContributorStatus, PostChunkRequest, SignedRequest},
@@ -109,7 +109,8 @@ fn build_context() -> TestCtx {
             rest::verify_chunks,
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
-            rest::get_contributions_info
+            rest::get_contributions_info,
+            rest::get_healthcheck
         ])
         .manage(coordinator);
 
@@ -160,6 +161,31 @@ fn test_stop_coordinator() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
+}
+
+#[test]
+fn test_get_healthcheck() {
+    // Create status file
+    let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
+    let file_content =
+        "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
+    status_file.write_all(file_content.as_bytes());
+    std::env::set_var("HEALTH_PATH", status_file.path());
+
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    let req = client.get("/healthcheck");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+
+    // It's impossible to extract the String out of the Body struct of the response, need to pass through serde
+    let response_body: serde_json::Value = response.into_json().unwrap();
+    let response_str = serde_json::to_string(&response_body).unwrap();
+    if response_str != file_content {
+        panic!("JSON status content doesn't match the expected one")
+    }
 }
 
 #[test]
@@ -296,7 +322,7 @@ fn test_join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
+    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
     // Wrong request, non-json body
     let mut req = client.post("/contributor/join_queue");
@@ -324,7 +350,19 @@ fn test_join_queue() {
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
+    // Wrong request, IP already in queue
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
+    req = client
+        .post("/contributor/join_queue")
+        .json(&sig_req)
+        .remote(socket_address);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+
     // Wrong request, already existing contributor
+    let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.unknown_participant.keypair, None).unwrap();
     req = client
         .post("/contributor/join_queue")
         .json(&sig_req)
@@ -509,6 +547,7 @@ fn test_wrong_post_contribution_info() {
 /// - verify_chunk
 /// - post_contributor_info
 /// - get_contributions_info
+/// - join_queue with already contributed Ip
 ///
 #[test]
 fn test_contribution() {
@@ -543,7 +582,8 @@ fn test_contribution() {
 
     let mut contribution: Vec<u8> = Vec::new();
     contribution.write_all(challenge_hash.as_slice()).unwrap();
-    Computation::contribute_test_masp(&challenge, &mut contribution);
+    let entropy = RandomSource::Entropy(String::from("entropy"));
+    Computation::contribute_test_masp(&challenge, &mut contribution, &entropy);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
     let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
@@ -621,4 +661,16 @@ fn test_contribution() {
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
     assert_eq!(summary[0].ceremony_round(), 1);
+
+    // Join queue with already contributed Ip
+    let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
+
+    let sig_req = SignedRequest::<()>::try_sign(&ctx.contributors[1].keypair, None).unwrap();
+    req = client
+        .post("/contributor/join_queue")
+        .json(&sig_req)
+        .remote(socket_address);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
 }

@@ -23,6 +23,7 @@ pub enum RequestError {
 
 type Result<T> = std::result::Result<T, RequestError>;
 
+/// Submit a json encoded [`SignedRequest`] to the provided enpoint
 async fn submit_request<T>(
     client: &Client,
     coordinator_address: &mut Url,
@@ -253,7 +254,7 @@ pub async fn post_contribution_info(
     submit_request::<ContributionInfo>(
         client,
         coordinator_address,
-        "/contributor/contribution_info",
+        "contributor/contribution_info",
         keypair,
         Some(request_body),
         &Method::POST,
@@ -269,6 +270,7 @@ pub async fn get_contributions_info(
     coordinator_address: &mut Url,
 ) -> Result<Vec<TrimmedContributionInfo>> {
     coordinator_address.set_path("/contribution_info");
+    // FIXME: manage accept-encoding header with compression only in production build (create a feature aws)
     let req = client.get(coordinator_address.to_owned());
     let response = req.send().await?;
 

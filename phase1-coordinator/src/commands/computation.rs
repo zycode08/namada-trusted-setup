@@ -7,7 +7,7 @@ use crate::{
 };
 use phase1::helpers::CurveKind;
 
-use setup_utils::calculate_hash;
+use setup_utils::{calculate_hash, GenericArray};
 
 use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
@@ -15,9 +15,17 @@ use tracing::{debug, error, info, trace};
 pub const SEED_LENGTH: usize = 32;
 pub type Seed = [u8; SEED_LENGTH];
 
-use blake2::{Blake2b512, Digest};
+use blake2::{digest::generic_array::ArrayLength, Blake2b512, Digest};
 use itertools::Itertools;
 use masp_phase2::MPCParameters;
+
+/// Sources of randomness
+pub enum RandomSource {
+    /// A string to be used as entropy
+    Entropy(String),
+    /// A [`Seed`] of 32 bytes for rng
+    Seed(Seed),
+}
 
 pub struct Computation;
 
@@ -137,11 +145,12 @@ impl Computation {
         trace!("Computing and writing your contribution, this could take a while");
 
         // Contribute to the MASP circuit
+        let rand_source = RandomSource::Entropy(String::from("entropy"));
         #[cfg(debug_assertions)]
-        Self::contribute_test_masp(&challenge_reader, &mut response_writer);
+        Self::contribute_test_masp(&challenge_reader, &mut response_writer, &rand_source);
 
         #[cfg(not(debug_assertions))]
-        Self::contribute_masp(&challenge_reader, &mut response_writer);
+        Self::contribute_masp(&challenge_reader, &mut response_writer, &rand_source);
 
         trace!("Finishing writing your contribution to response file");
 
@@ -149,30 +158,34 @@ impl Computation {
     }
 
     #[cfg(not(debug_assertions))]
-    pub fn contribute_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W) {
-        let entropy = "entropy";
-        // Create an RNG based on a mixture of system randomness and user provided randomness
+    pub fn contribute_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W, rand_source: &RandomSource) {
+        // Create an RNG as following:
+        //  - if the user provides a seed, create the rng from that seed
+        //  - if the user provides entropy, create the rng from the combination of OS randomness and user entropy
         let mut rng = {
             use rand::{Rng, SeedableRng};
             use rand_chacha::ChaChaRng;
             use std::convert::TryInto;
 
-            let h = {
-                let mut system_rng = rand::rngs::OsRng;
-                let mut h = Blake2b512::new();
+            match rand_source {
+                RandomSource::Entropy(e) => {
+                    let mut system_rng = rand::rngs::OsRng;
+                    let mut h = Blake2b512::new();
 
-                // Gather 1024 bytes of entropy from the system
-                for _ in 0..1024 {
-                    let r: u8 = system_rng.gen();
-                    h.update(&[r]);
+                    // Gather 1024 bytes of entropy from the system
+                    for _ in 0..1024 {
+                        let r: u8 = system_rng.gen();
+                        h.update(&[r]);
+                    }
+
+                    // Hash it all up to make a seed
+                    h.update(e.as_bytes());
+                    let digest = h.finalize();
+
+                    ChaChaRng::from_seed(digest[0..32].try_into().unwrap())
                 }
-
-                // Hash it all up to make a seed
-                h.update(&entropy.as_bytes());
-                h.finalize()
-            };
-
-            ChaChaRng::from_seed(h[0..32].try_into().unwrap())
+                RandomSource::Seed(s) => ChaChaRng::from_seed(*s),
+            }
         };
 
         let mut masp_challenge_reader = &challenge_reader[64..];
@@ -245,30 +258,34 @@ impl Computation {
     }
 
     #[cfg(debug_assertions)]
-    pub fn contribute_test_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W) {
-        let entropy = "entropy";
-        // Create an RNG based on a mixture of system randomness and user provided randomness
+    pub fn contribute_test_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W, rand_source: &RandomSource) {
+        // Create an RNG as following:
+        //  - if the user provides a seed, create the rng from that seed
+        //  - if the user provides entropy, create the rng from the combination of OS randomness and user entropy
         let mut rng = {
             use rand::{Rng, SeedableRng};
             use rand_chacha::ChaChaRng;
             use std::convert::TryInto;
 
-            let h = {
-                let mut system_rng = rand::rngs::OsRng;
-                let mut h = Blake2b512::new();
+            match rand_source {
+                RandomSource::Entropy(e) => {
+                    let mut system_rng = rand::rngs::OsRng;
+                    let mut h = Blake2b512::new();
 
-                // Gather 1024 bytes of entropy from the system
-                for _ in 0..1024 {
-                    let r: u8 = system_rng.gen();
-                    h.update(&[r]);
+                    // Gather 1024 bytes of entropy from the system
+                    for _ in 0..1024 {
+                        let r: u8 = system_rng.gen();
+                        h.update(&[r]);
+                    }
+
+                    // Hash it all up to make a seed
+                    h.update(e.as_bytes());
+                    let digest = h.finalize();
+
+                    ChaChaRng::from_seed(digest[0..32].try_into().unwrap())
                 }
-
-                // Hash it all up to make a seed
-                h.update(&entropy.as_bytes());
-                h.finalize()
-            };
-
-            ChaChaRng::from_seed(h[0..32].try_into().unwrap())
+                RandomSource::Seed(s) => ChaChaRng::from_seed(*s),
+            }
         };
 
         let mut test_params =

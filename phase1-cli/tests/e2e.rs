@@ -2,13 +2,13 @@
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
-//  NOTE: these test require the phase1radix files to be placed in the phase1-cli folder
+//  NOTE: these tests require the phase1radix files to be placed in the phase1-cli folder
 
 use std::{io::Write, net::IpAddr, sync::Arc};
 
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    commands::Computation,
+    commands::{Computation, RandomSource},
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, Task},
     rest::{self, PostChunkRequest},
@@ -32,10 +32,11 @@ use rocket::{
     Rocket,
 };
 
+use toml::Value;
+
 use phase1_cli::requests;
 use reqwest::{Client, Url};
 
-const COORDINATOR_ADDRESS: &str = "http://127.0.0.1:8000";
 const ROUND_HEIGHT: u64 = 1;
 
 struct TestParticipant {
@@ -49,6 +50,7 @@ struct TestCtx {
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
+    coordinator_url: String,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
@@ -67,7 +69,6 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let contributor2 = Participant::new_contributor(keypair2.pubkey().as_ref());
     let unknown_contributor = Participant::new_contributor(keypair3.pubkey().as_ref());
 
-    let coordinator_ip = IpAddr::V4("0.0.0.0".parse().unwrap());
     let contributor1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
@@ -77,6 +78,16 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         coordinator.environment().default_verifier_signing_key(),
         coordinator.environment().coordinator_verifiers()[0].address(),
     );
+
+    // Parse config toml file
+    let config = tokio::fs::read_to_string("../Rocket.toml")
+        .await
+        .unwrap()
+        .parse::<Value>()
+        .unwrap();
+    let default = config.get("default").unwrap();
+    let coordinator_ip = IpAddr::V4(default.get("address").unwrap().as_str().unwrap().parse().unwrap());
+    let coordinator_url = format!("http://{}:{}", coordinator_ip, default.get("port").unwrap());
 
     let coord_verifier = TestParticipant {
         _inner: coordinator.environment().coordinator_verifiers()[0].clone(),
@@ -112,7 +123,8 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
             rest::verify_chunks,
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
-            rest::get_contributions_info
+            rest::get_contributions_info,
+            rest::get_healthcheck
         ])
         .manage(coordinator);
 
@@ -142,6 +154,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
         coordinator: coord_verifier,
+        coordinator_url,
     };
 
     (ctx, handle)
@@ -156,12 +169,12 @@ async fn test_stop_coordinator() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Wrong, request from non-coordinator participant
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::get_stop_coordinator(&client, &mut url, &ctx.contributors[0].keypair).await;
     assert!(response.is_err());
 
     // Shut the server down
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::get_stop_coordinator(&client, &mut url, &ctx.coordinator.keypair).await;
     assert!(response.is_ok());
 
@@ -189,7 +202,7 @@ async fn test_get_contributor_queue_status() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Non-existing contributor key
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::get_contributor_queue_status(&client, &mut url, &ctx.unknown_participant.keypair).await;
     match response.unwrap() {
         rest::ContributorStatus::Other => (),
@@ -216,7 +229,7 @@ async fn test_heartbeat() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Non-existing contributor key
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::post_heartbeat(&client, &mut url, &ctx.unknown_participant.keypair).await;
     assert!(response.is_err());
 
@@ -238,7 +251,7 @@ async fn test_update_coordinator() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Wrong, request from non-coordinator
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     assert!(
         requests::get_update(&client, &mut url, &ctx.contributors[0].keypair)
             .await
@@ -263,7 +276,7 @@ async fn test_get_tasks_left() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Non-existing contributor key
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::get_tasks_left(&client, &mut url, &ctx.unknown_participant.keypair).await;
     assert!(response.is_err());
 
@@ -286,7 +299,7 @@ async fn test_join_queue() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Ok request
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     requests::post_join_queue(&client, &mut url, &ctx.contributors[0].keypair)
         .await
         .unwrap();
@@ -309,7 +322,7 @@ async fn test_wrong_contribute_chunk() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Non-existing contributor key
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::post_contribute_chunk(&client, &mut url, &ctx.unknown_participant.keypair, 0).await;
     assert!(response.is_err());
 
@@ -328,7 +341,7 @@ async fn test_wrong_post_contribution_info() {
     let contrib_info = ContributionInfo::default();
 
     // Non-existing contributor key
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::post_contribution_info(
         &client,
         &mut url,
@@ -359,6 +372,7 @@ async fn test_wrong_post_contribution_info() {
 ///
 #[tokio::test]
 async fn test_contribution() {
+    use rand::Rng;
     use setup_utils::calculate_hash;
 
     let client = Client::new();
@@ -368,7 +382,7 @@ async fn test_contribution() {
     time::sleep(Duration::from_millis(1000)).await;
 
     // Download chunk
-    let mut url = Url::parse(COORDINATOR_ADDRESS).unwrap();
+    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
 
     let response = requests::get_chunk(
         &client,
@@ -396,7 +410,8 @@ async fn test_contribution() {
 
     let mut contribution: Vec<u8> = Vec::new();
     contribution.write_all(challenge_hash.as_slice()).unwrap();
-    Computation::contribute_test_masp(&challenge, &mut contribution);
+    let seed = RandomSource::Seed(rand::thread_rng().gen::<[u8; 32]>());
+    Computation::contribute_test_masp(&challenge, &mut contribution, &seed);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
     let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
