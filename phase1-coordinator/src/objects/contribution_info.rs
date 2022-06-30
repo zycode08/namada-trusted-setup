@@ -141,7 +141,7 @@ impl ContributionInfo {
     }
 
     /// Verifies the signature.
-    #[cfg(debug_assertions)]
+    #[cfg(test)]
     fn verify_signature(&self) -> Result<bool, ContributionInfoError> {
         let serialized_contrib_info = self.hash_for_signature()?;
 

@@ -1524,6 +1524,13 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyAdded);
         }
 
+        // Check that the participant hasn't been already seen in the past.
+        for (_, inner) in &self.finished_contributors {
+            if inner.contains_key(&participant) {
+                return Err(CoordinatorError::ParticipantAlreadyAdded);
+            }
+        }
+
         match &participant {
             Participant::Contributor(_) => {
                 // Check if the contributor is authorized.

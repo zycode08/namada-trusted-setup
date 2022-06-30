@@ -2,7 +2,7 @@
 
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
-    objects::{ContributionInfo, TrimmedContributionInfo},
+    objects::ContributionInfo,
     rest::{
         RequestContent,
         SignatureHeaders,
@@ -23,7 +23,6 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::LinkedList,
     convert::{TryFrom, TryInto},
-    ops::{Deref, DerefMut},
 };
 use thiserror::Error;
 
@@ -124,7 +123,7 @@ where
         Request::Get => client.get(address),
         Request::Post(body) => match body {
             Some(b) => {
-                let json_body = serde_json::to_string(b)?;
+                let json_body = serde_json::to_vec(b)?;
 
                 let mut hasher = Sha256::new();
                 hasher.update(&json_body);
@@ -217,7 +216,7 @@ pub async fn get_challenge(
     )
     .await?;
 
-    Ok(response.json::<Vec<u8>>().await?)
+    Ok(response.bytes().await?.to_vec())
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to upload a contribution.
@@ -346,20 +345,18 @@ pub async fn post_contribution_info(
     Ok(())
 }
 
-/// Retrieve the list of contributions
-pub async fn get_contributions_info(
-    client: &Client,
-    coordinator_address: &Url,
-) -> Result<Vec<TrimmedContributionInfo>> {
+/// Retrieve the list of contributions, json encoded
+pub async fn get_contributions_info(coordinator_address: &Url) -> Result<Vec<u8>> {
+    let client = Client::builder().brotli(true).build()?;
     let address = coordinator_address
         .join("/contribution_info")
         .map_err(|_| RequestError::AddressParseError)?;
-    // FIXME: manage accept-encoding header with compression only in production build (create a feature aws)
+
     let req = client.get(address);
     let response = req.send().await?;
 
     if response.status().is_success() {
-        Ok(response.json::<Vec<TrimmedContributionInfo>>().await?)
+        Ok(response.bytes().await?.to_vec())
     } else {
         Err(RequestError::Server(response.text().await?))
     }

@@ -50,6 +50,9 @@ pub async fn main() {
     // Get healthcheck file path
     let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");
 
+    // Get healthcheck file path
+    let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");
+
     // Set the environment
     let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
         .await
