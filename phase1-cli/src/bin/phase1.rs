@@ -22,6 +22,7 @@ use std::{
 };
 
 use chrono::Utc;
+use colored::*;
 
 use base64;
 use bs58;
@@ -30,7 +31,7 @@ use regex::Regex;
 
 use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 
-use tracing::{debug, error, info, trace};
+use tracing::{debug, trace};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
@@ -261,7 +262,7 @@ async fn contribute(
     .await??;
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
-    info!(
+    println!(
         "Completed contribution in {} seconds",
         (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()
     );
@@ -307,7 +308,7 @@ async fn contribute(
     // Compute signature of contributor info
     contrib_info
         .try_sign(keypair)
-        .expect("Error while signing the contribution info");
+        .expect(&format!("{}", "Error while signing the contribution info".red().bold()));
 
     // Write contribution info file and send it to the Coordinator
     async_fs::write(
@@ -330,7 +331,7 @@ async fn contribution_loop(
 ) {
     requests::post_join_queue(&client, &coordinator, &keypair)
         .await
-        .expect("Couldn't join the queue");
+        .expect(&format!("{}", "Couldn't join the queue".red().bold()));
     contrib_info.timestamps.joined_queue = Utc::now();
 
     // Spawn heartbeat task to prevent the Coordinator from
@@ -343,7 +344,7 @@ async fn contribution_loop(
     let heartbeat_handle = tokio::task::spawn(async move {
         loop {
             if let Err(e) = requests::post_heartbeat(&client_cnt, &coordinator_cnt, &keypair_cnt).await {
-                error!("Heartbeat error: {}", e);
+                eprintln!("{}", format!("{}: {}", "Heartbeat error".red().bold(), e.to_string().red().bold()));
             }
             time::sleep(UPDATE_TIME).await;
         }
@@ -353,28 +354,29 @@ async fn contribution_loop(
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
             .await
-            .expect("Couldn't get the status of contributor");
+            .expect(&format!("{}", "Couldn't get the status of contributor".red().bold()));
 
         match queue_status {
             ContributorStatus::Queue(position, size) => {
-                println!(
+                println!( //FIXME: separators before and after
                     "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
                     position,
                     size,
                     position * 5
                 );
+                // FIXME: place a spinner here?
             }
             ContributorStatus::Round => {
                 contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
-                    .expect("Contribution failed");
+                    .expect(&format!("{}", "Contribution failed".red().bold()));
             }
             ContributorStatus::Finished => {
-                println!("Contribution done!");
+                println!("{}", "Contribution done, thank you!".green().bold());
                 break;
             }
             ContributorStatus::Other => {
-                println!("Something went wrong!");
+                println!("{}", "Something went wrong while getting the queue position!".yellow().bold());
             }
         }
 
@@ -386,8 +388,8 @@ async fn contribution_loop(
 #[inline(always)]
 async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
-        Ok(()) => info!("Ceremony completed!"),
-        Err(e) => error!("{}", e),
+        Ok(()) => println!("{}", "Ceremony completed!".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -396,9 +398,9 @@ async fn get_contributions(coordinator: &Url) {
     match requests::get_contributions_info(coordinator).await {
         Ok(contributions) => {
             let contributions_str = std::str::from_utf8(&contributions).unwrap();
-            info!("Contributions:\n{}", contributions_str)
+            println!("Contributions:\n{}", contributions_str)
         }
-        Err(e) => error!("{}", e),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -406,8 +408,8 @@ async fn get_contributions(coordinator: &Url) {
 #[inline(always)]
 async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_verify_chunks(client, coordinator, keypair).await {
-        Ok(()) => info!("Verification of pending contributions completed"),
-        Err(e) => error!("{}", e),
+        Ok(()) => println!("{}", "Verification of pending contributions completed".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -415,8 +417,8 @@ async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyP
 #[inline(always)]
 async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_update(client, coordinator, keypair).await {
-        Ok(()) => info!("Coordinator updated"),
-        Err(e) => error!("{}", e),
+        Ok(()) => println!("{}", "Coordinator updated".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -426,13 +428,15 @@ async fn main() {
 
     let opt = CeremonyOpt::from_args();
 
+    // FIXME: print the step taking place in the ceremony (e.g. reading challenge, computing hash, etc..)
+
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
             if offline {
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
                     .await
-                    .expect("Couldn't read the challenge file");
+                    .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
 
                 tokio::task::spawn_blocking(move || {
                     compute_contribution(
@@ -443,7 +447,8 @@ async fn main() {
                 })
                 .await
                 .unwrap()
-                .expect("Error in computing randomness");
+                .expect(&format!("{}", "Error in computing randomness".red().bold()));
+
                 return;
             }
 
@@ -451,12 +456,12 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
                 .unwrap()
-                .expect("Error while initializing the contribution");
+                .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 
@@ -472,7 +477,7 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let client = Client::new();
             close_ceremony(&client, &url.coordinator, &keypair).await;
@@ -485,7 +490,7 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let client = Client::new();
             verify_contributions(&client, &url.coordinator, &keypair).await;
@@ -495,7 +500,7 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
