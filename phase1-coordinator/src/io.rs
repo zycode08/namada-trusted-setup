@@ -79,9 +79,9 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
             get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
         } // End scope, get back to stdin/stdout
 
-        // Check if the user has correctly stored the mnemonic
-        #[cfg(not(debug_assertions))]
-        check_mnemonic(&mnemonic)?;
+        // Check if the user has correctly stored the mnemonic FIXME: decomment and fix for coordinator
+        // #[cfg(not(debug_assertions))]
+        // check_mnemonic(&mnemonic)?;
 
         mnemonic
     };
