@@ -76,10 +76,10 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
         {
             let mut secret_screen = AlternateScreen::from(std::io::stdout());
             writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic)?;
-            get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
-        } // End scope, get back to stdin/stdout
+            //get_user_input(format!("Press enter when you've done it...").as_str(), None)?; FIXME: decomment, no needed for Coordinator server
+        } // End scope, get back to stdout
 
-        // Check if the user has correctly stored the mnemonic FIXME: decomment and fix for coordinator
+        // Check if the user has correctly stored the mnemonic FIXME: decomment and fix for coordinator we shouldn't check the mnemonic, save it to a file locally and also adjust the close_ceremony cli command?
         // #[cfg(not(debug_assertions))]
         // check_mnemonic(&mnemonic)?;
 
