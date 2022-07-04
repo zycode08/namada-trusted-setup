@@ -23,6 +23,8 @@ use std::{
 
 use chrono::Utc;
 use colored::*;
+use console::Emoji;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use base64;
 use bs58;
@@ -35,6 +37,20 @@ use tracing::{debug, trace};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
+
+const NINJA: Emoji = Emoji("🥷  ", "");
+const TRUCK: Emoji = Emoji("🚚 ", "");
+const LINK: Emoji = Emoji("🔗 ", "");
+const SUCCESS: Emoji = Emoji("🎉 ", "");
+const INFO: Emoji = Emoji("⏱️ ", "");
+const LOCK: Emoji = Emoji("🔒 ", "");
+const RECEIVE: Emoji = Emoji("⚾ ", "");
+const SETUP: Emoji = Emoji("🛠️  ", "");
+const COMPUTE: Emoji = Emoji("🚂 ", "");
+const UPDATE: Emoji = Emoji("🔄 ", "");
+const SEND: Emoji = Emoji("⬆️ ", "");
+
+// FIXME: improve formatting of questions printed to the user (maybe indent println?) maybe remove the lines after the reponsee has been submitted
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -52,6 +68,8 @@ macro_rules! pretty_hash {
         output
     }};
 }
+
+// FIXME: swap colroed with owo-colors
 
 /// Asks the user a few questions to properly setup the contribution
 #[inline(always)]
@@ -138,7 +156,7 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 /// Contest and offline execution branches
 #[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
-    // Print instructions to the user
+    // Print instructions to the user FIXME: improve  style of these prints
     println!(
         "Instructions:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
         contribution_filename, challenge_filename
@@ -207,6 +225,7 @@ async fn contribute(
     heartbeat_handle: &JoinHandle<()>,
 ) -> Result<()> {
     // Get the necessary info to compute the contribution
+    println!("{} {} Locking chunk", "[4/11]".bold().dimmed(), LOCK);
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
@@ -214,8 +233,10 @@ async fn contribute(
     contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
+    println!("{} {} Getting chunk", "[5/11]".bold().dimmed(), RECEIVE);
     let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
 
+    println!("{} {} Getting challenge", "[6/11]".bold().dimmed(), RECEIVE); // FIXME: progress bar here
     let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
@@ -229,6 +250,7 @@ async fn contribute(
     debug!("Challenge length {}", challenge.len());
 
     // Prepare contribution file with the challege hash
+    println!("{} {} Setting up contribution file", "[7/11]".bold().dimmed(), SETUP);
     let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
     let contrib_filename = format!(
         "namada_contribution_round_{}_public_key_{}.params",
@@ -242,6 +264,7 @@ async fn contribute(
         contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??
     }
 
+    println!("{} {} Computing contribution", "[8/11]".bold().dimmed(), COMPUTE);
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_contest_participant || contrib_info.is_another_machine {
@@ -268,6 +291,7 @@ async fn contribute(
     );
 
     // Update contribution info
+    println!("{} {} Updating contribution info", "[9/11]".bold().dimmed(), UPDATE);
     let contribution_file_hash = calculate_hash(contribution.as_ref());
     let contribution_file_hash_str = hex::encode(contribution_file_hash);
     debug!("Contribution hash is {}", contribution_file_hash_str);
@@ -286,6 +310,7 @@ async fn contribute(
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
     // Send contribution to the coordinator
+    println!("{} {} Uploading contribution", "[10/11]".bold().dimmed(), SEND); // FIXME: progress bar here
     let post_chunk_req = PostChunkRequest::new(
         locked_locators.next_contribution(),
         contribution,
@@ -295,7 +320,7 @@ async fn contribute(
     requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
 
     requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
-    contrib_info.timestamps.end_contribution = Utc::now();
+    contrib_info.timestamps.end_contribution = Utc::now();                                                                            
 
     // Interrupt heartbeat, to prevent heartbeating during verification
     // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
@@ -311,6 +336,7 @@ async fn contribute(
         .expect(&format!("{}", "Error while signing the contribution info".red().bold()));
 
     // Write contribution info file and send it to the Coordinator
+    println!("{} {} Uploading contribution info", "[11/11]".bold().dimmed(), SEND);
     async_fs::write(
         format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round),
         &serde_json::to_vec(&contrib_info)?,
@@ -329,6 +355,7 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
+    println!("{} {}Joining queue", "[3/11]".bold().dimmed(), LINK);
     requests::post_join_queue(&client, &coordinator, &keypair)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
@@ -358,12 +385,20 @@ async fn contribution_loop(
 
         match queue_status {
             ContributorStatus::Queue(position, size) => {
-                println!( //FIXME: separators before and after
+                let msg = format!(
                     "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
                     position,
                     size,
                     position * 5
                 );
+
+                let max_len = msg.split("\n").map(|x| x.len()).max().unwrap();
+
+                println!("{} Queue status", INFO);
+                println!("{}", "=".repeat(max_len));
+                println!("{}", msg);
+                println!("{}", "=".repeat(max_len));
+                // FIXME: this should rewrite not append (maybe with the spinner)
                 // FIXME: place a spinner here?
             }
             ContributorStatus::Round => {
@@ -372,7 +407,7 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Contribution failed".red().bold()));
             }
             ContributorStatus::Finished => {
-                println!("{}", "Contribution done, thank you!".green().bold());
+                println!("{} {} {}", SUCCESS, "Contribution completed, thank you!".green().bold(), SUCCESS);
                 break;
             }
             ContributorStatus::Other => {
@@ -432,12 +467,20 @@ async fn main() {
 
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
-            if offline {
+            let progress_style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar} {percent} {msg}"); //FIXME: remove from here
+            let progress_bar = ProgressBar::new(100);
+            progress_bar.set_style(progress_style);
+
+            if offline { //FIXME: fix progress bar in here
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
+                progress_bar.set_message("Reading challenge file");
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
                     .await
                     .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
 
+                progress_bar.inc(20);
+
+                // FIXME: continue here with progress bar
                 tokio::task::spawn_blocking(move || {
                     compute_contribution(
                         get_seed_of_randomness().unwrap(),
@@ -449,15 +492,20 @@ async fn main() {
                 .unwrap()
                 .expect(&format!("{}", "Error in computing randomness".red().bold()));
 
+                progress_bar.finish_with_message("TEst message"); //FIXME: remove message
+
                 return;
             }
 
+            // FIXME: fix all denominators of steps
             // Perform the entire contribution cycle
+            println!("{} {}Generating keypair", "[1/11]".bold().dimmed(), NINJA);
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
                 .unwrap()
                 .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
+            println!("{} {}Initializing contribution", "[2/11]".bold().dimmed(), TRUCK);
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
                 .unwrap()

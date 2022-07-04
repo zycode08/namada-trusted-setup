@@ -2835,6 +2835,7 @@ dependencies = [
  "bs58",
  "chrono",
  "colored",
+ "console",
  "ed25519-compact",
  "fs-err",
  "gumdrop",

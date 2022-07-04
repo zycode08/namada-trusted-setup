@@ -679,4 +679,4 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
     Ok(summary)
 }
 
-// FIXME: status endpoint
+// FIXME: status endpoint + test

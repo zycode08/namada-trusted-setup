@@ -55,7 +55,7 @@ impl Display for MnemonicWrap {
         let mut max_len = 0;
 
         // Get longest word including its position
-        for (i, word) in self.word_iter().enumerate() {
+        for (i, word) in self.word_iter().enumerate() { //FIXME: use map + max here
             let tmp_len = format!("{}. {}  ", i + 1, word).len();
             if tmp_len > max_len {
                 max_len = tmp_len;
@@ -165,7 +165,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     }
     indexes.shuffle(&mut rng);
 
-    println!("{}", " Mnemonic verification step".yellow().bold());
+    println!("{}", "Mnemonic verification step".yellow().bold()); //FIXME: this should be done in a sperate terminal window
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
     for &i in indexes[..3].iter() {
