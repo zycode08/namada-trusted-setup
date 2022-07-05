@@ -119,7 +119,7 @@ where
         .map_err(|_| RequestError::AddressParseError)?;
     let mut content: Option<RequestContent> = None;
 
-    let req = match request {
+    let mut req = match request {
         Request::Get => client.get(address),
         Request::Post(body) => match body {
             Some(b) => {
@@ -143,13 +143,23 @@ where
     let mut headers = SignatureHeaders::new(keypair.pubkey(), content, None);
     headers.try_sign(keypair.sigkey())?;
     let header_map: HeaderWrap = headers.try_into()?;
+    req = req.headers(header_map.into());
 
-    let response = req.headers(header_map.into()).send().await?;
+    loop {
+        let response = req.try_clone().expect("Expected request not stream").send().await?;
 
-    if response.status().is_success() {
-        Ok(response)
-    } else {
-        Err(RequestError::Server(response.text().await?))
+        match response.error_for_status() {
+            Ok(response) => return Ok(response),
+            Err(e) => {
+                match e.status().expect("Expected response error") {
+                    reqwest::StatusCode::GATEWAY_TIMEOUT => {
+                        // Print the error and resend the request
+                        eprintln!("CDN timeout expired, resubmitting the request...");
+                    },
+                    _ => return Err(RequestError::Server(e.to_string()))
+                }
+            },
+        }
     }
 }
 
@@ -182,7 +192,7 @@ pub async fn get_lock_chunk(client: &Client, coordinator_address: &Url, keypair:
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_chunk(
+pub async fn get_chunk( //FIXME: remove this and all tests
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
@@ -200,13 +210,13 @@ pub async fn get_chunk(
     Ok(response.json::<Task>().await?)
 }
 
-/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge.
-pub async fn get_challenge(
+/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge's url.
+pub async fn get_challenge_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &LockedLocators,
-) -> Result<Vec<u8>> {
+    request_body: &u64,
+) -> Result<Url> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -216,24 +226,37 @@ pub async fn get_challenge(
     )
     .await?;
 
+    Ok(response.json().await?)
+}
+
+/// Send a request to Amazon S3 to download the next challenge.
+pub async fn get_challenge() -> Result<Vec<u8>> {
+    let response = ; //FIXME: request to amazon
+
     Ok(response.bytes().await?.to_vec())
 }
 
-/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to upload a contribution.
-pub async fn post_chunk(
+/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target [Url] where to upload the contribu tion.
+pub async fn get_contribution_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &PostChunkRequest,
-) -> Result<()> {
-    submit_request(
+) -> Result<(Url, Url)> {
+    let response = submit_request(
         client,
         coordinator_address,
         "upload/chunk",
         keypair,
-        Request::Post(Some(request_body)),
+        Request::Get(None),
     )
     .await?;
+
+    Ok(response.json().await?)
+}
+
+/// Send a request to the Amazon S3 to upload a contribution.
+pub async fn upload_chunk() -> Result<()> {
+    let response = ; //FIXME: request to amazon
 
     Ok(())
 }
@@ -243,14 +266,14 @@ pub async fn post_contribute_chunk(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: u64,
+    request_body: &PostChunkRequest,
 ) -> Result<ContributionLocator> {
     let response = submit_request(
         client,
         coordinator_address,
         "contributor/contribute_chunk",
         keypair,
-        Request::Post(Some(&request_body)),
+        Request::Post(Some(request_body)),
     )
     .await?;
 

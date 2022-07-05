@@ -213,9 +213,8 @@ async fn contribute(
     contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
-    let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
-
-    let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
+    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
+    let challenge = requests::get_challenge().await?; //FIXME: adjust parameters
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
@@ -279,21 +278,23 @@ async fn contribute(
     contrib_info.contribution_hash_signature =
         Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?;
 
+    // Send contribution to the coordinator
     let contribution_state = ContributionState::new(challenge_hash.to_vec(), contribution_file_hash.to_vec(), None)?;
 
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
-    // Send contribution to the coordinator
-    let post_chunk_req = PostChunkRequest::new(
-        locked_locators.next_contribution(),
-        contribution,
-        locked_locators.next_contribution_file_signature(),
-        contribution_file_signature,
-    );
-    requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
+    let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair).await?;
+    requests::upload_chunk().await?; //FIXME: adjust parameters
 
-    requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
+    let post_chunk_req = PostChunkRequest::new(
+        contribution_url,
+        locked_locators.next_contribution(),
+        contribution_signature_url,
+        locked_locators.next_contribution_file_signature(),
+    );
+
+    requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Interrupt heartbeat, to prevent heartbeating during verification

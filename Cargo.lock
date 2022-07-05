@@ -2911,6 +2911,7 @@ dependencies = [
  "time 0.3.9",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
