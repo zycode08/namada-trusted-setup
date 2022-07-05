@@ -24,6 +24,7 @@ use rocket::{
     Shutdown,
     State,
 };
+use rusoto_s3::S3;
 use sha2::Sha256;
 
 use std::{
@@ -439,6 +440,8 @@ pub async fn get_chunk( //FIXME: remove if not used, together with its request a
     }
 }
 
+// FIXME: remove old files from s3?
+
 /// Get the challenge key on Amazon S3 from the [Coordinator](`crate::Coordinator`) accordingly to the [`LockedLocators`] received from the Contributor.
 #[post("/contributor/challenge", format = "json", data = "<round_height>")]
 pub async fn get_challenge_url( //FIXME: review locks
@@ -446,21 +449,18 @@ pub async fn get_challenge_url( //FIXME: review locks
     _participant: Participant,
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<String>> {
-    debug!(
-        "rest::get_challenge - round_height {}, chunk_id 0, contribution_id 0, is_verified true",
-        round_height
-    );
-
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
-    // FIXME: don't need this part anymore, file is already on s3
-    let mut write_lock = (*coordinator).clone().write_owned().await;
-    let challenge = match task::spawn_blocking(move || write_lock.get_challenge(round_height, 0, 0, true)).await? {
+    let mut read_lock = (*coordinator).clone().read_owned().await;
+    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(round_height, 0, 0, true)).await? {
         Ok(challenge_hash) => challenge_hash,
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
 
-    // FIXME: return url of the last contribution (already on s3) based on its key
+    // FIXME: upload challenge
+
+    // Return key of the challenge
+    Ok(Json(format!("round_{}/chunk_0/contribution_0", round_height)))
 }
 
 /// Request the keys where to upload a [Chunk](`crate::objects::Chunk`) contribution and the [`ContributionFileSignature`].

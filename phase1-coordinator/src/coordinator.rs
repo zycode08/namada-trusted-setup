@@ -1612,7 +1612,7 @@ impl Coordinator {
 
     #[inline]
     pub(crate) fn get_challenge(
-        &mut self,
+        &self,
         round_height: u64,
         chunk_id: u64,
         contribution_id: u64,
