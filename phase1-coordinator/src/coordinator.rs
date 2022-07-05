@@ -1627,7 +1627,6 @@ impl Coordinator {
         ));
         // Get the challenge from the challenge file locator
         let challenge_reader = self.storage.reader(&challenge_file_locator)?;
-        // let challenge_hash = calculate_hash(challenge_reader.as_ref());
 
         Ok(challenge_reader.to_vec())
     }

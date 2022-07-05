@@ -81,6 +81,7 @@ pub async fn main() {
         .await
         .expect("Initialization task panicked");
 
+    // FIXME: update endpoints
     // Build Rocket REST server
     #[cfg(debug_assertions)]
     let routes = routes![

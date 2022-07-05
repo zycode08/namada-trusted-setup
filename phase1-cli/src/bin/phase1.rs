@@ -213,7 +213,7 @@ async fn contribute(
     contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
-    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
+    let challenge_key = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
     let challenge = requests::get_challenge().await?; //FIXME: adjust parameters
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
@@ -284,13 +284,13 @@ async fn contribute(
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
-    let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair).await?;
+    let (contribution_key, contribution_signature_key) = requests::get_contribution_url(client, coordinator, keypair).await?;
     requests::upload_chunk().await?; //FIXME: adjust parameters
 
     let post_chunk_req = PostChunkRequest::new(
-        contribution_url,
+        contribution_key,
         locked_locators.next_contribution(),
-        contribution_signature_url,
+        contribution_signature_key,
         locked_locators.next_contribution_file_signature(),
     );
 
@@ -503,3 +503,7 @@ async fn main() {
         }
     }
 }
+
+// FIXME: fix all FIXMEs
+// FIXME: tests
+// FIXME: fmt

@@ -210,13 +210,13 @@ pub async fn get_chunk( //FIXME: remove this and all tests
     Ok(response.json::<Task>().await?)
 }
 
-/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge's url.
+/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge's key.
 pub async fn get_challenge_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
     request_body: &u64,
-) -> Result<Url> {
+) -> Result<String> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -236,12 +236,12 @@ pub async fn get_challenge() -> Result<Vec<u8>> {
     Ok(response.bytes().await?.to_vec())
 }
 
-/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target [Url] where to upload the contribu tion.
+/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target Strings where to upload the contribution.
 pub async fn get_contribution_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-) -> Result<(Url, Url)> {
+) -> Result<(String, String)> {
     let response = submit_request(
         client,
         coordinator_address,
