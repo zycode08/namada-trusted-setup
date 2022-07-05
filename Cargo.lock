@@ -2239,7 +2239,7 @@ dependencies = [
 [[package]]
 name = "masp-phase2"
 version = "0.2.3"
-source = "git+https://github.com/heliaxdev/masp-phase2?branch=main#763bc36bd0336c6626c0c1e6050fb76dfd27cb9e"
+source = "git+https://github.com/heliaxdev/masp-phase2?branch=master#d577ff9cfd156d6b99d05e76844fc03112cb1510"
 dependencies = [
  "bellman 0.11.2",
  "blake2 0.10.4",
@@ -2253,6 +2253,7 @@ dependencies = [
  "pairing 0.21.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rayon",
 ]
 
 [[package]]
