@@ -10,7 +10,7 @@ use phase1_coordinator::{
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
-    },
+    }, ContributionFileSignature,
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
@@ -33,8 +33,10 @@ use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkReq
 pub enum RequestError {
     #[error("Error while parsing the coordinator url")]
     AddressParseError,
+    #[error("Client-side error: {0}")]
+    Client(String),
     #[error("Digest header is missing hashing algorithm")]
-    InvalidDigestHeaderFormat,
+    InvalidDigestHeaderFormat, //FIXME: need this?
     #[error("Invalid header value: {0}")]
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
     #[error("Json serialization of body failed")]
@@ -42,7 +44,7 @@ pub enum RequestError {
     #[error("Request error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("The required {0} header is missing")]
-    MissingRequiredHeader(&'static str),
+    MissingRequiredHeader(&'static str), //FIXME: need this?
     #[error("Error while signing the request")]
     SigningError,
     #[error("Server-side error: {0}")]
@@ -147,16 +149,22 @@ where
 
     loop {
         let response = req.try_clone().expect("Expected request not stream").send().await?;
-
-        match response.error_for_status() {
-            Ok(response) => return Ok(response),
+    
+        match response.error_for_status_ref() {
+            Ok(_) => return Ok(response),
             Err(e) => {
                 match e.status().expect("Expected response error") {
                     reqwest::StatusCode::GATEWAY_TIMEOUT => {
                         // Print the error and resend the request
                         eprintln!("CDN timeout expired, resubmitting the request...");
                     },
-                    _ => return Err(RequestError::Server(e.to_string()))
+                    _ => {
+                        if response.status().is_client_error() {
+                            return Err(RequestError::Client(response.text().await?))
+                        } else if response.status().is_server_error() {
+                            return Err(RequestError::Server(response.text().await?))
+                        }
+                    }
                 }
             },
         }
@@ -191,25 +199,6 @@ pub async fn get_lock_chunk(client: &Client, coordinator_address: &Url, keypair:
     Ok(response.json::<LockedLocators>().await?)
 }
 
-/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next [Chunk](`phase1-coordinator::objects::Chunk`).
-pub async fn get_chunk( //FIXME: remove this and all tests
-    client: &Client,
-    coordinator_address: &Url,
-    keypair: &KeyPair,
-    request_body: &LockedLocators,
-) -> Result<Task> {
-    let response = submit_request(
-        client,
-        coordinator_address,
-        "download/chunk",
-        keypair,
-        Request::Post(Some(request_body)),
-    )
-    .await?;
-
-    Ok(response.json::<Task>().await?)
-}
-
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the next challenge's key.
 pub async fn get_challenge_url(
     client: &Client,
@@ -230,24 +219,36 @@ pub async fn get_challenge_url(
 }
 
 /// Send a request to Amazon S3 to download the next challenge.
-pub async fn get_challenge() -> Result<Vec<u8>> {
-    let response = ; //FIXME: request to amazon
+pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<Vec<u8>> {
+    //FIXME: generalize this part with the other similar functions
 
-    Ok(response.bytes().await?.to_vec())
+    let req = client.get(challenge_url);
+    let response = req.send().await?;
+
+    if response.status().is_success() { //FIXME: improve
+        Ok(response.bytes().await?.to_vec())
+    } else {
+        if response.status().is_client_error() {
+            Err(RequestError::Client(response.text().await?))
+        } else {
+            Err(RequestError::Server(response.text().await?))
+        }
+    }
 }
 
-/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target Strings where to upload the contribution.
+/// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target Strings where to upload the contribution and its signature.
 pub async fn get_contribution_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
+    request_body: &u64
 ) -> Result<(String, String)> {
-    let response = submit_request(
+    let response = submit_request::<u64>(
         client,
         coordinator_address,
         "upload/chunk",
         keypair,
-        Request::Get(None),
+        Request::Post(Some(request_body)),
     )
     .await?;
 
@@ -255,8 +256,26 @@ pub async fn get_contribution_url(
 }
 
 /// Send a request to the Amazon S3 to upload a contribution.
-pub async fn upload_chunk() -> Result<()> {
-    let response = ; //FIXME: request to amazon
+pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
+    //FIXME: generalize this part with the other similar functions
+
+    // FIXME: broken, can't update contribution
+    let contrib_req = client.post(contrib_url).body(contribution);
+    let mut response = contrib_req.send().await?;
+    if response.status().is_client_error() {
+        return Err(RequestError::Client(response.text().await?))
+    } else if response.status().is_server_error() {
+        return Err(RequestError::Server(response.text().await?))
+    }
+
+    let json_sig = serde_json::to_vec(&contribution_signature)?;
+    let contrib_sig_req = client.post(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    response = contrib_sig_req.send().await?;
+    if response.status().is_client_error() { //FIXME: this block in a function
+        return Err(RequestError::Client(response.text().await?))
+    } else if response.status().is_server_error() {
+        return Err(RequestError::Server(response.text().await?))
+    }
 
     Ok(())
 }
@@ -292,20 +311,6 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &Url, keypair:
     .await?;
 
     Ok(())
-}
-
-/// Get pending tasks of the contributor.
-pub async fn get_tasks_left(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<LinkedList<Task>> {
-    let response = submit_request::<String>(
-        client,
-        coordinator_address,
-        "contributor/get_tasks_left",
-        keypair,
-        Request::Get,
-    )
-    .await?;
-
-    Ok(response.json::<LinkedList<Task>>().await?)
 }
 
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.

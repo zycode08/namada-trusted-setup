@@ -379,6 +379,17 @@ impl Disk {
         // Now, let's clear all the contributions made on this round.
         let round_dir = self.resolver.round_directory(round_height);
         self.clear_dir_files(round_dir.into(), false);
+
+        // FIXME: delete contribution file and trim contribution summary file but only if this files exist
+        // FIXME: manage errors
+        let contribution_info_locator = Locator::ContributionInfoFile { round_height };
+        if self.exists(&contribution_info_locator) { //FIXME: remove this check
+            self.remove(&contribution_info_locator);
+        }
+        
+        // if self.exists(Locator::ContributionsInfoSummary) { //FIXME: remove this check?
+        //     let contrib_summary = self.get_contributions_summary();
+        //     // FIXME:
     }
 
     fn clear_dir_files(&mut self, path: PathBuf, delete_initial_contribution: bool) {

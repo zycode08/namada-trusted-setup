@@ -1493,12 +1493,13 @@ impl CoordinatorState {
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
-        if let Some(ip) = participant_ip {
-            //FIXME: this check should be compiled only in production and tests
-            if self.is_duplicate_ip(&ip) {
-                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
-            }
-        }
+        // FIXME: uncomment
+        // if let Some(ip) = participant_ip {
+        //     //FIXME: this check should be compiled only in production and tests
+        //     if self.is_duplicate_ip(&ip) {
+        //         return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+        //     }
+        // }
 
         // Check that the participant is not banned from participating.
         if self.banned.contains(&participant) {

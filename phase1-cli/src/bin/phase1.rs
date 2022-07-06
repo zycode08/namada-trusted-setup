@@ -213,8 +213,9 @@ async fn contribute(
     contrib_info.ceremony_round = round_height;
     let contribution_id = response_locator.contribution_id();
 
-    let challenge_key = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
-    let challenge = requests::get_challenge().await?; //FIXME: adjust parameters
+    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
+    debug!("Presigned url: {}", challenge_url);
+    let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
@@ -284,13 +285,12 @@ async fn contribute(
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
-    let (contribution_key, contribution_signature_key) = requests::get_contribution_url(client, coordinator, keypair).await?;
-    requests::upload_chunk().await?; //FIXME: adjust parameters
+    let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
+    requests::upload_chunk(client, contribution_url.as_str(), contribution_signature_url.as_str(), contribution, &contribution_file_signature).await?;
 
     let post_chunk_req = PostChunkRequest::new(
-        contribution_key,
+        round_height,
         locked_locators.next_contribution(),
-        contribution_signature_key,
         locked_locators.next_contribution_file_signature(),
     );
 
@@ -504,6 +504,9 @@ async fn main() {
     }
 }
 
+// FIXME: start docker compose for local develpoment/test (also export //     export AWS_ACCESS_KEY_ID=foobar
+// export AWS_SECRET_ACCESS_KEY=foobar)
 // FIXME: fix all FIXMEs
+// FIXME: compilation warnings
 // FIXME: tests
 // FIXME: fmt
