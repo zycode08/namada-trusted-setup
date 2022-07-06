@@ -50,6 +50,7 @@ getrandom = {version = "0.2.6", features = ["js"]}
 hex = "0.4.2"
 itertools = "0.10.3"
 rand = {version = "0.8.5", default-features = false, features = ["getrandom"]}
+rand-06 = { package = "rand", version = "0.6" } # Used just for compatibility with bip39
 rand_chacha = "0.3.1"
 sha2 = "0.10.2"
 bls12_381 = "0.6.1"
