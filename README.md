@@ -55,14 +55,27 @@ For instructions on how to ensure that the ceremony is executed properly, refer 
 ## Directory Structure
 
 This repository contains several Rust crates that implement the different building blocks of the MPC. The high-level structure of the repository is as follows:
-- [`phase1`](phase1): Rust crate that provides an accumulator for Powers of Tau. It runs multithreaded and works in "batches", allowing large powers to be calculated in resource constrained environments
-- [`phase2`](phase2): Rust crate that provides a wrapper over Groth16's parameters which also contains a verifiable transcript of the so-far contributions to the specialization phase
-- [`setup1-contributor`](setup1-contributor): Rust crate for the Aleo Setup I contributor
-- [`setup1-verifier`](setup1-verifier): Rust crate for the Aleo Setup I verifier
-- [`setup2`](setup2): Rust crate for running Aleo Setup II
-- [`setup-utils`](setup-utils): Utility functions shared across crates, involving i/o, mathematical operations and errors.
+- [`client`](phase1-cli): Rust crate that provides a HTTP client that communicates with the REST API endpoints of the coordinator and uses the necessary cryptographic functions to contribute to the trusted setup.
+- [`coordinator`](phase1-coordinator): Rust crate that provides a coordinator library and a HTTP REST API that allow contributors to interact with the coordinator. The coordinator handles the operational steps of the ceremony like: adding a new contributor to the queue, authentificating a contributor, sending and receiving challenge files, removing inactive contributors, reattributing challenge file to a new contributor after a contributor dropped, verifying contributions, creating new files, etc.
+
+## Audits
+
+The original implementation of the coordinator for the Aleo Trusted Setup was audited by: 
+
+- [Least Authority](https://leastauthority.com/blog/audit-of-aleo-trusted-setup-phase-1/)
 
 ## License
 
-This library is a collection of repositories licensed under different standard licenses.
-Please refer to each individual repository for its respective license.
+All code in this workspace is licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in the work by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or
+conditions.
