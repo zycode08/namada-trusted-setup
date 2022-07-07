@@ -35,16 +35,12 @@ pub enum RequestError {
     AddressParseError,
     #[error("Client-side error: {0}")]
     Client(String),
-    #[error("Digest header is missing hashing algorithm")]
-    InvalidDigestHeaderFormat, //FIXME: need this?
     #[error("Invalid header value: {0}")]
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
     #[error("Json serialization of body failed")]
     JsonError(#[from] serde_json::Error),
     #[error("Request error: {0}")]
     Reqwest(#[from] reqwest::Error),
-    #[error("The required {0} header is missing")]
-    MissingRequiredHeader(&'static str), //FIXME: need this?
     #[error("Error while signing the request")]
     SigningError,
     #[error("Server-side error: {0}")]
@@ -158,16 +154,21 @@ where
                         // Print the error and resend the request
                         eprintln!("CDN timeout expired, resubmitting the request...");
                     },
-                    _ => {
-                        if response.status().is_client_error() {
-                            return Err(RequestError::Client(response.text().await?))
-                        } else if response.status().is_server_error() {
-                            return Err(RequestError::Server(response.text().await?))
-                        }
-                    }
+                    _ => map_response_error(response).await
                 }
             },
         }
+    }
+}
+
+/// Maps [`Response`] error to [`RequestError`]
+async fn map_response_error(response: Response) -> Result<()> {
+    if response.status().is_client_error() {
+        Err(RequestError::Client(response.text().await?))
+    } else if response.status().is_server_error() {
+        Err(RequestError::Server(response.text().await?))
+    } else {
+        Ok(())
     }
 }
 
@@ -220,19 +221,13 @@ pub async fn get_challenge_url(
 
 /// Send a request to Amazon S3 to download the next challenge.
 pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<Vec<u8>> {
-    //FIXME: generalize this part with the other similar functions
-
     let req = client.get(challenge_url);
     let response = req.send().await?;
 
-    if response.status().is_success() { //FIXME: improve
+    if response.status().is_success() {
         Ok(response.bytes().await?.to_vec())
     } else {
-        if response.status().is_client_error() {
-            Err(RequestError::Client(response.text().await?))
-        } else {
-            Err(RequestError::Server(response.text().await?))
-        }
+        map_response_error(reponse).await
     }
 }
 
@@ -255,27 +250,17 @@ pub async fn get_contribution_url(
     Ok(response.json().await?)
 }
 
-/// Send a request to the Amazon S3 to upload a contribution.
+/// Upload a contribution and its signature to Amazon S3.
 pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
-    //FIXME: generalize this part with the other similar functions
     let contrib_req = client.put(contrib_url).body(contribution);
     let mut response = contrib_req.send().await?;
-    if response.status().is_client_error() {
-        return Err(RequestError::Client(response.text().await?))
-    } else if response.status().is_server_error() {
-        return Err(RequestError::Server(response.text().await?))
-    }
+    map_response_error(response).await?;
 
     let json_sig = serde_json::to_vec(&contribution_signature)?;
     let contrib_sig_req = client.put(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     response = contrib_sig_req.send().await?;
-    if response.status().is_client_error() { //FIXME: this block in a function
-        return Err(RequestError::Client(response.text().await?))
-    } else if response.status().is_server_error() {
-        return Err(RequestError::Server(response.text().await?))
-    }
 
-    Ok(())
+    map_response_error(response).await
 }
 
 /// Send a request to notify the [Coordinator](`phase1-coordinator::Coordinator`) of an uploaded contribution.
