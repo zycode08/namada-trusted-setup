@@ -7,6 +7,7 @@ use crate::{
     ContributionFileSignature,
     CoordinatorError,
     Participant,
+    s3::{self, S3Error}
 };
 
 use blake2::Digest;
@@ -24,9 +25,7 @@ use rocket::{
     Shutdown,
     State,
 };
-use rusoto_credential::{ChainProvider, ProvideAwsCredentials, AwsCredentials};
-use rusoto_core::{region::Region, HttpClient};
-use rusoto_s3::{GetObjectRequest, PutObjectRequest, util::{PreSignedRequestOption, PreSignedRequest}, S3, S3Client, CreateMultipartUploadRequest, StreamingBody, HeadObjectRequest};
+
 use sha2::Sha256;
 
 use std::{
@@ -77,6 +76,8 @@ pub enum ResponseError {
     ParseError(#[from] std::num::ParseIntError),
     #[error("Thread panicked: {0}")]
     RuntimeError(#[from] task::JoinError),
+    #[error("Error with S3: {0}")]
+    S3Error(#[from] S3Error),
     #[error("Error with Serde: {0}")]
     SerdeError(#[from] serde_json::error::Error),
     #[error("Error while terminating the ceremony: {0}")]
@@ -424,36 +425,12 @@ pub async fn get_challenge_url( //FIXME: review locks
     _participant: Participant,
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<String>> {
-    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height); //FIXME: review this name
-    
+    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
+    let s3_ctx = s3::get_s3_ctx().await?;
+
     // If challenge is already on S3 (round rollback) immediately return the key
-    let provider = ChainProvider::new();
-    let region = Region::Custom {
-        name: "custom".to_string(),
-        endpoint: "http://localhost:4566".to_string(), //FIXME: manage production release
-    };
-    let options = PreSignedRequestOption {
-        expires_in: std::time::Duration::from_secs(300),
-    };
-    let credentials = provider.clone().credentials().await.unwrap(); // FIXME: ?
-
-
-    let s3_client = S3Client::new_with(HttpClient::new().unwrap(), provider.clone(), region.clone());
-    let head = HeadObjectRequest {
-        bucket: "bucket".to_string(),
-        key: key.clone(),
-        ..Default::default()
-    };
-
-    if s3_client.head_object(head).await.is_ok() {
-        let get = GetObjectRequest {
-            bucket: "bucket".to_string(),
-            key: key.clone(),
-            ..Default::default()
-        };
-        let url = get.get_presigned_url(&region, &credentials, &options);
-
-        return Ok(Json(url));
+    if let Some(url) = s3::get_challenge_url(&s3_ctx, key.clone()).await {
+        return Ok(Json(url))
     }
 
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
@@ -464,71 +441,27 @@ pub async fn get_challenge_url( //FIXME: review locks
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
 
-    // Upload challenge to S3
+    // Upload challenge to S3 and return url
+    let url = s3::upload_challenge(&s3_ctx, key, challenge).await?;
 
-    // FIXME: remove
-//     export AWS_ACCESS_KEY_ID=foobar
-// export AWS_SECRET_ACCESS_KEY=foobar
-
-    let put_object_request = PutObjectRequest {
-        bucket: "bucket".to_string(),
-        key: key.clone(),
-        body: Some(StreamingBody::from(challenge)),
-        ..Default::default()
-    };
-    
-    let s3_client = S3Client::new_with(HttpClient::new().unwrap(), provider, region.clone());
-    let upload_result = s3_client.put_object(put_object_request).await.unwrap(); // FIXME: remove unwrap use ?
-
-    let get = GetObjectRequest {
-        bucket: "bucket".to_string(),
-        key: key.clone(),
-        ..Default::default()
-    };
-    let url = get.get_presigned_url(&region, &credentials, &options);
-
-    // Return key of the challenge
     Ok(Json(url))
 }
 
 /// Request the urls where to upload a [Chunk](`crate::objects::Chunk`) contribution and the [`ContributionFileSignature`].
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
-pub async fn get_contribution_url(  //FIXME: review locks
-    coordinator: &State<Coordinator>, //FIXME: need this?
+pub async fn get_contribution_url(
     _participant: Participant,
+    // FIXME: correct to ask the round_height to the client?
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
-) -> Result<Json<(String, String)>> { //FIXME: need result?
+) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
     let contrib_sig_key = format!("round_{}/chunk_0/contribution_1.unverified.signature", *round_height);
 
     // Prepare urls for the upload
-    // FIXME: export to separte function
-    let region = Region::Custom {
-        name: "custom".to_string(),
-        endpoint: "http://localhost:4566".to_string(),
-    };
+    let s3_ctx = s3::get_s3_ctx().await?;
+    let urls = s3::get_contribution_urls(&s3_ctx, contrib_key, contrib_sig_key);
 
-    let provider = ChainProvider::new();
-    let credentials = provider.credentials().await.unwrap(); // FIXME: ?
-    let options = PreSignedRequestOption {
-        expires_in: std::time::Duration::from_secs(300),
-    };
-
-    let get_contrib = GetObjectRequest {
-        bucket: "bucket".to_string(),
-        key: contrib_key,
-        ..Default::default()
-    };
-    let get_sig = GetObjectRequest {
-        bucket: "bucket".to_string(),
-        key: contrib_sig_key,
-        ..Default::default()
-    };
-
-    let contrib_url = get_contrib.get_presigned_url(&region, &credentials, &options);
-    let contrib_sig_url = get_sig.get_presigned_url(&region, &credentials, &options);
-
-    Ok(Json((contrib_url, contrib_sig_url)))
+    Ok(Json(urls))
 }
 
 /// Notify the [Coordinator](`crate::Coordinator`) of a finished and uploaded [Contribution](`crate::objects::Contribution`). This will unlock the given [Chunk](`crate::objects::Chunk`) and allow the contributor to take on a new task.
@@ -543,34 +476,10 @@ pub async fn contribute_chunk(  //FIXME: review locks
     mut contribute_chunk_request: LazyJson<PostChunkRequest>,
 ) -> Result<Json<ContributionLocator>> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
-    let region = Region::Custom {
-        name: "custom".to_string(),
-        endpoint: "http://localhost:4566".to_string(),
-    };
+    let s3_ctx = s3::get_s3_ctx().await?;
+    let (contribution, contribution_sig) = s3::get_contribution(&s3_ctx, contribute_chunk_request.round_height).await?;
 
-    let provider = ChainProvider::new();
-
-    let get_contrib = GetObjectRequest {
-        bucket: "bucket".to_string(),
-        key: format!("round_{}/chunk_0/contribution_1.unverified", contribute_chunk_request.round_height),
-        ..Default::default()
-    };
-    let get_sig = GetObjectRequest {
-        bucket: "bucket".to_string(),
-        key: format!("round_{}/chunk_0/contribution_1.unverified.signature", contribute_chunk_request.round_height),
-        ..Default::default()
-    };
-
-    let s3_client = S3Client::new_with(HttpClient::new().unwrap(), provider, region.clone());
-    let contribution_stream = s3_client.get_object(get_contrib).await.unwrap().body.unwrap(); //FIXME: unwraps
-    let mut contribution = Vec::new();
-    contribution_stream.into_async_read().read_to_end(&mut contribution).await.unwrap(); //FIXME: unwrap
-
-    let contribution_sig_stream = s3_client.get_object(get_sig).await.unwrap().body.unwrap(); //FIXME: unwraps
-    let mut contribution_sig = Vec::new();
-    contribution_sig_stream.into_async_read().read_to_end(&mut contribution_sig).await.unwrap(); //FIXME: unwrap
-
-    let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?; //FIXME: unwraps
+    let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?;
 
     let contribution_locator = contribute_chunk_request.contribution_locator.clone();
 
@@ -583,7 +492,7 @@ pub async fn contribute_chunk(  //FIXME: review locks
 
     write_lock = (*coordinator).clone().write_owned().await;
     if let Err(e) = task::spawn_blocking(move || {
-        write_lock.write_contribution_file_signature(
+        write_lock.write_contribution_file_signature( //FIXME: no take and remove mut from contribute_chunk_request argument
             std::mem::take(&mut contribute_chunk_request.contribution_signature_locator),
             std::mem::take(&mut contribution_signature),
         )
