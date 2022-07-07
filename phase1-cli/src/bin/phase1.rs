@@ -59,7 +59,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     println!("Welcome to the Namada trusted setup ceremony!\nBefore starting, a couple of questions:");
     let incentivization = io::get_user_input(
         "Do you want to participate in the incentivised trusted setup? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
@@ -75,7 +75,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 
     if io::get_user_input(
         "Do you want to take part in the contest? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase()
         == "y"
@@ -89,8 +89,8 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 /// Asks the user wheter he wants to use a custom seed of randomness or not
 fn get_seed_of_randomness() -> Result<bool> {
     let custom_seed = io::get_user_input(
-        "Do you want to input your own seed of randomness? [y/n]", //FIXME: accepts nnnnn as valid input
-        Some(&Regex::new(r"(?i)[yn]")?),
+        "Do you want to input your own seed of randomness? [y/n]",
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
@@ -102,7 +102,7 @@ fn get_seed_of_randomness() -> Result<bool> {
 fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
     let offline = io::get_user_input(
         "Do you want to contribute on another machine? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
