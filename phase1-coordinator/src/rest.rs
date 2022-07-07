@@ -727,14 +727,14 @@ pub async fn post_contribution_info(
     // Write contribution info to file
     let contribution_info = request.clone();
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info)) // FIXME: manage round revert
+    task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info))
         .await?
         .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     // Append summary to file
     let contribution_summary = (*request).clone().into();
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || write_lock.update_contribution_summary(contribution_summary)) // FIXME: manage round revert
+    task::spawn_blocking(move || write_lock.update_contribution_summary(contribution_summary))
         .await?
         .map_err(|e| ResponseError::CoordinatorError(e))?;
 

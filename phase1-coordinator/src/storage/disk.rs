@@ -380,16 +380,24 @@ impl Disk {
         let round_dir = self.resolver.round_directory(round_height);
         self.clear_dir_files(round_dir.into(), false);
 
-        // FIXME: delete contribution file and trim contribution summary file but only if this files exist
-        // FIXME: manage errors
-        let contribution_info_locator = Locator::ContributionInfoFile { round_height };
-        if self.exists(&contribution_info_locator) { //FIXME: remove this check
-            self.remove(&contribution_info_locator);
+        // Delete contribution file and trim contribution summary file if these files exist
+        if let Err(e) = self.remove(&Locator::ContributionInfoFile { round_height }) {
+            tracing::warn!("Could not delete contribution file: {}", e);
         }
-        
-        // if self.exists(Locator::ContributionsInfoSummary) { //FIXME: remove this check?
-        //     let contrib_summary = self.get_contributions_summary();
-        //     // FIXME:
+
+        match self.get(&Locator::ContributionsInfoSummary) {
+            Ok(o) => {
+                if let Object::ContributionsInfoSummary(mut s) = o {
+                    // NOTE: the vec is ordered for ascending round heights
+                    if let Some(contrib) = s.last() {
+                        if contrib.ceremony_round() == round_height {
+                            s.pop();
+                        }
+                    }
+                }
+            },
+            Err(e) => tracing::warn!("Could not retrieve contribution summary file: {}", e),
+        }
     }
 
     fn clear_dir_files(&mut self, path: PathBuf, delete_initial_contribution: bool) {

@@ -258,9 +258,7 @@ pub async fn get_contribution_url(
 /// Send a request to the Amazon S3 to upload a contribution.
 pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
     //FIXME: generalize this part with the other similar functions
-
-    // FIXME: broken, can't update contribution
-    let contrib_req = client.post(contrib_url).body(contribution);
+    let contrib_req = client.put(contrib_url).body(contribution);
     let mut response = contrib_req.send().await?;
     if response.status().is_client_error() {
         return Err(RequestError::Client(response.text().await?))
@@ -269,7 +267,7 @@ pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &
     }
 
     let json_sig = serde_json::to_vec(&contribution_signature)?;
-    let contrib_sig_req = client.post(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    let contrib_sig_req = client.put(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     response = contrib_sig_req.send().await?;
     if response.status().is_client_error() { //FIXME: this block in a function
         return Err(RequestError::Client(response.text().await?))

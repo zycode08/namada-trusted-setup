@@ -89,7 +89,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 /// Asks the user wheter he wants to use a custom seed of randomness or not
 fn get_seed_of_randomness() -> Result<bool> {
     let custom_seed = io::get_user_input(
-        "Do you want to input your own seed of randomness? [y/n]",
+        "Do you want to input your own seed of randomness? [y/n]", //FIXME: accepts nnnnn as valid input
         Some(&Regex::new(r"(?i)[yn]")?),
     )?
     .to_lowercase();
@@ -211,7 +211,6 @@ async fn contribute(
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
-    let contribution_id = response_locator.contribution_id();
 
     let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
     debug!("Presigned url: {}", challenge_url);
@@ -256,7 +255,7 @@ async fn contribute(
         .await??;
     }
     let contribution = tokio::task::spawn_blocking(move || {
-        get_file_as_byte_vec(contrib_filename.as_str(), round_height, contribution_id)
+        get_file_as_byte_vec(contrib_filename.as_str(), round_height, response_locator.contribution_id())
     })
     .await??;
     contrib_info.timestamps.end_computation = Utc::now();
