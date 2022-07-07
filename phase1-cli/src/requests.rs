@@ -28,7 +28,7 @@ use thiserror::Error;
 
 use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkRequest, Task};
 
-/// Error returned from a request. Could be due to a Client or Server error.
+/// Error returned from a request.
 #[derive(Debug, Error)]
 pub enum RequestError {
     #[error("Error while parsing the coordinator url")]
@@ -39,6 +39,8 @@ pub enum RequestError {
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
     #[error("Json serialization of body failed")]
     JsonError(#[from] serde_json::Error),
+    #[error("CDN Error: {0}")]
+    Proxy(String),
     #[error("Request error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("Error while signing the request")]
@@ -146,29 +148,32 @@ where
     loop {
         let response = req.try_clone().expect("Expected request not stream").send().await?;
     
-        match response.error_for_status_ref() {
-            Ok(_) => return Ok(response),
+        match decapsulate_response(response).await {
+            Ok(response) => return Ok(response),
             Err(e) => {
-                match e.status().expect("Expected response error") {
-                    reqwest::StatusCode::GATEWAY_TIMEOUT => {
-                        // Print the error and resend the request
-                        eprintln!("CDN timeout expired, resubmitting the request...");
-                    },
-                    _ => map_response_error(response).await
+                match e {
+                    RequestError::Proxy(_) => eprintln!("CDN timeout expired, resubmitting the request..."),
+                    _ => return Err(e)
                 }
-            },
+            }
         }
     }
 }
 
-/// Maps [`Response`] error to [`RequestError`]
-async fn map_response_error(response: Response) -> Result<()> {
-    if response.status().is_client_error() {
+/// Decapsulate the response and, if error, maps [`Response`] error to [`RequestError`].
+async fn decapsulate_response(response: Response) -> Result<Response> {
+    let status = response.status();
+
+    if status.is_success() {
+        Ok(response)
+    } else if status.is_client_error() {
         Err(RequestError::Client(response.text().await?))
-    } else if response.status().is_server_error() {
-        Err(RequestError::Server(response.text().await?))
     } else {
-        Ok(())
+        if status.as_u16() == reqwest::StatusCode::GATEWAY_TIMEOUT.as_u16() {
+            Err(RequestError::Proxy(response.text().await?))
+        } else {
+            Err(RequestError::Server(response.text().await?))
+        }
     }
 }
 
@@ -224,11 +229,7 @@ pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<Vec<u
     let req = client.get(challenge_url);
     let response = req.send().await?;
 
-    if response.status().is_success() {
-        Ok(response.bytes().await?.to_vec())
-    } else {
-        map_response_error(reponse).await
-    }
+    Ok(decapsulate_response(response).await?.bytes().await?.to_vec())
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target Strings where to upload the contribution and its signature.
@@ -254,13 +255,14 @@ pub async fn get_contribution_url(
 pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
     let contrib_req = client.put(contrib_url).body(contribution);
     let mut response = contrib_req.send().await?;
-    map_response_error(response).await?;
+    decapsulate_response(response).await?;
 
     let json_sig = serde_json::to_vec(&contribution_signature)?;
     let contrib_sig_req = client.put(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     response = contrib_sig_req.send().await?;
+    decapsulate_response(response).await?;
 
-    map_response_error(response).await
+    Ok(())
 }
 
 /// Send a request to notify the [Coordinator](`phase1-coordinator::Coordinator`) of an uploaded contribution.
