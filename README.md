@@ -18,12 +18,12 @@ If you are interested in participating in the ceremony head over to the [Namada 
 
 ### Building and contributing from source
 
-Via command-line, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
+First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-If you already have Rust installed, make sure it is the most up-to-date version updated:
+If you already have Rust installed, make sure it is the most up-to-date version:
 ```
 rustup update
 ```
