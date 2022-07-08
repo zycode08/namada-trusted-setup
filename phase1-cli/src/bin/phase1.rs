@@ -59,7 +59,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     println!("Welcome to the Namada trusted setup ceremony!\nBefore starting, a couple of questions:");
     let incentivization = io::get_user_input(
         "Do you want to participate in the incentivised trusted setup? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
@@ -75,7 +75,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 
     if io::get_user_input(
         "Do you want to take part in the contest? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase()
         == "y"
@@ -90,7 +90,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 fn get_seed_of_randomness() -> Result<bool> {
     let custom_seed = io::get_user_input(
         "Do you want to input your own seed of randomness? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
@@ -102,7 +102,7 @@ fn get_seed_of_randomness() -> Result<bool> {
 fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
     let offline = io::get_user_input(
         "Do you want to contribute on another machine? [y/n]",
-        Some(&Regex::new(r"(?i)[yn]")?),
+        Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
@@ -211,11 +211,10 @@ async fn contribute(
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
-    let contribution_id = response_locator.contribution_id();
 
-    let task = requests::get_chunk(client, coordinator, keypair, &locked_locators).await?;
-
-    let challenge = requests::get_challenge(client, coordinator, keypair, &locked_locators).await?;
+    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
+    debug!("Presigned url: {}", challenge_url);
+    let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
@@ -256,7 +255,7 @@ async fn contribute(
         .await??;
     }
     let contribution = tokio::task::spawn_blocking(move || {
-        get_file_as_byte_vec(contrib_filename.as_str(), round_height, contribution_id)
+        get_file_as_byte_vec(contrib_filename.as_str(), round_height, response_locator.contribution_id())
     })
     .await??;
     contrib_info.timestamps.end_computation = Utc::now();
@@ -279,21 +278,22 @@ async fn contribute(
     contrib_info.contribution_hash_signature =
         Production.sign(keypair.sigkey(), contrib_info.contribution_hash.as_str())?;
 
+    // Send contribution to the coordinator
     let contribution_state = ContributionState::new(challenge_hash.to_vec(), contribution_file_hash.to_vec(), None)?;
 
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
-    // Send contribution to the coordinator
-    let post_chunk_req = PostChunkRequest::new(
-        locked_locators.next_contribution(),
-        contribution,
-        locked_locators.next_contribution_file_signature(),
-        contribution_file_signature,
-    );
-    requests::post_chunk(client, coordinator, keypair, &post_chunk_req).await?;
+    let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
+    requests::upload_chunk(client, contribution_url.as_str(), contribution_signature_url.as_str(), contribution, &contribution_file_signature).await?;
 
-    requests::post_contribute_chunk(client, coordinator, keypair, task.chunk_id()).await?;
+    let post_chunk_req = PostChunkRequest::new(
+        round_height,
+        locked_locators.next_contribution(),
+        locked_locators.next_contribution_file_signature(),
+    );
+
+    requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Interrupt heartbeat, to prevent heartbeating during verification
@@ -502,3 +502,4 @@ async fn main() {
         }
     }
 }
+

@@ -590,7 +590,7 @@ impl Testing {
                 contributor_seen_timeout: time::Duration::minutes(5),
                 verifier_seen_timeout: time::Duration::minutes(15),
                 participant_lock_timeout: time::Duration::minutes(20),
-                queue_seen_timeout: time::Duration::days(10),
+                queue_seen_timeout: time::Duration::minutes(5),
                 participant_ban_threshold: 5,
                 allow_current_contributors_in_queue: true,
                 allow_current_verifiers_in_queue: true,

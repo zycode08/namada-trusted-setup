@@ -267,29 +267,6 @@ async fn test_update_coordinator() {
 }
 
 #[tokio::test]
-async fn test_get_tasks_left() {
-    let client = Client::new();
-    // Spawn the server and get the test context
-    let (ctx, handle) = test_prelude().await;
-    // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
-
-    // Non-existing contributor key
-    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
-    let response = requests::get_tasks_left(&client, &mut url, &ctx.unknown_participant.keypair).await;
-    assert!(response.is_err());
-
-    // Ok tasks left
-    let response = requests::get_tasks_left(&client, &mut url, &ctx.contributors[0].keypair)
-        .await
-        .unwrap();
-    assert_eq!(response.len(), 1);
-
-    // Drop the server
-    handle.abort()
-}
-
-#[tokio::test]
 async fn test_join_queue() {
     let client = Client::new();
     // Spawn the server and get the test context
@@ -354,9 +331,8 @@ async fn test_wrong_post_contribution_info() {
     handle.abort()
 }
 
-/// To test a full contribution we need to test the 7 involved endpoints sequentially:
+/// To test a full contribution we need to test the 6 involved endpoints sequentially:
 ///
-/// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
@@ -375,18 +351,6 @@ async fn test_contribution() {
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 
-    // Download chunk
-    let mut url = Url::parse(&ctx.coordinator_url).unwrap();
-
-    let response = requests::get_chunk(
-        &client,
-        &mut url,
-        &ctx.contributors[0].keypair,
-        ctx.contributors[0].locked_locators.as_ref().unwrap(),
-    )
-    .await;
-    let task: Task = response.unwrap();
-
     // Get challenge
     let challenge = requests::get_challenge(
         &client,
@@ -398,7 +362,7 @@ async fn test_contribution() {
     .unwrap();
 
     // Upload chunk
-    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
+    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 0, false);
 
     let challenge_hash = calculate_hash(challenge.as_ref());
 
@@ -408,11 +372,11 @@ async fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution, &seed);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 0);
     contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =
-        ContributionSignatureLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
+        ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
 
     let response_hash = calculate_hash(contribution.as_ref());
 
@@ -437,7 +401,7 @@ async fn test_contribution() {
         .unwrap();
 
     // Contribute
-    requests::post_contribute_chunk(&client, &mut url, &ctx.contributors[0].keypair, task.chunk_id())
+    requests::post_contribute_chunk(&client, &mut url, &ctx.contributors[0].keypair, 0)
         .await
         .unwrap();
 
@@ -470,7 +434,7 @@ async fn test_contribution() {
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
-    assert_eq!(summary[0].ceremony_round(), 1);
+    assert_eq!(summary[0].ceremony_round, 1);
 
     // Drop the server
     handle.abort()

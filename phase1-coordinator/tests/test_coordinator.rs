@@ -270,30 +270,6 @@ fn test_update_coordinator() {
 }
 
 #[test]
-fn test_get_tasks_left() {
-    use std::collections::LinkedList;
-
-    let ctx = build_context();
-    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
-
-    // Non-existing contributor key
-    let mut req = client.get("/contributor/get_tasks_left");
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
-    assert!(response.body().is_some());
-
-    // Ok tasks left
-    req = client.get("/contributor/get_tasks_left");
-    req = set_request::<()>(req, &ctx.contributors[0].keypair, None);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
-    let list: LinkedList<Task> = response.into_json().unwrap();
-    assert_eq!(list.len(), 1);
-}
-
-#[test]
 fn test_join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
@@ -334,33 +310,6 @@ fn test_wrong_lock_chunk() {
     req = set_request::<u8>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
-    assert!(response.body().is_some());
-}
-
-/// Test wrong usage of get_chunk.
-#[test]
-fn test_wrong_get_chunk() {
-    let ctx = build_context();
-    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
-
-    // Wrong request, non-json body
-    let mut req = client
-        .post("/download/chunk")
-        .header(ContentType::Text)
-        .body("Wrong parameter type");
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::NotFound);
-    assert!(response.body().is_some());
-
-    // Wrong request json body format
-    req = client.post("/download/chunk");
-    req = set_request::<String>(
-        req,
-        &ctx.contributors[0].keypair,
-        Some(&String::from("Unexpected string")),
-    );
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 }
 
@@ -497,9 +446,8 @@ fn test_wrong_post_contribution_info() {
     assert!(response.body().is_some());
 }
 
-/// To test a full contribution we need to test the 7 involved endpoints sequentially:
+/// To test a full contribution we need to test the 6 involved endpoints sequentially:
 ///
-/// - get_chunk
 /// - get_challenge
 /// - post_contribution_chunk
 /// - contribute_chunk
@@ -515,16 +463,8 @@ fn test_contribution() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
-    // Download chunk
-    let locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
-    let mut req = client.post("/download/chunk");
-    req = set_request::<LockedLocators>(req, &ctx.contributors[0].keypair, Some(locked_locators));
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
-    let task: Task = response.into_json().unwrap();
-
     // Get challenge
+    let locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
     req = client.post("/contributor/challenge");
     req = set_request::<LockedLocators>(req, &ctx.contributors[0].keypair, Some(locked_locators));
     let response = req.dispatch();
@@ -533,7 +473,7 @@ fn test_contribution() {
     let challenge = response.into_bytes().unwrap();
 
     // Upload chunk
-    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
+    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 0, false);
     let challenge_hash = calculate_hash(challenge.as_ref());
 
     let mut contribution: Vec<u8> = Vec::new();
@@ -542,11 +482,11 @@ fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution, &entropy);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, task.contribution_id());
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 0);
     contribution.resize(contrib_size as usize, 0);
 
     let contribution_file_signature_locator =
-        ContributionSignatureLocator::new(ROUND_HEIGHT, task.chunk_id(), task.contribution_id(), false);
+        ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
 
     let response_hash = calculate_hash(contribution.as_ref());
 
@@ -574,7 +514,7 @@ fn test_contribution() {
 
     // Contribute
     req = client.post("/contributor/contribute_chunk");
-    req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&task.chunk_id()));
+    req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&0));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
@@ -616,7 +556,7 @@ fn test_contribution() {
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
-    assert_eq!(summary[0].ceremony_round(), 1);
+    assert_eq!(summary[0].ceremony_round, 1);
 
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
