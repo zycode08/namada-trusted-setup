@@ -407,6 +407,7 @@ pub async fn join_queue(
     }
 }
 
+// FIXME: the following 4 endpoints should only be accessible to the curent contributor?
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
 #[get("/contributor/lock_chunk", format = "json")]
 pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participant) -> Result<Json<LockedLocators>> {
@@ -420,13 +421,13 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participa
 
 /// Get the challenge key on Amazon S3 from the [Coordinator](`crate::Coordinator`).
 #[post("/contributor/challenge", format = "json", data = "<round_height>")]
-pub async fn get_challenge_url( //FIXME: review locks
+pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: Participant,
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<String>> {
-    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
     let s3_ctx = s3::get_s3_ctx().await?;
+    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
 
     // If challenge is already on S3 (round rollback) immediately return the key
     if let Some(url) = s3::get_challenge_url(&s3_ctx, key.clone()).await {
@@ -436,7 +437,7 @@ pub async fn get_challenge_url( //FIXME: review locks
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
     let mut read_lock = (*coordinator).clone().read_owned().await;
-    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(*round_height, 0, 0, true)).await? { //FIXME: contribution id 1
+    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(*round_height, 0, 0, true)).await? {
         Ok(challenge_hash) => challenge_hash,
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
@@ -451,7 +452,6 @@ pub async fn get_challenge_url( //FIXME: review locks
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
     _participant: Participant,
-    // FIXME: correct to ask the round_height to the client?
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
@@ -473,14 +473,13 @@ pub async fn get_contribution_url(
 pub async fn contribute_chunk(  //FIXME: review locks
     coordinator: &State<Coordinator>,
     participant: Participant,
-    mut contribute_chunk_request: LazyJson<PostChunkRequest>,
+    contribute_chunk_request: LazyJson<PostChunkRequest>,
 ) -> Result<Json<ContributionLocator>> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
     let s3_ctx = s3::get_s3_ctx().await?;
     let (contribution, contribution_sig) = s3::get_contribution(&s3_ctx, contribute_chunk_request.round_height).await?;
 
     let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?;
-
     let contribution_locator = contribute_chunk_request.contribution_locator.clone();
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
@@ -492,9 +491,9 @@ pub async fn contribute_chunk(  //FIXME: review locks
 
     write_lock = (*coordinator).clone().write_owned().await;
     if let Err(e) = task::spawn_blocking(move || {
-        write_lock.write_contribution_file_signature( //FIXME: no take and remove mut from contribute_chunk_request argument
-            std::mem::take(&mut contribute_chunk_request.contribution_signature_locator),
-            std::mem::take(&mut contribution_signature),
+        write_lock.write_contribution_file_signature(
+            contribute_chunk_request.contribution_signature_locator,
+            contribution_signature,
         )
     })
     .await?
@@ -561,7 +560,8 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
         if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
-            return Err(ResponseError::VerificationError(format!("{}", e)));
+            return Err(ResponseError::VerificationError(format!("{}", e))); //FIXME: delete contribution if verification fails?
+            // FIXME: ban participant and ip if verification failed?
         }
     }
 
@@ -614,6 +614,7 @@ pub async fn get_contributor_queue_status(
     Json(ContributorStatus::Other)
 }
 
+// FIXME: this endpoint should only be accessible to the current contributor (check in api or in coordinator?)
 /// Write [`ContributionInfo`] to disk
 #[post("/contributor/contribution_info", format = "json", data = "<request>")]
 pub async fn post_contribution_info(
@@ -621,6 +622,9 @@ pub async fn post_contribution_info(
     participant: Participant,
     request: LazyJson<ContributionInfo>,
 ) -> Result<()> {
+    // FIXME: validate round height and pubkey of ContributionInfo before writing to disk?
+    // FIXME: what to do if validation fails?
+
     // Check participant is registered in the ceremony
     let read_lock = coordinator.read().await;
 

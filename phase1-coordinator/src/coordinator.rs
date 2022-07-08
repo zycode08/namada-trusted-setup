@@ -1653,9 +1653,8 @@ impl Coordinator {
         &mut self,
         contribution_info: ContributionInfo,
     ) -> Result<(), CoordinatorError> {
-        let round_height = Self::load_current_round_height(&self.storage)?;
         self.storage.insert(
-            Locator::ContributionInfoFile { round_height },
+            Locator::ContributionInfoFile { round_height: contribution_info.ceremony_round },
             Object::ContributionInfoFile(contribution_info),
         )
     }

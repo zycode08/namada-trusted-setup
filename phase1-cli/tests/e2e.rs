@@ -434,7 +434,7 @@ async fn test_contribution() {
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
-    assert_eq!(summary[0].ceremony_round(), 1);
+    assert_eq!(summary[0].ceremony_round, 1);
 
     // Drop the server
     handle.abort()

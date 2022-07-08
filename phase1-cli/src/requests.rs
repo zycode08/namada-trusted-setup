@@ -16,7 +16,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
     Response,
-    Url,
+    Url, RequestBuilder,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -251,16 +251,24 @@ pub async fn get_contribution_url(
     Ok(response.json().await?)
 }
 
-/// Upload a contribution and its signature to Amazon S3.
-pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
-    let contrib_req = client.put(contrib_url).body(contribution);
-    let mut response = contrib_req.send().await?;
+/// Upload a gneric object to S3.
+async fn upload_object(req: RequestBuilder) -> Result<()> {
+    let mut response = req.send().await?;
     decapsulate_response(response).await?;
 
+    Ok(())
+}
+
+/// Upload a contribution and its signature to Amazon S3.
+pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
     let json_sig = serde_json::to_vec(&contribution_signature)?;
+    let contrib_req = client.put(contrib_url).body(contribution);
     let contrib_sig_req = client.put(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    response = contrib_sig_req.send().await?;
-    decapsulate_response(response).await?;
+
+    tokio::try_join!(
+        upload_object(contrib_req),
+        upload_object(contrib_sig_req)
+    )?;
 
     Ok(())
 }
