@@ -34,7 +34,6 @@ pub(crate) struct S3Ctx {
 
 impl S3Ctx {
     pub(crate) async fn new() -> Result<Self> {
-        let start = std::time::Instant::now(); //FIXME: remove
         let provider = ChainProvider::new();
         let bucket = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
         let endpoint_env = std::env::var("AWS_S3_ENDPOINT");
@@ -44,15 +43,14 @@ impl S3Ctx {
             endpoint: endpoint_env
             }
         } else {
-            Region::EuWest1
+            Region::EuCentral1
         };
         let credentials = provider.credentials().await?;
-        let client = S3Client::new_with(HttpClient::new()?, provider, region.clone());
+        let client = S3Client::new(region.clone());
         let options = PreSignedRequestOption {
             expires_in: std::time::Duration::from_secs(300),
         };
         
-        tracing::info!("Created S3 context in {:?}", start.elapsed()); //FIXME: remove
         Ok(Self {
             client,
             bucket,
@@ -105,12 +103,12 @@ impl S3Ctx {
 
     /// Get the urls of a contribution and its signature.
     pub(crate) fn get_contribution_urls(&self, contrib_key: String, contrib_sig_key: String) -> (String, String) {
-        let get_contrib = GetObjectRequest {
+        let get_contrib = PutObjectRequest {
             bucket: self.bucket.clone(),
             key: contrib_key,
             ..Default::default()
         };
-        let get_sig = GetObjectRequest {
+        let get_sig = PutObjectRequest {
             bucket: self.bucket.clone(),
             key: contrib_sig_key,
             ..Default::default()
