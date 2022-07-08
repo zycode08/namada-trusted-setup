@@ -4,8 +4,6 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, util::{PreSignedRequestOptio
 use thiserror::Error;
 use rocket::tokio::io::AsyncReadExt;
 
-const BUCKET: &str = "bucket";
-
 #[derive(Error, Debug)]
 pub enum S3Error {
     #[error("Error while creating the http client: {0}")]
@@ -28,6 +26,7 @@ type Result<T> = std::result::Result<T, S3Error>;
 
 pub(crate) struct S3Ctx {
     client: S3Client,
+    bucket: String,
     region: Region,
     options: PreSignedRequestOption,
     credentials: AwsCredentials
@@ -37,6 +36,7 @@ impl S3Ctx {
     pub(crate) async fn new() -> Result<Self> {
         let start = std::time::Instant::now(); //FIXME: remove
         let provider = ChainProvider::new();
+        let bucket = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
         let endpoint_env = std::env::var("AWS_S3_ENDPOINT");
         let region = if let Ok(endpoint_env) = endpoint_env {
             Region::Custom {
@@ -55,6 +55,7 @@ impl S3Ctx {
         tracing::info!("Created S3 context in {:?}", start.elapsed()); //FIXME: remove
         Ok(Self {
             client,
+            bucket,
             region,
             options,
             credentials
@@ -64,14 +65,14 @@ impl S3Ctx {
     /// Get the url of a challenge on S3.
     pub(crate) async fn get_challenge_url(&self, key: String) -> Option<String> {
         let head = HeadObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key: key.clone(),
             ..Default::default()
         };
 
         if self.client.head_object(head).await.is_ok() {
             let get = GetObjectRequest {
-                bucket: BUCKET.to_string(),
+                bucket: self.bucket.clone(),
                 key,
                 ..Default::default()
             };
@@ -85,7 +86,7 @@ impl S3Ctx {
     /// Upload a challenge to S3. Returns the presigned url to get it.
     pub(crate) async fn upload_challenge(&self, key: String, challenge: Vec<u8>) -> Result<String> {
         let put_object_request = PutObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key: key.clone(),
             body: Some(StreamingBody::from(challenge)),
             ..Default::default()
@@ -94,7 +95,7 @@ impl S3Ctx {
         let upload_result = self.client.put_object(put_object_request).await.map_err(|e| S3Error::UploadError(e.to_string()))?;
 
         let get = GetObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key,
             ..Default::default()
         };
@@ -105,12 +106,12 @@ impl S3Ctx {
     /// Get the urls of a contribution and its signature.
     pub(crate) fn get_contribution_urls(&self, contrib_key: String, contrib_sig_key: String) -> (String, String) {
         let get_contrib = GetObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key: contrib_key,
             ..Default::default()
         };
         let get_sig = GetObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key: contrib_sig_key,
             ..Default::default()
         };
@@ -135,12 +136,12 @@ impl S3Ctx {
     /// Retrieve a contribution and its signature from S3.
     pub(crate) async fn get_contribution(&self, round_height: u64) -> Result<(Vec<u8>, Vec<u8>)> {
         let get_contrib = GetObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key: format!("round_{}/chunk_0/contribution_1.unverified", round_height),
             ..Default::default()
         };
         let get_sig = GetObjectRequest {
-            bucket: BUCKET.to_string(),
+            bucket: self.bucket.clone(),
             key: format!("round_{}/chunk_0/contribution_1.unverified.signature", round_height),
             ..Default::default()
         };
