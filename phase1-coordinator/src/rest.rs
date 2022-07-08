@@ -463,7 +463,7 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: CurrentCo
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation FIXME: get round height from client or from coordinator?
+    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation FIXME: get round height from client or from coordinator? Also in the following two endpoints?
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
@@ -521,6 +521,7 @@ pub async fn contribute_chunk(  //FIXME: review locks
     let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?;
     let contribution_locator = contribute_chunk_request.contribution_locator.clone();
 
+    // FIXME: join these 3 spawn blocking in just one?
     let mut write_lock = (*coordinator).clone().write_owned().await;
     if let Err(e) =
         task::spawn_blocking(move || write_lock.write_contribution(contribution_locator, contribution)).await?
@@ -601,6 +602,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
         if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
             return Err(ResponseError::VerificationError(format!("{}", e))); //FIXME: delete contribution if verification fails?
         }
+        // FIXME: is participant added to the already seen ones if verification fails? And its ip?
     }
 
     Ok(())
@@ -666,6 +668,8 @@ pub async fn post_contribution_info(
     let read_lock = coordinator.read().await;
 
     if !(read_lock.is_current_contributor(&participant) || read_lock.is_finished_contributor(&participant)) {// FIXME: improve this check, move it to RequestGuard?
+        // FIXME: is_finished_contributor makes it so that a finished contributor could query this endpoint forever. I have to mitigate this.
+        //  FIXME: can the participant be already moved to the finished_contributor queue? Check when this happens and see if this condition can be removed from here
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(
             participant,
@@ -676,6 +680,7 @@ pub async fn post_contribution_info(
 
     // Write contribution info to file
     let contribution_info = request.clone();
+    // FIXME: join these two spawn blocking in just one
     let mut write_lock = (*coordinator).clone().write_owned().await;
     task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info))
         .await?
