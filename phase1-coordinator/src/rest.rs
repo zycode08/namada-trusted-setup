@@ -253,6 +253,46 @@ impl<'r> FromRequest<'r> for Participant {
     }
 }
 
+/// Implements the signature verification on the incoming current contributor request via [`FromRequest`].
+pub struct CurrentContributor(Participant);
+
+impl Deref for CurrentContributor {
+    type Target = Participant;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for CurrentContributor {
+    type Error = ResponseError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let pubkey = match request.verify_signature() {
+            Ok(h) => h,
+            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+        };
+
+        // Check that the signature comes from the current contributor by matching the public key
+        let coordinator = request
+            .guard::<&State<Coordinator>>()
+            .await
+            .succeeded()
+            .expect("Managed state should always be retrievable");
+        let participant = Participant::new_contributor(pubkey);
+        
+        if !coordinator.read().await.is_current_contributor(&participant) {
+            return Outcome::Failure((
+                Status::Unauthorized,
+                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string()),
+            ));
+        }
+
+        Outcome::Success(Self(participant))
+    }
+}
+
 /// Implements the signature verification on the incoming server request via [`FromRequest`].
 pub struct ServerAuth;
 
@@ -396,7 +436,7 @@ impl PostChunkRequest {
 #[post("/contributor/join_queue")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    participant: Participant, //FIXME: allow only unknown participants? New request guard? Should also include the check on the ip
     contributor_ip: IpAddr, //NOTE: if ip address cannot be retrieved this request is forwarded and fails. If we want to accept requests from unknown ips we should use Option<IpAddr>
 ) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
@@ -407,10 +447,9 @@ pub async fn join_queue(
     }
 }
 
-// FIXME: the following 4 endpoints should only be accessible to the curent contributor?
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
 #[get("/contributor/lock_chunk", format = "json")]
-pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participant) -> Result<Json<LockedLocators>> {
+pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: CurrentContributor) -> Result<Json<LockedLocators>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     match task::spawn_blocking(move || write_lock.try_lock(&participant)).await? {
@@ -423,8 +462,8 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participa
 #[post("/contributor/challenge", format = "json", data = "<round_height>")]
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
-    _participant: Participant,
-    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
+    _participant: CurrentContributor,
+    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation FIXME: get round height from client or from coordinator?
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
@@ -451,7 +490,7 @@ pub async fn get_challenge_url(
 /// Request the urls where to upload a [Chunk](`crate::objects::Chunk`) contribution and the [`ContributionFileSignature`].
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
-    _participant: Participant,
+    _participant: CurrentContributor,
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
@@ -472,7 +511,7 @@ pub async fn get_contribution_url(
 )]
 pub async fn contribute_chunk(  //FIXME: review locks
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    participant: CurrentContributor,
     contribute_chunk_request: LazyJson<PostChunkRequest>,
 ) -> Result<Json<ContributionLocator>> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
@@ -561,7 +600,6 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
         //  no external verifiers
         if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
             return Err(ResponseError::VerificationError(format!("{}", e))); //FIXME: delete contribution if verification fails?
-            // FIXME: ban participant and ip if verification failed?
         }
     }
 
@@ -627,7 +665,7 @@ pub async fn post_contribution_info(
     // Check participant is registered in the ceremony
     let read_lock = coordinator.read().await;
 
-    if !(read_lock.is_current_contributor(&participant) || read_lock.is_finished_contributor(&participant)) {
+    if !(read_lock.is_current_contributor(&participant) || read_lock.is_finished_contributor(&participant)) {// FIXME: improve this check, move it to RequestGuard?
         // Only the current contributor can upload this file
         return Err(ResponseError::UnauthorizedParticipant(
             participant,
