@@ -7,7 +7,7 @@ use crate::{
     ContributionFileSignature,
     CoordinatorError,
     Participant,
-    s3::{self, S3Error}
+    s3::{S3Ctx, S3Error}
 };
 
 use blake2::Digest;
@@ -426,11 +426,11 @@ pub async fn get_challenge_url(
     _participant: Participant,
     round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
 ) -> Result<Json<String>> {
-    let s3_ctx = s3::get_s3_ctx().await?;
+    let s3_ctx = S3Ctx::new().await?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
 
     // If challenge is already on S3 (round rollback) immediately return the key
-    if let Some(url) = s3::get_challenge_url(&s3_ctx, key.clone()).await {
+    if let Some(url) = s3_ctx.get_challenge_url(key.clone()).await {
         return Ok(Json(url))
     }
 
@@ -443,7 +443,7 @@ pub async fn get_challenge_url(
     };
 
     // Upload challenge to S3 and return url
-    let url = s3::upload_challenge(&s3_ctx, key, challenge).await?;
+    let url = s3_ctx.upload_challenge(key, challenge).await?;
 
     Ok(Json(url))
 }
@@ -458,8 +458,8 @@ pub async fn get_contribution_url(
     let contrib_sig_key = format!("round_{}/chunk_0/contribution_1.unverified.signature", *round_height);
 
     // Prepare urls for the upload
-    let s3_ctx = s3::get_s3_ctx().await?;
-    let urls = s3::get_contribution_urls(&s3_ctx, contrib_key, contrib_sig_key);
+    let s3_ctx = S3Ctx::new().await?;
+    let urls = s3_ctx.get_contribution_urls(contrib_key, contrib_sig_key);
 
     Ok(Json(urls))
 }
@@ -476,8 +476,8 @@ pub async fn contribute_chunk(  //FIXME: review locks
     contribute_chunk_request: LazyJson<PostChunkRequest>,
 ) -> Result<Json<ContributionLocator>> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
-    let s3_ctx = s3::get_s3_ctx().await?;
-    let (contribution, contribution_sig) = s3::get_contribution(&s3_ctx, contribute_chunk_request.round_height).await?;
+    let s3_ctx = S3Ctx::new().await?;
+    let (contribution, contribution_sig) = s3_ctx.get_contribution(contribute_chunk_request.round_height).await?;
 
     let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?;
     let contribution_locator = contribute_chunk_request.contribution_locator.clone();
@@ -614,7 +614,6 @@ pub async fn get_contributor_queue_status(
     Json(ContributorStatus::Other)
 }
 
-// FIXME: this endpoint should only be accessible to the current contributor (check in api or in coordinator?)
 /// Write [`ContributionInfo`] to disk
 #[post("/contributor/contribution_info", format = "json", data = "<request>")]
 pub async fn post_contribution_info(
