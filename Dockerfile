@@ -1,4 +1,5 @@
 FROM rust:1.61.0 AS base
+RUN apt update && apt install musl-tools -y
 WORKDIR /app
 
 FROM base as builder
