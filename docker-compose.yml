@@ -1,0 +1,10 @@
+version: '3.7'
+services:
+  localstack:
+    image: localstack/localstack
+    environment:
+      - SERVICES=s3
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./aws:/docker-entrypoint-initaws.d

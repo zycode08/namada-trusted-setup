@@ -1493,10 +1493,11 @@ impl CoordinatorState {
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
-        if let Some(ip) = participant_ip {
-            //FIXME: this check should be compiled only in production and tests
-            if self.is_duplicate_ip(&ip) {
-                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+        if std::env::var("NAMADA_MPC_IP_BAN").is_ok() {
+            if let Some(ip) = participant_ip {
+                if self.is_duplicate_ip(&ip) {
+                    return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+                }
             }
         }
 
