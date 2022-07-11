@@ -82,8 +82,8 @@ pub enum ResponseError {
     SerdeError(#[from] serde_json::error::Error),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
-    #[error("The participant {0} is not allowed to access the endpoint {1}")]
-    UnauthorizedParticipant(Participant, String),
+    #[error("The participant {0} is not allowed to access the endpoint {1} because of: {2}")]
+    UnauthorizedParticipant(Participant, String, String),
     #[error("Could not find contributor with public key {0}")]
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
@@ -253,6 +253,39 @@ impl<'r> FromRequest<'r> for Participant {
     }
 }
 
+/// Implements the signature verification on the incoming unknown contributor request via [`FromRequest`].
+pub struct NewParticipant{participant: Participant, ip_address: Option<IpAddr>}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for NewParticipant {
+    type Error = ResponseError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let pubkey = match request.verify_signature() {
+            Ok(h) => h,
+            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+        };
+
+        // Check that the signature comes from an unknown contributor
+        let coordinator = request
+            .guard::<&State<Coordinator>>()
+            .await
+            .succeeded()
+            .expect("Managed state should always be retrievable");
+        let participant = Participant::new_contributor(pubkey);
+        let ip_address = request.client_ip();
+        
+        if let Err(e) = coordinator.state().add_to_queue_checks(&participant, &ip_address) {
+            return Outcome::Failure((
+                Status::Unauthorized,
+                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), e.to_string()),
+            ));
+        }
+
+        Outcome::Success(Sel{participant, ip_address})
+    }
+}
+
 /// Implements the signature verification on the incoming current contributor request via [`FromRequest`].
 pub struct CurrentContributor(Participant);
 
@@ -279,13 +312,13 @@ impl<'r> FromRequest<'r> for CurrentContributor {
             .guard::<&State<Coordinator>>()
             .await
             .succeeded()
-            .expect("Managed state should always be retrievable");
+            .expect("Managed state should always be retrievable"); //FIXME: till here try to generalize with the other from requests. Macro?
         let participant = Participant::new_contributor(pubkey);
         
         if !coordinator.read().await.is_current_contributor(&participant) {
             return Outcome::Failure((
                 Status::Unauthorized,
-                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string()),
+                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), String::from("Participant is not the current contributor")),
             ));
         }
 
@@ -317,7 +350,7 @@ impl<'r> FromRequest<'r> for ServerAuth {
         if verifier != coordinator.read().await.environment().coordinator_verifiers()[0] {
             return Outcome::Failure((
                 Status::Unauthorized,
-                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string()),
+                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string(), String::from("Not the coordinator's verifier")),
             ));
         }
 
@@ -436,12 +469,11 @@ impl PostChunkRequest {
 #[post("/contributor/join_queue")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
-    participant: Participant, //FIXME: allow only unknown participants? New request guard? Should also include the check on the ip
-    contributor_ip: IpAddr, //NOTE: if ip address cannot be retrieved this request is forwarded and fails. If we want to accept requests from unknown ips we should use Option<IpAddr>
+    new_participant: NewParticipant,
 ) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.add_to_queue(participant, Some(contributor_ip), 10)).await? {
+    match task::spawn_blocking(move || write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10)).await? {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
@@ -463,7 +495,7 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: CurrentCo
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation FIXME: get round height from client or from coordinator? Also in the following two endpoints?
+    round_height: LazyJson<u64>,
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
@@ -491,7 +523,7 @@ pub async fn get_challenge_url(
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
+    round_height: LazyJson<u64>,
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
     let contrib_sig_key = format!("round_{}/chunk_0/contribution_1.unverified.signature", *round_height);
@@ -509,7 +541,7 @@ pub async fn get_contribution_url(
     format = "json",
     data = "<contribute_chunk_request>"
 )]
-pub async fn contribute_chunk(  //FIXME: review locks
+pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
     participant: CurrentContributor,
     contribute_chunk_request: LazyJson<PostChunkRequest>,
@@ -517,35 +549,18 @@ pub async fn contribute_chunk(  //FIXME: review locks
     // Download contribution and its signature from S3 to local disk from the provided Urls
     let s3_ctx = S3Ctx::new().await?;
     let (contribution, contribution_sig) = s3_ctx.get_contribution(contribute_chunk_request.round_height).await?;
-
-    let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?;
-    let contribution_locator = contribute_chunk_request.contribution_locator.clone();
-
-    // FIXME: join these 3 spawn blocking in just one?
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    if let Err(e) =
-        task::spawn_blocking(move || write_lock.write_contribution(contribution_locator, contribution)).await?
-    {
-        return Err(ResponseError::CoordinatorError(e));
-    }
 
-    write_lock = (*coordinator).clone().write_owned().await;
-    if let Err(e) = task::spawn_blocking(move || {
+    let contribution_locator = task::spawn_blocking(move || {
+        write_lock.write_contribution(contribute_chunk_request.contribution_locator, contribution)?;
         write_lock.write_contribution_file_signature(
             contribute_chunk_request.contribution_signature_locator,
-            contribution_signature,
-        )
-    })
-    .await?
-    {
-        return Err(ResponseError::CoordinatorError(e));
-    }
+            serde_json::from_slice(&contribution_sig)?,
+        )?;
+        write_lock.try_contribute(&participant, 0) // Only 1 chunk per round, chunk_id is always 0
+    }).await?.map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    write_lock = (*coordinator).clone().write_owned().await;
-    match task::spawn_blocking(move || write_lock.try_contribute(&participant, 0)).await? { // Only 1 chunk per round, chunk_id is always 0
-        Ok(contribution_locator) => Ok(Json(contribution_locator)),
-        Err(e) => Err(ResponseError::CoordinatorError(e)),
-    }
+    Ok(Json(contribution_locator))
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)
@@ -674,22 +689,19 @@ pub async fn post_contribution_info(
         return Err(ResponseError::UnauthorizedParticipant(
             participant,
             String::from("/contributor/contribution_info"),
+            String::from("Participant isn't the current contributor")
         ));
     }
     drop(read_lock);
 
-    // Write contribution info to file
-    let contribution_info = request.clone();
-    // FIXME: join these two spawn blocking in just one
+    // Write contribution info and summary to file
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info))
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))?;
+    
+    task::spawn_blocking(move || {
+        write_lock.write_contribution_info(request.clone())?;
 
-    // Append summary to file
-    let contribution_summary = (*request).clone().into();
-    let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || write_lock.update_contribution_summary(contribution_summary))
+        write_lock.update_contribution_summary(request.0.into())
+})
         .await?
         .map_err(|e| ResponseError::CoordinatorError(e))?;
 

@@ -1482,6 +1482,72 @@ impl CoordinatorState {
     }
 
     ///
+    /// Safety checks performed before adding a new contributor to the queue.
+    ///
+    pub(crate) fn add_to_queue_checks(&self, participant: &Participant, participant_ip: Option<&IpAddr>) -> Result<(), CoordinatorError> {
+        // Check that the pariticipant IP is not known.
+        if let Some(ip) = participant_ip {
+            let ip_ban = std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("false".to_string());
+            
+            if ip_ban == "true" && self.is_duplicate_ip(ip) {
+                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+            }
+        }
+
+        // Check that the participant is not banned from participating.
+        if self.banned.contains(participant) {
+            return Err(CoordinatorError::ParticipantBanned);
+        }
+
+        // Check that the participant is not already added to the queue.
+        if self.queue.contains_key(participant) {
+            return Err(CoordinatorError::ParticipantAlreadyAdded);
+        }
+
+        // Check that the participant hasn't been already seen in the past.
+        for (k, v) in &self.finished_contributors {
+            for (p, _) in v {
+                if participant == p {
+                    return Err(CoordinatorError::ParticipantAlreadyAdded);
+                }
+            }
+        }
+
+        // Check that the participant is not in precommit for the next round.
+        if self.next.contains_key(participant) {
+            return Err(CoordinatorError::ParticipantAlreadyAdded);
+        }
+
+        // Check that the participant hasn't been already seen in the past.
+        for (_, inner) in &self.finished_contributors {
+            if inner.contains_key(participant) {
+                return Err(CoordinatorError::ParticipantAlreadyAdded);
+            }
+        }
+
+        match participant {
+            Participant::Contributor(_) => {
+                // Check if the contributor is authorized.
+                if !self.is_authorized_contributor(participant) {
+                    return Err(CoordinatorError::ParticipantUnauthorized);
+                }
+
+                // Check that the contributor is not in the current round.
+                if !self.environment.allow_current_contributors_in_queue()
+                    && self.current_contributors.contains_key(participant)
+                {
+                    return Err(CoordinatorError::ParticipantInCurrentRoundCannotJoinQueue);
+                }
+            }
+            Participant::Verifier(_) => {
+                return Err(CoordinatorError::ExpectedContributor);
+            }
+        }
+
+        Ok(())
+    }
+
+    ///
     /// Adds the given participant to the queue if they are permitted to participate.
     ///
     #[inline]
@@ -1492,64 +1558,7 @@ impl CoordinatorState {
         mut reliability_score: u8,
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
-        // Check that the pariticipant IP is not known.
-        if let Some(ip) = &participant_ip {
-            let ip_ban = std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("false".to_string());
-            
-            if ip_ban == "true" && self.is_duplicate_ip(ip) {
-                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
-            }
-        }
-
-        // Check that the participant is not banned from participating.
-        if self.banned.contains(&participant) {
-            return Err(CoordinatorError::ParticipantBanned);
-        }
-
-        // Check that the participant is not already added to the queue.
-        if self.queue.contains_key(&participant) {
-            return Err(CoordinatorError::ParticipantAlreadyAdded);
-        }
-
-        // Check that the participant hasn't been already seen in the past.
-        for (k, v) in &self.finished_contributors {
-            for (p, _) in v {
-                if &participant == p {
-                    return Err(CoordinatorError::ParticipantAlreadyAdded);
-                }
-            }
-        }
-
-        // Check that the participant is not in precommit for the next round.
-        if self.next.contains_key(&participant) {
-            return Err(CoordinatorError::ParticipantAlreadyAdded);
-        }
-
-        // Check that the participant hasn't been already seen in the past.
-        for (_, inner) in &self.finished_contributors {
-            if inner.contains_key(&participant) {
-                return Err(CoordinatorError::ParticipantAlreadyAdded);
-            }
-        }
-
-        match &participant {
-            Participant::Contributor(_) => {
-                // Check if the contributor is authorized.
-                if !self.is_authorized_contributor(&participant) {
-                    return Err(CoordinatorError::ParticipantUnauthorized);
-                }
-
-                // Check that the contributor is not in the current round.
-                if !self.environment.allow_current_contributors_in_queue()
-                    && self.current_contributors.contains_key(&participant)
-                {
-                    return Err(CoordinatorError::ParticipantInCurrentRoundCannotJoinQueue);
-                }
-            }
-            Participant::Verifier(_) => {
-                return Err(CoordinatorError::ExpectedContributor);
-            }
-        }
+        // NOTE: safety cehcks are performed directly in the rest api, no need to duplicate them here
 
         // Add the participant to the queue.
         self.queue.insert(
