@@ -497,7 +497,7 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: CurrentCo
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>, //FIXME:
+    round_height: LazyJson<u64>,
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
@@ -525,7 +525,7 @@ pub async fn get_challenge_url(
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>, // FIXME:
+    round_height: LazyJson<u64>,
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
     let contrib_sig_key = format!("round_{}/chunk_0/contribution_1.unverified.signature", *round_height);

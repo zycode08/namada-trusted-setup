@@ -26,7 +26,7 @@ use tracing::{error, info};
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        info!("{} seconds to the next update of the coordinator...", UPDATE_TIME);
+        info!("{:#?} seconds to the next update of the coordinator...", UPDATE_TIME);
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Updating coordinator...");
@@ -38,7 +38,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
 /// Periodically verifies the pending contributions
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        info!("{} seconds to the next verification round...", UPDATE_TIME);
+        info!("{:#?} seconds to the next verification round...", UPDATE_TIME);
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Verifying contributions...");

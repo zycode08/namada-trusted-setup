@@ -2945,6 +2945,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "itertools",
+ "lazy_static",
  "masp-phase2",
  "masp_proofs",
  "memmap",

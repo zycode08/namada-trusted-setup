@@ -20,6 +20,14 @@ use std::{
 use time::{Duration, OffsetDateTime};
 use tracing::*;
 
+lazy_static! {
+    static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
+        Ok(s) if s == "true" => true,
+        Ok(_) => false,
+        Err(_) => false,
+    };
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) enum CoordinatorStatus {
     Initializing,
@@ -1487,9 +1495,7 @@ impl CoordinatorState {
     pub(crate) fn add_to_queue_checks(&self, participant: &Participant, participant_ip: Option<&IpAddr>) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
         if let Some(ip) = participant_ip {
-            let ip_ban = std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("false".to_string());
-            
-            if ip_ban == "true" && self.is_duplicate_ip(ip) {
+            if *IP_BAN && self.is_duplicate_ip(ip) {
                 return Err(CoordinatorError::ParticipantIpAlreadyAdded);
             }
         }
