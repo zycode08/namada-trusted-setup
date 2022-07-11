@@ -292,17 +292,7 @@ async fn contribute(
         locked_locators.next_contribution(),
         locked_locators.next_contribution_file_signature(),
     );
-
-    requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
     contrib_info.timestamps.end_contribution = Utc::now();
-
-    // Interrupt heartbeat, to prevent heartbeating during verification
-    // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
-    //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
-    //  only gets detached from the main execution unit but keeps running in the background until the main
-    //  function returns. This would cause the contributor to send heartbeats even after it has been removed
-    //  from the list of current contributors, causing an error
-    heartbeat_handle.abort();
 
     // Compute signature of contributor info
     contrib_info
@@ -316,6 +306,19 @@ async fn contribute(
     )
     .await?;
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
+
+    // Notify contribution to the coordinator for the verification
+    requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
+
+    // Interrupt heartbeat, to prevent heartbeating during verification
+    // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
+    //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
+    //  only gets detached from the main execution unit but keeps running in the background until the main
+    //  function returns. This would cause the contributor to send heartbeats even after it has been removed
+    //  from the list of current contributors, causing an error
+    heartbeat_handle.abort();
+
+    // FIXME: wait fo verification here? Or is it already done in the loop? Probably already done in the loop
 
     Ok(())
 }
@@ -368,6 +371,7 @@ async fn contribution_loop(
                 contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
+                // FIXME: print wait for verification here
             }
             ContributorStatus::Finished => {
                 println!("Contribution done!");

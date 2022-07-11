@@ -60,6 +60,8 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
+    #[error("Contribution info is not valid: {0}")]
+    InvalidContributionInfo(String),
     #[error("Header {0} is badly formatted")]
     InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
@@ -312,9 +314,9 @@ impl<'r> FromRequest<'r> for CurrentContributor {
             .guard::<&State<Coordinator>>()
             .await
             .succeeded()
-            .expect("Managed state should always be retrievable"); //FIXME: till here try to generalize with the other from requests. Macro?
+            .expect("Managed state should always be retrievable");
         let participant = Participant::new_contributor(pubkey);
-        
+
         if !coordinator.read().await.is_current_contributor(&participant) {
             return Outcome::Failure((
                 Status::Unauthorized,
@@ -509,7 +511,7 @@ pub async fn get_challenge_url(
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
     let mut read_lock = (*coordinator).clone().read_owned().await;
     let challenge = match task::spawn_blocking(move || read_lock.get_challenge(*round_height, 0, 0, true)).await? {
-        Ok(challenge_hash) => challenge_hash,
+        Ok(challenge) => challenge,
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
 
@@ -613,11 +615,10 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
     for (task, _) in pending_verifications {
         let mut write_lock = coordinator.clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
-        //  no external verifiers
+        //  no external verifiers. We don't ban the ip of the contributor if verification fails
         if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
-            return Err(ResponseError::VerificationError(format!("{}", e))); //FIXME: delete contribution if verification fails?
+            return Err(ResponseError::VerificationError(format!("{}", e)));
         }
-        // FIXME: is participant added to the already seen ones if verification fails? And its ip?
     }
 
     Ok(())
@@ -673,26 +674,23 @@ pub async fn get_contributor_queue_status(
 #[post("/contributor/contribution_info", format = "json", data = "<request>")]
 pub async fn post_contribution_info(
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    participant: CurrentContributor,
     request: LazyJson<ContributionInfo>,
 ) -> Result<()> {
-    // FIXME: validate round height and pubkey of ContributionInfo before writing to disk?
-    // FIXME: what to do if validation fails?
-
-    // Check participant is registered in the ceremony
-    let read_lock = coordinator.read().await;
-
-    if !(read_lock.is_current_contributor(&participant) || read_lock.is_finished_contributor(&participant)) {// FIXME: improve this check, move it to RequestGuard?
-        // FIXME: is_finished_contributor makes it so that a finished contributor could query this endpoint forever. I have to mitigate this.
-        //  FIXME: can the participant be already moved to the finished_contributor queue? Check when this happens and see if this condition can be removed from here
-        // Only the current contributor can upload this file
-        return Err(ResponseError::UnauthorizedParticipant(
-            participant,
-            String::from("/contributor/contribution_info"),
-            String::from("Participant isn't the current contributor")
-        ));
+    // Validate info
+    if request.public_key != participant.address() {
+        return Err(ResponseError::InvalidContributionInfo(format!("Public key in info {} doesnt' match the participant one {}", request.publick_key, participant.address())));
     }
-    drop(read_lock);
+
+    let current_round_height = match coordinator.read().await.current_round_height() {
+        Ok(r) => r,
+        Err(e) => return Err(ResponseError::CoordinatorError(e)),
+    };
+
+    if current_round_height != request.round_height {
+        // NOTE: valiadtion of round_height is particularly important in case of a round rollback
+        return Err(ResponseError::InvalidContributionInfo(format!("Round height in info {} doesnt' match the current round height {}", request.round_height, current_round_height)));
+    }
 
     // Write contribution info and summary to file
     let mut write_lock = (*coordinator).clone().write_owned().await;
