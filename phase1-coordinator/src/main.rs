@@ -26,19 +26,33 @@ use tracing::{error, info};
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
+        info!("{} seconds to the next update of the coordinator...", UPDATE_TIME);
         tokio::time::sleep(UPDATE_TIME).await;
 
+        info!("Updating coordinator...");
         rest::perform_coordinator_update(coordinator.clone()).await?;
+        info!("Update of coordinator completed");
     }
 }
 
 /// Periodically verifies the pending contributions
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
+        info!("{} seconds to the next verification round...", UPDATE_TIME);
         tokio::time::sleep(UPDATE_TIME).await;
 
+        info!("Verifying contributions...");
         rest::perform_verify_chunks(coordinator.clone()).await?;
+        info!("Verification of contributions completed");
     }
+}
+
+/// Checks and prints the env variables of interest for the ceremony
+fn print_env() {
+    info!("AWS_S3_BUCKET: {}", std::env::var("AWS_S3_BUCKET").unwrap());
+    info!("AWS_S3_ENDPOINT: {}", std::env::var("AWS_S3_ENDPOINT").unwrap());
+    info!("NAMADA_MPC_IP_BAN: {}", std::env::var("NAMADA_MPC_IP_BAN").unwrap());
+    info!("HEALTH_PATH: {}", std::env::var("HEALTH_PATH").unwrap());
 }
 
 /// Rocket main function using the [`tokio`] runtime
@@ -46,6 +60,7 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
 pub async fn main() {
     let tracing_enable_color = std::env::var("RUST_LOG_COLOR").is_ok();
     tracing_subscriber::fmt().with_ansi(tracing_enable_color).init();
+    print_env();
 
     // Get healthcheck file path
     let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");

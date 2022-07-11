@@ -107,7 +107,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
             ResponseError::MissingSigningKey => Status::BadRequest,
-            ResponseError::UnauthorizedParticipant(_, _) => Status::Unauthorized,
+            ResponseError::UnauthorizedParticipant(_, _, _) => Status::Unauthorized,
             ResponseError::WrongDigestEncoding(_) => Status::BadRequest,
             _ => Status::InternalServerError,
         };
@@ -276,15 +276,15 @@ impl<'r> FromRequest<'r> for NewParticipant {
             .expect("Managed state should always be retrievable");
         let participant = Participant::new_contributor(pubkey);
         let ip_address = request.client_ip();
-        
-        if let Err(e) = coordinator.state().add_to_queue_checks(&participant, &ip_address) {
+
+        if let Err(e) = coordinator.read().await.state().add_to_queue_checks(&participant, ip_address.as_ref()) {
             return Outcome::Failure((
                 Status::Unauthorized,
                 ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), e.to_string()),
             ));
         }
 
-        Outcome::Success(Sel{participant, ip_address})
+        Outcome::Success(Self{participant, ip_address})
     }
 }
 
@@ -497,7 +497,7 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: CurrentCo
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>,
+    round_height: LazyJson<u64>, //FIXME:
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
@@ -525,7 +525,7 @@ pub async fn get_challenge_url(
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
     _participant: CurrentContributor,
-    round_height: LazyJson<u64>,
+    round_height: LazyJson<u64>, // FIXME:
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
     let contrib_sig_key = format!("round_{}/chunk_0/contribution_1.unverified.signature", *round_height);
@@ -546,7 +546,7 @@ pub async fn get_contribution_url(
 pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
     participant: CurrentContributor,
-    contribute_chunk_request: LazyJson<PostChunkRequest>,
+    contribute_chunk_request: LazyJson<PostChunkRequest>, //FIXME: neeed the locators and height? No i can build them here
 ) -> Result<Json<ContributionLocator>> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
     let s3_ctx = S3Ctx::new().await?;
@@ -679,7 +679,7 @@ pub async fn post_contribution_info(
 ) -> Result<()> {
     // Validate info
     if request.public_key != participant.address() {
-        return Err(ResponseError::InvalidContributionInfo(format!("Public key in info {} doesnt' match the participant one {}", request.publick_key, participant.address())));
+        return Err(ResponseError::InvalidContributionInfo(format!("Public key in info {} doesnt' match the participant one {}", request.public_key, participant.address())));
     }
 
     let current_round_height = match coordinator.read().await.current_round_height() {
@@ -687,9 +687,9 @@ pub async fn post_contribution_info(
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
 
-    if current_round_height != request.round_height {
+    if current_round_height != request.ceremony_round {
         // NOTE: valiadtion of round_height is particularly important in case of a round rollback
-        return Err(ResponseError::InvalidContributionInfo(format!("Round height in info {} doesnt' match the current round height {}", request.round_height, current_round_height)));
+        return Err(ResponseError::InvalidContributionInfo(format!("Round height in info {} doesnt' match the current round height {}", request.ceremony_round, current_round_height)));
     }
 
     // Write contribution info and summary to file
