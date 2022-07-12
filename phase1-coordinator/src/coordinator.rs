@@ -1507,7 +1507,7 @@ impl Coordinator {
             // Compute the challenge hash using the challenge file.
             let challenge_reader = self.storage.reader(&challenge_file_locator)?;
             let challenge_hash = calculate_hash(challenge_reader.as_ref());
-            trace!(
+            info!(
                 "Challenge is located in {}",
                 self.storage.to_path(&challenge_file_locator)?
             );
@@ -1518,7 +1518,7 @@ impl Coordinator {
             // Compute the response hash.
             let response_reader = self.storage.reader(&Locator::ContributionFile(response_file_locator))?;
             let response_hash = calculate_hash(response_reader.as_ref());
-            trace!(
+            info!(
                 "Response is located in {}",
                 self.storage
                     .to_path(&Locator::ContributionFile(response_file_locator))?

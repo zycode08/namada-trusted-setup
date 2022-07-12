@@ -420,14 +420,18 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participa
 }
 
 /// Get the challenge key on Amazon S3 from the [Coordinator](`crate::Coordinator`).
-#[post("/contributor/challenge", format = "json", data = "<round_height>")]
+#[post("/contributor/challenge", format = "json", data = "<locked_locators>")]
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: Participant,
-    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
+    locked_locators: LazyJson<LockedLocators>,
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
-    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
+
+    let challenge_locator = locked_locators.current_contribution();
+    let round_height = challenge_locator.round_height();
+    let chunk_id = challenge_locator.chunk_id();
+    let key = format!("round_{}/chunk_{}/contribution_0.verified", round_height, chunk_id);
 
     // If challenge is already on S3 (round rollback) immediately return the key
     if let Some(url) = s3_ctx.get_challenge_url(key.clone()).await {
@@ -437,7 +441,7 @@ pub async fn get_challenge_url(
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
     let mut read_lock = (*coordinator).clone().read_owned().await;
-    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(*round_height, 0, 0, true)).await? {
+    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(round_height, chunk_id, 0, true)).await? {
         Ok(challenge_hash) => challenge_hash,
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
@@ -452,7 +456,7 @@ pub async fn get_challenge_url(
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
     _participant: Participant,
-    round_height: LazyJson<u64>, // NOTE: LazyJson only to take advanage of its FromData implementation
+    round_height: LazyJson<u64>,
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
     let contrib_sig_key = format!("round_{}/chunk_0/contribution_1.unverified.signature", *round_height);
