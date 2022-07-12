@@ -40,11 +40,12 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Verifying contributions...");
+        let start = std::time::Instant::now();
         if let Err(e) = rest::perform_verify_chunks(coordinator.clone()).await {
             error!("Error in the contributions' verification step: {}", e);
             // FIXME: remove the last contribution to verify that caused the error because the coordinator doesn't do that and it stalls. Also need to restart the round and drop the participant
         }
-        info!("Verification of contributions completed, {:#?} to the next verification round...", UPDATE_TIME);
+        info!("Verification of contributions completed in {:#?}. {:#?} to the next verification round...", start.elapsed(), UPDATE_TIME);
     }
 }
 
