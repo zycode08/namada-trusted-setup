@@ -26,33 +26,34 @@ use tracing::{error, info};
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        info!("{:#?} seconds to the next update of the coordinator...", UPDATE_TIME);
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Updating coordinator...");
         rest::perform_coordinator_update(coordinator.clone()).await?;
-        info!("Update of coordinator completed");
+        info!("Update of coordinator completed, {:#?} to the next update of the coordinator...", UPDATE_TIME);
     }
 }
 
 /// Periodically verifies the pending contributions
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
-        info!("{:#?} seconds to the next verification round...", UPDATE_TIME);
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Verifying contributions...");
-        rest::perform_verify_chunks(coordinator.clone()).await?;
-        info!("Verification of contributions completed");
+        if let Err(e) = rest::perform_verify_chunks(coordinator.clone()).await {
+            error!("Error in the contributions' verification step: {}", e);
+            // FIXME: remove the last contribution to verify that caused the error because the coordinator doesn't do that and it stalls. Also need to restart the round and drop the participant
+        }
+        info!("Verification of contributions completed, {:#?} to the next verification round...", UPDATE_TIME);
     }
 }
 
 /// Checks and prints the env variables of interest for the ceremony
 fn print_env() {
-    info!("AWS_S3_BUCKET: {}", std::env::var("AWS_S3_BUCKET").unwrap());
-    info!("AWS_S3_ENDPOINT: {}", std::env::var("AWS_S3_ENDPOINT").unwrap());
-    info!("NAMADA_MPC_IP_BAN: {}", std::env::var("NAMADA_MPC_IP_BAN").unwrap());
-    info!("HEALTH_PATH: {}", std::env::var("HEALTH_PATH").unwrap());
+    info!("AWS_S3_BUCKET: {}", std::env::var("AWS_S3_BUCKET").unwrap_or("MISSING".to_string()));
+    info!("AWS_S3_ENDPOINT: {}", std::env::var("AWS_S3_ENDPOINT").unwrap_or("MISSING".to_string()));
+    info!("NAMADA_MPC_IP_BAN: {}", std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("MISSING".to_string()));
+    info!("HEALTH_PATH: {}", std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string()));
 }
 
 /// Rocket main function using the [`tokio`] runtime

@@ -254,10 +254,21 @@ async fn contribute(
         })
         .await??;
     }
-    let contribution = tokio::task::spawn_blocking(move || {
+    let mut contribution = tokio::task::spawn_blocking(move || { //FIXME: remove mut
         get_file_as_byte_vec(contrib_filename.as_str(), round_height, response_locator.contribution_id())
     })
     .await??;
+
+    // FIXME: remove this block
+    use rand::distributions::Uniform;
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let range = Uniform::new(0, 250);
+    for i in (challenge_hash.len()..contribution.len()) {
+        contribution[i] = rng.sample(&range);
+    }
+
+
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
     info!(
@@ -286,12 +297,6 @@ async fn contribute(
 
     let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
     requests::upload_chunk(client, contribution_url.as_str(), contribution_signature_url.as_str(), contribution, &contribution_file_signature).await?;
-
-    let post_chunk_req = PostChunkRequest::new(
-        round_height,
-        locked_locators.next_contribution(),
-        locked_locators.next_contribution_file_signature(),
-    );
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Compute signature of contributor info
@@ -308,6 +313,11 @@ async fn contribute(
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     // Notify contribution to the coordinator for the verification
+    let post_chunk_req = PostChunkRequest::new(
+        round_height,
+        locked_locators.next_contribution(),
+        locked_locators.next_contribution_file_signature(),
+    );
     requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
 
     // Interrupt heartbeat, to prevent heartbeating during verification
@@ -319,6 +329,8 @@ async fn contribute(
     heartbeat_handle.abort();
 
     // FIXME: wait fo verification here? Or is it already done in the loop? Probably already done in the loop
+    // FIXME: after the upload of the contribution the participant is moved to the list of finished contributors
+    //  without waiting for the verification. I have to manage this
 
     Ok(())
 }
