@@ -537,7 +537,7 @@ pub async fn get_contribution_url(
     Ok(Json(urls))
 }
 
-/// Notify the [Coordinator](`crate::Coordinator`) of a finished and uploaded [Contribution](`crate::objects::Contribution`). This will unlock the given [Chunk](`crate::objects::Chunk`) and allow the contributor to take on a new task.
+/// Notify the [Coordinator](`crate::Coordinator`) of a finished and uploaded [Contribution](`crate::objects::Contribution`). This will unlock the given [Chunk](`crate::objects::Chunk`).
 #[post(
     "/contributor/contribute_chunk",
     format = "json",
@@ -546,14 +546,14 @@ pub async fn get_contribution_url(
 pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
     participant: CurrentContributor,
-    contribute_chunk_request: LazyJson<PostChunkRequest>, //FIXME: neeed the locators and height? No i can build them here
-) -> Result<Json<ContributionLocator>> {
+    contribute_chunk_request: LazyJson<PostChunkRequest>,
+) -> Result<()> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
     let s3_ctx = S3Ctx::new().await?;
     let (contribution, contribution_sig) = s3_ctx.get_contribution(contribute_chunk_request.round_height).await?;
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    let contribution_locator = task::spawn_blocking(move || {
+    task::spawn_blocking(move || {
         write_lock.write_contribution(contribute_chunk_request.contribution_locator, contribution)?;
         write_lock.write_contribution_file_signature(
             contribute_chunk_request.contribution_signature_locator,
@@ -562,7 +562,7 @@ pub async fn contribute_chunk(
         write_lock.try_contribute(&participant, 0) // Only 1 chunk per round, chunk_id is always 0
     }).await?.map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    Ok(Json(contribution_locator))
+    Ok(())
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)

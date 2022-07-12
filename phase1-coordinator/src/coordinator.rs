@@ -2275,6 +2275,9 @@ impl Coordinator {
                     &replace_action.tasks,
                 )?;
 
+                // Remove contribution info and trimmed info
+                self.storage.clear_info_files(round.round_height());
+
                 // Assign a replacement contributor from the queue to the dropped tasks for the current round.
                 round.add_replacement_contributor_unsafe(replace_action.replacement_contributor.clone())?;
                 warn!(

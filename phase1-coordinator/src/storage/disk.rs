@@ -381,6 +381,11 @@ impl Disk {
         self.clear_dir_files(round_dir.into(), false);
 
         // Delete contribution file and trim contribution summary file if these files exist
+        self.clear_info_files(round_height);
+    }
+
+    /// Delete contribution file and trim contribution summary file if these files exist
+    pub fn clear_info_files(&mut self, round_height: u64) {
         if let Err(e) = self.remove(&Locator::ContributionInfoFile { round_height }) {
             tracing::warn!("Could not delete contribution file: {}", e);
         }

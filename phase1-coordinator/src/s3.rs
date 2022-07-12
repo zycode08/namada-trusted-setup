@@ -4,6 +4,22 @@ use rusoto_s3::{GetObjectRequest, PutObjectRequest, util::{PreSignedRequestOptio
 use thiserror::Error;
 use rocket::tokio::io::AsyncReadExt;
 
+lazy_static! {
+    static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
+}
+
+lazy_static! {
+    static ref REGION: Region = {
+        match std::env::var("AWS_S3_ENDPOINT") {
+            Ok(endpoint_env) => Region::Custom {
+                name: "custom".to_string(),
+                endpoint: endpoint_env
+                },
+            Err(_) => Region::EuCentral1
+        }
+    };
+}
+
 #[derive(Error, Debug)]
 pub enum S3Error {
     #[error("Error while creating the http client: {0}")]
@@ -35,26 +51,16 @@ pub(crate) struct S3Ctx {
 impl S3Ctx {
     pub(crate) async fn new() -> Result<Self> {
         let provider = ChainProvider::new();
-        let bucket = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
-        let endpoint_env = std::env::var("AWS_S3_ENDPOINT");
-        let region = if let Ok(endpoint_env) = endpoint_env {
-            Region::Custom {
-            name: "custom".to_string(),
-            endpoint: endpoint_env
-            }
-        } else {
-            Region::EuCentral1
-        };
         let credentials = provider.credentials().await?;
-        let client = S3Client::new(region.clone());
+        let client = S3Client::new(REGION.clone());
         let options = PreSignedRequestOption {
             expires_in: std::time::Duration::from_secs(300),
         };
         
         Ok(Self {
             client,
-            bucket,
-            region,
+            bucket: BUCKET.clone(),
+            region: REGION.clone(),
             options,
             credentials
         })

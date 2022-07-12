@@ -279,7 +279,7 @@ pub async fn post_contribute_chunk(
     coordinator_address: &Url,
     keypair: &KeyPair,
     request_body: &PostChunkRequest,
-) -> Result<ContributionLocator> {
+) -> Result<()> {
     let response = submit_request(
         client,
         coordinator_address,
@@ -289,7 +289,7 @@ pub async fn post_contribute_chunk(
     )
     .await?;
 
-    Ok(response.json::<ContributionLocator>().await?)
+    Ok(())
 }
 
 /// Let the [Coordinator](`phase1-coordinator::Coordinator`) know that the contributor is still alive.
