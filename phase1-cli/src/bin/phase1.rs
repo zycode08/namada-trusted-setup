@@ -74,7 +74,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     };
 
     if io::get_user_input(
-        "Do you want to take part in the contest? [y/n]",
+        "Do you want to take part in the contest? [y/n]", //FIXME: improve message
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase()
@@ -196,7 +196,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     Ok(())
 }
 
-/// Performs the contribution sequence
+/// Performs the contribution sequence. Returns the round height of the contribution.
 #[inline(always)]
 async fn contribute(
     client: &Client,
@@ -204,7 +204,7 @@ async fn contribute(
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
-) -> Result<()> {
+) -> Result<u64> {
     // Get the necessary info to compute the contribution
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
@@ -328,11 +328,7 @@ async fn contribute(
     //  from the list of current contributors, causing an error
     heartbeat_handle.abort();
 
-    // FIXME: wait fo verification here? Or is it already done in the loop? Probably already done in the loop
-    // FIXME: after the upload of the contribution the participant is moved to the list of finished contributors
-    //  without waiting for the verification. I have to manage this
-
-    Ok(())
+    Ok(round_height)
 }
 
 /// Waits in line until it's time to contribute
@@ -364,6 +360,8 @@ async fn contribution_loop(
         }
     });
 
+    let mut round_height = 0;
+
     loop {
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
@@ -380,13 +378,12 @@ async fn contribution_loop(
                 );
             }
             ContributorStatus::Round => {
-                contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
+                round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
-                // FIXME: print wait for verification here
             }
             ContributorStatus::Finished => {
-                println!("Contribution done!");
+                println!("Contribution done, thank you! We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours it means your contribution didn't pass the verification step.", round_height);
                 break;
             }
             ContributorStatus::Other => {

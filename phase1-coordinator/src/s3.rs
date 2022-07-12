@@ -15,7 +15,7 @@ lazy_static! {
                 name: "custom".to_string(),
                 endpoint: endpoint_env
                 },
-            Err(_) => Region::EuCentral1
+            Err(_) => Region::EuWest1
         }
     };
 }
