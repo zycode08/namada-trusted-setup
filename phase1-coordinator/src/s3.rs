@@ -43,7 +43,7 @@ impl S3Ctx {
             endpoint: endpoint_env
             }
         } else {
-            Region::EuCentral1
+            Region::EuWest1
         };
         let credentials = provider.credentials().await?;
         let client = S3Client::new(region.clone());
