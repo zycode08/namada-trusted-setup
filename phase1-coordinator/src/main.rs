@@ -51,9 +51,11 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
 
 /// Checks and prints the env variables of interest for the ceremony
 fn print_env() {
+    info!("ENV VARIABLES STATE:");
     info!("AWS_S3_BUCKET: {}", std::env::var("AWS_S3_BUCKET").unwrap_or("MISSING".to_string()));
     info!("AWS_S3_ENDPOINT: {}", std::env::var("AWS_S3_ENDPOINT").unwrap_or("MISSING".to_string()));
     info!("NAMADA_MPC_IP_BAN: {}", std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("MISSING".to_string()));
+    info!("NAMADA_MPC_TIMEOUT_SECONDS: {}", std::env::var("NAMADA_MPC_TIMEOUT_SECONDS").unwrap_or("MISSING".to_string()));
     info!("HEALTH_PATH: {}", std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string()));
 }
 
