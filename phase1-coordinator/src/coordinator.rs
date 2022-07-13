@@ -2495,7 +2495,7 @@ impl Coordinator {
     /// Verify a contribution using the coordinator's default verifier.
     /// This is just an interface to [`verify`]
     ///
-    /// #Error
+    /// # Error
     /// This function assumes that the given task has been indeed assigned to the
     /// default verifier.
     pub fn default_verify(&mut self, task: &Task) -> anyhow::Result<()> {

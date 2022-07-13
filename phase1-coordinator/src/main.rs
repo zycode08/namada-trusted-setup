@@ -30,7 +30,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
 
         info!("Updating coordinator...");
         rest::perform_coordinator_update(coordinator.clone()).await?;
-        info!("Update of coordinator completed, {:#?} to the next update of the coordinator...", UPDATE_TIME);
+        info!("Update of coordinator completed, {:#?} to the next update round...", UPDATE_TIME);
     }
 }
 
@@ -41,10 +41,7 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
 
         info!("Verifying contributions...");
         let start = std::time::Instant::now();
-        if let Err(e) = rest::perform_verify_chunks(coordinator.clone()).await {
-            error!("Error in the contributions' verification step: {}", e);
-            // FIXME: remove the last contribution to verify that caused the error because the coordinator doesn't do that and it stalls. Also need to restart the round and drop the participant
-        }
+        rest::perform_verify_chunks(coordinator.clone()).await?;
         info!("Verification of contributions completed in {:#?}. {:#?} to the next verification round...", start.elapsed(), UPDATE_TIME);
     }
 }

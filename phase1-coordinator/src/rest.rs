@@ -10,7 +10,7 @@ use crate::{
     s3::{S3Ctx, S3Error}
 };
 
-use blake2::Digest;
+use blake2::{Digest, digest::crypto_common::InnerUser};
 use rocket::{
     data::FromData,
     error,
@@ -40,7 +40,7 @@ use std::{
 };
 use thiserror::Error;
 
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[cfg(debug_assertions)]
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
@@ -90,8 +90,6 @@ pub enum ResponseError {
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
     UnknownTask(Task),
-    #[error("Error while verifying a contribution: {0}")]
-    VerificationError(String),
     #[error("Digest of request's body is not base64 encoded: {0}")]
     WrongDigestEncoding(#[from] base64::DecodeError),
 }
@@ -610,14 +608,33 @@ pub async fn stop_coordinator(coordinator: &State<Coordinator>, _auth: ServerAut
 /// Performs the verification of the pending contributions
 pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
+    // Technically, since we don't chunk contributions and we only have one contribution per round, we will always get
+    // one pending verification at max.
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
 
     for (task, _) in pending_verifications {
         let mut write_lock = coordinator.clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
-        //  no external verifiers. We don't ban the ip of the contributor if verification fails
-        if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
-            return Err(ResponseError::VerificationError(format!("{}", e)));
+        //  no external verifiers
+        let verify_response = match task::spawn_blocking(move || write_lock.default_verify(&task)).await {
+            Ok(inner) => inner.map_err(|e| e.to_string()).and(Ok(())),
+            Err(e) => Err(e.to_string()),
+        };
+
+        if let Err(e) = verify_response {
+            warn!("Error while verifying a contribution: {}. Restarting the round...", e);
+            // FIXME: the verify_masp function may panic but the programs doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
+
+            // Get the participant who produced the contribution
+            let mut write_lock = coordinator.write().await;
+            let finished_contributor = write_lock.state().current_round_finished_contributors().unwrap().first().unwrap().clone();
+
+            // Reset the round to prevent a coordinator stall (the corrupted contribution is not automatically dropped)
+            write_lock.reset_round().map_err(|e| ResponseError::CoordinatorError(e))?; //FIXME: spawn blocking?
+
+            // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
+            // FIXME: doesn't really ban the participant ip
+            return write_lock.ban_participant(&finished_contributor).map_err(|e| ResponseError::CoordinatorError(e)); //FIXME: spawn blocking?
         }
     }
 
@@ -667,7 +684,7 @@ pub async fn get_contributor_queue_status(
     }
 
     // Not in the queue, not finished, nor in the current round
-    Json(ContributorStatus::Other)
+    Json(ContributorStatus::Other) //FIXME: check if dropped?
 }
 
 /// Write [`ContributionInfo`] to disk
@@ -688,7 +705,7 @@ pub async fn post_contribution_info(
     };
 
     if current_round_height != request.ceremony_round {
-        // NOTE: valiadtion of round_height is particularly important in case of a round rollback
+        // NOTE: validation of round_height matters in case of a round rollback
         return Err(ResponseError::InvalidContributionInfo(format!("Round height in info {} doesnt' match the current round height {}", request.ceremony_round, current_round_height)));
     }
 

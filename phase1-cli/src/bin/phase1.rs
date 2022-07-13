@@ -74,7 +74,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     };
 
     if io::get_user_input(
-        "Do you want to take part in the contest? [y/n]", //FIXME: improve message
+        "Do you want to take part in the contest? [y/n]", //FIXME: improve message, and fix execution path
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase()
@@ -387,7 +387,7 @@ async fn contribution_loop(
                 break;
             }
             ContributorStatus::Other => {
-                println!("Something went wrong!");
+                println!("Something went wrong!"); //FIXME: quit execution here
             }
         }
 
