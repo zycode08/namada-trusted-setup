@@ -1103,8 +1103,9 @@ impl CoordinatorState {
             *self = Self {
                 current_metrics,
                 current_round_height: Some(new_round_height),
+                contributors_ips: std::mem::take(&mut self.contributors_ips),
                 queue,
-                banned: self.banned.clone(),
+                banned: std::mem::take(&mut self.banned),
                 ..Self::new(self.environment.clone())
             };
 
@@ -1143,10 +1144,10 @@ impl CoordinatorState {
             *self = Self {
                 current_contributors,
                 current_verifiers: Default::default(),
-
-                queue: self.queue.clone(),
-                banned: self.banned.clone(),
-                dropped: self.dropped.clone(),
+                contributors_ips: std::mem::take(&mut self.contributors_ips),
+                queue: std::mem::take(&mut self.queue),
+                banned: std::mem::take(&mut self.banned),
+                dropped: std::mem::take(&mut self.dropped),
                 ..Self::new(self.environment.clone())
             };
 
@@ -1494,14 +1495,11 @@ impl CoordinatorState {
     ///
     pub(crate) fn add_to_queue_checks(&self, participant: &Participant, participant_ip: Option<&IpAddr>) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
-        info!("START OF ADD TO QUEUE CHECKS"); // FIXME: REMOVE
         if let Some(ip) = participant_ip {
-            info!("CHECK IP: {:?}", participant_ip); // FIXME: REMOVE
             if *IP_BAN && self.is_duplicate_ip(ip) {
                 return Err(CoordinatorError::ParticipantIpAlreadyAdded);
             }
         }
-        info!("END OF IP"); // FIXME: REMOVE
 
         // Check that the participant is not banned from participating.
         if self.banned.contains(participant) {
@@ -1567,9 +1565,7 @@ impl CoordinatorState {
 
         // Add ip (if any) to the set of known addresses
         if let Some(ip) = participant_ip {
-            info!("ADDING IP {:?} TO THE CONTRIBUTORS", ip); //FIXME: REMOVE
             self.contributors_ips.insert(ip, participant);
-            info!("IPS in ADD {:?}", self.contributors_ips); //FIXME: REMOVE, here ok
         }
 
         Ok(())
@@ -2145,13 +2141,11 @@ impl CoordinatorState {
             }
 
             // Remove ip (if any) from the list of current ips to allow the participant to rejoin
-            info!("IPS BEFORE DROP: {:?}", self.contributors_ips); //FIXME: remove. Empty
             self.contributors_ips = self
                 .contributors_ips
                 .drain()
                 .filter(|(_, contributor)| contributor != participant)
                 .collect();
-            info!("IPS AFTER DROP: {:?}", self.contributors_ips); //FIXME: remove
 
             return Ok(DropParticipant::DropQueue(DropQueueParticipantData {
                 participant: participant.clone(),
@@ -2381,7 +2375,6 @@ impl CoordinatorState {
         }
 
         // Save participant ip for later ban
-        info!("IPS!!!!!!: {:?}", self.contributors_ips); //FIXME: remove, this is empty, maybe is the round reset that clears it?
         let participant_ip = match self
             .contributors_ips
             .iter()
@@ -2391,8 +2384,6 @@ impl CoordinatorState {
             Some((ip, contrib)) => Some((ip.clone(), contrib.clone())),
             None => None,
         };
-
-        info!("PARITICPANT IP!!!!: {:?}", participant_ip); //FIXME: remove
 
         // Drop the participant from the queue, precommit, and current round.
         let drop = self.drop_participant(participant, time)?;
