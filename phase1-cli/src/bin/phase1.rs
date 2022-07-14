@@ -365,7 +365,8 @@ async fn contribution_loop(
                 break;
             }
             ContributorStatus::Other => {
-                println!("Something went wrong!"); //FIXME: quit execution here
+                println!("Could not retrieve e valid contributor state. There's a good chance you've been banned from the ceremony.");
+                break;
             }
         }
 

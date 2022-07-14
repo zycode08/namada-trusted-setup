@@ -117,7 +117,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 
         builder
             .status(response_code)
-            .header(ContentType::JSON) //FIXME: content is not really json encoded
+            .header(ContentType::Text)
             .sized_body(response.len(), Cursor::new(response))
             .ok()
     }
@@ -718,14 +718,16 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
             // FIXME: the verify_masp function may panic but the programs doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
 
             // Get the participant who produced the contribution
-            let mut write_lock = coordinator.write().await;
-            let finished_contributor = write_lock.state().current_round_finished_contributors().unwrap().first().unwrap().clone();
+            let mut write_lock = coordinator.clone().write_owned().await;
+            return task::spawn_blocking(move || {
+                let finished_contributor = write_lock.state().current_round_finished_contributors().unwrap().first().unwrap().clone();
 
-            // Reset the round to prevent a coordinator stall (the corrupted contribution is not automatically dropped)
-            write_lock.reset_round().map_err(|e| ResponseError::CoordinatorError(e))?; //FIXME: spawn blocking?
+                // Reset the round to prevent a coordinator stall (the corrupted contribution is not automatically dropped)
+                write_lock.reset_round().map_err(|e| ResponseError::CoordinatorError(e))?;
 
-            // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
-            return write_lock.ban_participant(&finished_contributor).map_err(|e| ResponseError::CoordinatorError(e)); //FIXME: spawn blocking?
+                // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
+                write_lock.ban_participant(&finished_contributor).map_err(|e| ResponseError::CoordinatorError(e))
+            }).await?; 
         }
     }
 
