@@ -207,7 +207,7 @@ async fn contribute(
     let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
-    // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
+    // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the offline contrib path
     let challenge_filename = format!("namada_challenge_round_{}.params", round_height);
     let mut challenge_writer = async_fs::File::create(challenge_filename.as_str()).await?;
     challenge_writer.write_all(&challenge.as_slice()).await?;

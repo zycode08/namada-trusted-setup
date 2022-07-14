@@ -48,9 +48,6 @@ pub use coordinator_state::CoordinatorState;
 pub mod environment;
 pub mod io;
 
-#[macro_use]
-extern crate lazy_static;
-
 pub mod objects;
 pub use objects::{ContributionFileSignature, ContributionState, Participant, Round};
 

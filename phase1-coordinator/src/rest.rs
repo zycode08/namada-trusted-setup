@@ -12,13 +12,14 @@ use crate::{
 
 use blake2::{Digest, digest::crypto_common::InnerUser};
 use rocket::{
+    catch,
     data::FromData,
     error,
     get,
-    http::{ContentType, Status},
+    http::{ContentType, Status, uri::Path},
     outcome::IntoOutcome,
     post,
-    request::{FromRequest, Outcome, Request},
+    request::{local_cache, FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
     tokio::{sync::RwLock, task, io::AsyncReadExt},
@@ -47,6 +48,8 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
+pub const UNKNOWN: &str = "Unknown";
+
 // Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
@@ -67,7 +70,7 @@ pub enum ResponseError {
     #[error("Request's signature is invalid")]
     InvalidSignature,
     #[error("Io Error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
     MismatchingChecksum(String, String),
     #[error("The required {0} header was missing from the incoming request")]
@@ -81,7 +84,7 @@ pub enum ResponseError {
     #[error("Error with S3: {0}")]
     S3Error(#[from] S3Error),
     #[error("Error with Serde: {0}")]
-    SerdeError(#[from] serde_json::error::Error),
+    SerdeError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
     #[error("The participant {0} is not allowed to access the endpoint {1} because of: {2}")]
@@ -103,8 +106,10 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
+            ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
             ResponseError::MissingSigningKey => Status::BadRequest,
+            ResponseError::SerdeError(_) => Status::UnprocessableEntity,
             ResponseError::UnauthorizedParticipant(_, _, _) => Status::Unauthorized,
             ResponseError::WrongDigestEncoding(_) => Status::BadRequest,
             _ => Status::InternalServerError,
@@ -112,13 +117,59 @@ impl<'r> Responder<'r, 'static> for ResponseError {
 
         builder
             .status(response_code)
-            .header(ContentType::JSON)
+            .header(ContentType::JSON) //FIXME: content is not really json encoded
             .sized_body(response.len(), Cursor::new(response))
             .ok()
     }
 }
 
 type Result<T> = std::result::Result<T, ResponseError>;
+
+// Custom catchers for Request/Data Guards. These remap custom error codes to the standard ones and call the ResponseError Responder to produce the response. The default catcher is mantained for non-custom errors
+
+#[catch(452)]
+pub fn invalid_signature() -> ResponseError {
+    ResponseError::InvalidSignature
+}
+
+#[catch(453)]
+pub fn unauthorized(req: &Request) -> ResponseError {
+    let participant = req.local_cache(|| Participant::new_contributor(UNKNOWN));
+    let (endpoint, cause) = req.local_cache(|| (String::from(UNKNOWN), String::from(UNKNOWN)));
+
+    ResponseError::UnauthorizedParticipant(participant.clone(), endpoint.to_owned(), cause.to_owned())
+}
+
+#[catch(454)]
+pub fn missing_required_header(req: &Request) -> ResponseError {
+    let header = req.local_cache(|| UNKNOWN);
+    ResponseError::MissingRequiredHeader(header)
+}
+
+#[catch(455)]
+pub fn unprocessable_entity(req: &Request) -> ResponseError {
+    let message = req.local_cache(|| UNKNOWN.to_string());
+    ResponseError::SerdeError(message.to_string())
+}
+
+#[catch(456)]
+pub fn mismatching_checksum(req: &Request) -> ResponseError {
+    let (expected, actual) = req.local_cache(|| (UNKNOWN.to_string(), UNKNOWN.to_string()));
+    ResponseError::MismatchingChecksum(expected.to_owned(), actual.to_owned())
+}
+
+#[catch(457)]
+pub fn invalid_header(req: &Request) -> ResponseError {
+    let header = req.local_cache(|| UNKNOWN);
+    ResponseError::InvalidHeader(header)
+}   
+
+#[catch(512)]
+pub fn io_error(req: &Request) -> ResponseError {
+    let message = req.local_cache(|| UNKNOWN.to_string());
+    ResponseError::IoError(message.to_owned())
+}
+
 /// Content info
 pub struct RequestContent<'a> {
     len: usize,
@@ -248,7 +299,7 @@ impl<'r> FromRequest<'r> for Participant {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match request.verify_signature() {
             Ok(pubkey) => Outcome::Success(Participant::new_contributor(pubkey)),
-            Err(e) => Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => Outcome::Failure((Status::new(452), e)),
         }
     }
 }
@@ -263,7 +314,7 @@ impl<'r> FromRequest<'r> for NewParticipant {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let pubkey = match request.verify_signature() {
             Ok(h) => h,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => return Outcome::Failure((Status::new(452), e)),
         };
 
         // Check that the signature comes from an unknown contributor
@@ -276,8 +327,12 @@ impl<'r> FromRequest<'r> for NewParticipant {
         let ip_address = request.client_ip();
 
         if let Err(e) = coordinator.read().await.state().add_to_queue_checks(&participant, ip_address.as_ref()) {
+            // Cache error data for the error catcher
+            request.local_cache(|| participant.clone());
+            request.local_cache(|| (request.uri().to_string(), e.to_string()));
+
             return Outcome::Failure((
-                Status::Unauthorized,
+               Status::new(453),
                 ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), e.to_string()),
             ));
         }
@@ -304,7 +359,7 @@ impl<'r> FromRequest<'r> for CurrentContributor {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let pubkey = match request.verify_signature() {
             Ok(h) => h,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => return Outcome::Failure((Status::new(452), e)),
         };
 
         // Check that the signature comes from the current contributor by matching the public key
@@ -316,9 +371,14 @@ impl<'r> FromRequest<'r> for CurrentContributor {
         let participant = Participant::new_contributor(pubkey);
 
         if !coordinator.read().await.is_current_contributor(&participant) {
+            // Cache error data for the error catcher
+            let error_msg = String::from("Participant is not the current contributor");
+            request.local_cache(|| participant.clone());
+            request.local_cache(|| (request.uri().to_string(), error_msg.clone()));
+            
             return Outcome::Failure((
-                Status::Unauthorized,
-                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), String::from("Participant is not the current contributor")),
+                Status::new(453),
+                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), error_msg),
             ));
         }
 
@@ -334,9 +394,9 @@ impl<'r> FromRequest<'r> for ServerAuth {
     type Error = ResponseError;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let pubkey = match request.verify_signature() {
+        let pubkey = match request.verify_signature() {// FIXME: code duplication in the FromRequest implementations
             Ok(h) => h,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => return Outcome::Failure((Status::new(452), e)),
         };
 
         // Check that the signature comes from the coordinator by matching the default verifier key
@@ -348,9 +408,14 @@ impl<'r> FromRequest<'r> for ServerAuth {
         let verifier = Participant::new_verifier(pubkey);
 
         if verifier != coordinator.read().await.environment().coordinator_verifiers()[0] {
+            // Cache error data for the error catcher
+            let error_msg = String::from("Not the coordinator's verifier");
+            request.local_cache(|| verifier.clone());
+            request.local_cache(|| (request.uri().to_string(), error_msg.clone()));
+            
             return Outcome::Failure((
-                Status::Unauthorized,
-                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string(), String::from("Not the coordinator's verifier")),
+                Status::new(453),
+                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string(), error_msg),
             ));
         }
 
@@ -385,8 +450,11 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         let expected_digest = match headers.get_one(BODY_DIGEST_HEADER) {
             Some(h) => h,
             None => {
+                // Cache error data for the error catcher
+                req.local_cache(|| BODY_DIGEST_HEADER.to_string());
+
                 return rocket::data::Outcome::Failure((
-                    Status::BadRequest,
+                    Status::new(454),
                     ResponseError::MissingRequiredHeader(BODY_DIGEST_HEADER),
                 ));
             }
@@ -395,8 +463,11 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         let content_length = match headers.get_one(CONTENT_LENGTH_HEADER) {
             Some(h) => h,
             None => {
+                // Cache error data for the error catcher
+                req.local_cache(|| CONTENT_LENGTH_HEADER.to_string());
+
                 return rocket::data::Outcome::Failure((
-                    Status::LengthRequired,
+                    Status::new(454),
                     ResponseError::MissingRequiredHeader(CONTENT_LENGTH_HEADER),
                 ));
             }
@@ -404,20 +475,37 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
 
         let expected_content = match RequestContent::try_from_header(content_length, expected_digest) {
             Ok(c) => c,
-            Err(e) => return rocket::data::Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => {
+                // Cache error data for the error catcher
+                let header = match e {
+                    ResponseError::InvalidHeader(h) => h,
+                    _ => UNKNOWN
+                };
+                req.local_cache(|| header);
+
+                return rocket::data::Outcome::Failure((Status::new(457), e))
+            },
         };
 
         let body = match data.open(expected_content.len.into()).into_bytes().await {
             Ok(bytes) => bytes.into_inner(),
-            Err(e) => return rocket::data::Outcome::Failure((Status::InternalServerError, ResponseError::from(e))),
+            Err(e) => {
+                 // Cache error data for the error catcher
+                 req.local_cache(|| e.to_string());
+    
+                return rocket::data::Outcome::Failure((Status::new(512), ResponseError::IoError(e.to_string())))
+            },
         };
 
         let mut hasher = Sha256::new();
         hasher.update(&body);
         let digest = base64::encode(hasher.finalize());
         if digest != expected_content.digest {
+            // Cache error data for the error catcher
+            req.local_cache(|| (expected_digest.to_owned(), expected_content.digest.to_string()));
+
             return rocket::data::Outcome::Failure((
-                Status::BadRequest,
+                Status::new(456),
                 ResponseError::MismatchingChecksum(expected_digest.to_owned(), expected_content.digest.to_string()),
             ));
         }
@@ -425,7 +513,11 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         // Deserialize data and pass it to the request handler
         match serde_json::from_slice::<T>(&body) {
             Ok(obj) => rocket::data::Outcome::Success(LazyJson(obj)),
-            Err(e) => rocket::data::Outcome::Failure((Status::UnprocessableEntity, ResponseError::from(e))),
+            Err(e) => {
+                // Cache error data for the error catcher
+                req.local_cache(|| (e.to_string()));
+                rocket::data::Outcome::Failure((Status::new(455), ResponseError::SerdeError(e.to_string())))
+            },
         }
     }
 }
@@ -633,7 +725,6 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
             write_lock.reset_round().map_err(|e| ResponseError::CoordinatorError(e))?; //FIXME: spawn blocking?
 
             // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
-            // FIXME: doesn't really ban the participant ip
             return write_lock.ban_participant(&finished_contributor).map_err(|e| ResponseError::CoordinatorError(e)); //FIXME: spawn blocking?
         }
     }

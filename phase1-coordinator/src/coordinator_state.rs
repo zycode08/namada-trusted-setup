@@ -8,7 +8,7 @@ use crate::{
     CoordinatorError,
     TimeSource,
 };
-// use phase1::ProvingSystem;
+use lazy_static::lazy_static;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

@@ -3,6 +3,7 @@ use rusoto_core::{region::Region, HttpClient, request::TlsError, RusotoError};
 use rusoto_s3::{GetObjectRequest, PutObjectRequest, util::{PreSignedRequestOption, PreSignedRequest}, S3, S3Client, CreateMultipartUploadRequest, StreamingBody, HeadObjectRequest};
 use thiserror::Error;
 use rocket::tokio::io::AsyncReadExt;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());

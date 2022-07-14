@@ -12,6 +12,7 @@ use phase1_coordinator::environment::Testing;
 use phase1_coordinator::environment::Production;
 
 use rocket::{
+    catchers,
     self,
     fs::FileServer,
     routes,
@@ -128,7 +129,8 @@ pub async fn main() {
     let build_rocket = rocket::build()
         .mount("/", routes)
         .mount("/healthcheck", FileServer::from(health_path))
-        .manage(coordinator);
+        .manage(coordinator)
+        .register("/", catchers![rest::invalid_signature, rest::unauthorized, rest::missing_required_header, rest::io_error, rest::unprocessable_entity, rest::mismatching_checksum, rest::invalid_header]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically
