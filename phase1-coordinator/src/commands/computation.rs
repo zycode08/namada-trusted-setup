@@ -157,6 +157,10 @@ impl Computation {
         Ok(())
     }
 
+    // The [`ContributionFile`] has the following format
+    // | previous_contribution_file_hash (64 bytes) |
+    // | masp_mpc_new_parameters_contribution |
+    // The masp-mpc commands are executed at offset 64 of the [`ContributionFile`]
     #[cfg(not(debug_assertions))]
     pub fn contribute_masp<W: Write>(challenge_reader: &[u8], mut response_writer: W, rand_source: &RandomSource) {
         // Create an RNG as following:
