@@ -1507,7 +1507,7 @@ impl Coordinator {
             // Compute the challenge hash using the challenge file.
             let challenge_reader = self.storage.reader(&challenge_file_locator)?;
             let challenge_hash = calculate_hash(challenge_reader.as_ref());
-            trace!(
+            info!(
                 "Challenge is located in {}",
                 self.storage.to_path(&challenge_file_locator)?
             );
@@ -1518,7 +1518,7 @@ impl Coordinator {
             // Compute the response hash.
             let response_reader = self.storage.reader(&Locator::ContributionFile(response_file_locator))?;
             let response_hash = calculate_hash(response_reader.as_ref());
-            trace!(
+            info!(
                 "Response is located in {}",
                 self.storage
                     .to_path(&Locator::ContributionFile(response_file_locator))?
@@ -1612,7 +1612,7 @@ impl Coordinator {
 
     #[inline]
     pub(crate) fn get_challenge(
-        &mut self,
+        &self,
         round_height: u64,
         chunk_id: u64,
         contribution_id: u64,
@@ -1627,7 +1627,6 @@ impl Coordinator {
         ));
         // Get the challenge from the challenge file locator
         let challenge_reader = self.storage.reader(&challenge_file_locator)?;
-        // let challenge_hash = calculate_hash(challenge_reader.as_ref());
 
         Ok(challenge_reader.to_vec())
     }
@@ -1654,9 +1653,8 @@ impl Coordinator {
         &mut self,
         contribution_info: ContributionInfo,
     ) -> Result<(), CoordinatorError> {
-        let round_height = Self::load_current_round_height(&self.storage)?;
         self.storage.insert(
-            Locator::ContributionInfoFile { round_height },
+            Locator::ContributionInfoFile { round_height: contribution_info.ceremony_round },
             Object::ContributionInfoFile(contribution_info),
         )
     }

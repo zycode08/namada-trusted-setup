@@ -20,3 +20,7 @@ status.json
 namada_contributor_info_round_*
 status.json
 *keypair
+
+# AWS
+aws
+docker-compose.yml

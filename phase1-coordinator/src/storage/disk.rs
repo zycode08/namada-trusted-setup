@@ -379,6 +379,25 @@ impl Disk {
         // Now, let's clear all the contributions made on this round.
         let round_dir = self.resolver.round_directory(round_height);
         self.clear_dir_files(round_dir.into(), false);
+
+        // Delete contribution file and trim contribution summary file if these files exist
+        if let Err(e) = self.remove(&Locator::ContributionInfoFile { round_height }) {
+            tracing::warn!("Could not delete contribution file: {}", e);
+        }
+
+        match self.get(&Locator::ContributionsInfoSummary) {
+            Ok(o) => {
+                if let Object::ContributionsInfoSummary(mut s) = o {
+                    // NOTE: the vec is ordered for ascending round heights
+                    if let Some(contrib) = s.last() {
+                        if contrib.ceremony_round == round_height {
+                            s.pop();
+                        }
+                    }
+                }
+            },
+            Err(e) => tracing::warn!("Could not retrieve contribution summary file: {}", e),
+        }
     }
 
     fn clear_dir_files(&mut self, path: PathBuf, delete_initial_contribution: bool) {

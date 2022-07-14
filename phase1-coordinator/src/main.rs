@@ -50,9 +50,6 @@ pub async fn main() {
     // Get healthcheck file path
     let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");
 
-    // Get healthcheck file path
-    let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");
-
     // Set the environment
     let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
         .await
@@ -86,13 +83,11 @@ pub async fn main() {
     let routes = routes![
         rest::join_queue,
         rest::lock_chunk,
-        rest::get_chunk,
-        rest::get_challenge,
-        rest::post_contribution_chunk,
+        rest::get_challenge_url,
+        rest::get_contribution_url,
         rest::contribute_chunk,
         rest::update_coordinator,
         rest::heartbeat,
-        rest::get_tasks_left,
         rest::stop_coordinator,
         rest::verify_chunks,
         rest::get_contributor_queue_status,
@@ -104,12 +99,10 @@ pub async fn main() {
     let routes = routes![
         rest::join_queue,
         rest::lock_chunk,
-        rest::get_chunk,
-        rest::get_challenge,
-        rest::post_contribution_chunk,
+        rest::get_challenge_url,
+        rest::get_contribution_url,
         rest::contribute_chunk,
         rest::heartbeat,
-        rest::get_tasks_left,
         rest::stop_coordinator,
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
