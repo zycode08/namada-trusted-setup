@@ -73,16 +73,6 @@ fn initialize_contribution() -> Result<ContributionInfo> {
         contrib_info.is_incentivized = true;
     };
 
-    if io::get_user_input(
-        "Do you want to take part in the contest? [y/n]", //FIXME: improve message, and fix execution path
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase()
-        == "y"
-    {
-        contrib_info.is_contest_participant = true;
-    };
-
     Ok(contrib_info)
 }
 
@@ -235,14 +225,12 @@ async fn contribute(
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
-    // Ask more questions to the user (only if not contest participant)
-    if !contrib_info.is_contest_participant {
-        contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??
-    }
+    // Ask more questions to the user
+    contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
 
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
-    if contrib_info.is_contest_participant || contrib_info.is_another_machine {
+    if contrib_info.is_another_machine {
         tokio::task::spawn_blocking(move || {
             compute_contribution_offline(contrib_filename_copy.as_str(), challenge_filename.as_str())
         })
@@ -254,20 +242,10 @@ async fn contribute(
         })
         .await??;
     }
-    let mut contribution = tokio::task::spawn_blocking(move || { //FIXME: remove mut
+    let contribution = tokio::task::spawn_blocking(move || {
         get_file_as_byte_vec(contrib_filename.as_str(), round_height, response_locator.contribution_id())
     })
     .await??;
-
-    // FIXME: remove this block
-    use rand::distributions::Uniform;
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let range = Uniform::new(0, 250);
-    for i in (challenge_hash.len()..contribution.len()) {
-        contribution[i] = rng.sample(&range);
-    }
-
 
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);

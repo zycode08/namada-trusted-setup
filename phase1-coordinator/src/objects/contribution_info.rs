@@ -80,8 +80,6 @@ pub struct ContributionInfo {
     pub public_key: String,
     // User participates in incentivized program or not
     pub is_incentivized: bool,
-    // User expresses his intent to participate or not in the contest for creative contributions
-    pub is_contest_participant: bool,
     // User can choose to contribute on another machine
     pub is_another_machine: bool,
     // User can choose the default method to generate randomness or his own.
