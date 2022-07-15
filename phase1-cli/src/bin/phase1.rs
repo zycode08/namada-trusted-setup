@@ -49,8 +49,8 @@ const SETUP: Emoji = Emoji("🛠️  ", "");
 const COMPUTE: Emoji = Emoji("🚂 ", "");
 const UPDATE: Emoji = Emoji("🔄 ", "");
 const SEND: Emoji = Emoji("⬆️ ", "");
-
-// FIXME: improve formatting of questions printed to the user (maybe indent println?) maybe remove the lines after the reponsee has been submitted
+const QUESTION: Emoji = Emoji("❔ ", "");
+const EXCLAMATION: Emoji = Emoji("❕ ", "");
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -69,15 +69,15 @@ macro_rules! pretty_hash {
     }};
 }
 
-// FIXME: swap colroed with owo-colors
+// FIXME: swap colored with owo-colors
 
 /// Asks the user a few questions to properly setup the contribution
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
-    println!("Welcome to the Namada trusted setup ceremony!\nBefore starting, a couple of questions:");
+    println!("Welcome to the Namada trusted setup ceremony!"); //FIXME: move this to beginning of the ceremony
     let incentivization = io::get_user_input(
-        "Do you want to participate in the incentivised trusted setup? [y/n]",
+        format!("{}{}", QUESTION, "Do you want to participate in the incentivised trusted setup? [y/n]".yellow()),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -98,7 +98,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 /// Asks the user wheter he wants to use a custom seed of randomness or not
 fn get_seed_of_randomness() -> Result<bool> {
     let custom_seed = io::get_user_input(
-        "Do you want to input your own seed of randomness? [y/n]",
+        format!("{}{}", QUESTION, "Do you want to input your own seed of randomness? [y/n]".yellow()),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -110,7 +110,7 @@ fn get_seed_of_randomness() -> Result<bool> {
 #[inline(always)]
 fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
     let offline = io::get_user_input(
-        "Do you want to contribute on another machine? [y/n]",
+        format!("{}{}", QUESTION, "Do you want to contribute on another machine? [y/n]".yellow()),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -146,9 +146,10 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 /// Contest and offline execution branches
 #[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
-    // Print instructions to the user FIXME: improve  style of these prints
+    // Print instructions to the user
     println!(
-        "Instructions:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
+        "{}:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
+        "Instructions".bold().underline(),
         contribution_filename, challenge_filename
     );
     println!("If you want to use the provided \"contribute --offline\" command follow these steps:");
@@ -171,7 +172,7 @@ fn compute_contribution_offline(contribution_filename: &str, challenge_filename:
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
-    io::get_user_input("When the file is ready press enter to move on", None)?;
+    io::get_user_input("When the file is ready press enter to move on".yellow(), None)?;
 
     Ok(())
 }
@@ -180,7 +181,7 @@ fn compute_contribution_offline(contribution_filename: &str, challenge_filename:
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your own seed of randomness, 32 bytes hex encoded",
+            "Enter your own seed of randomness, 32 bytes hex encoded".yellow(),
             Some(&Regex::new(r"[[:xdigit:]]{64}")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
@@ -190,7 +191,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         }
         RandomSource::Seed(seed)
     } else {
-        let entropy = io::get_user_input("Enter a random string to be used as entropy", None)?;
+        let entropy = io::get_user_input("Enter a random string to be used as entropy:".yellow(), None)?;
         RandomSource::Entropy(entropy)
     };
 
@@ -222,7 +223,7 @@ async fn contribute(
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
 
-    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &locked_locators).await?;
+    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
     debug!("Presigned url: {}", challenge_url);
     println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE); // FIXME: progress bar here
     let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
@@ -282,7 +283,7 @@ async fn contribute(
     );
 
     // Update contribution info
-    println!("{} {} Updating contribution info", "[8/11]".bold().dimmed(), UPDATE);
+    println!("{}{} Updating contribution info", "[8/11]".bold().dimmed(), UPDATE);
     let contribution_file_hash = calculate_hash(contribution.as_ref());
     let contribution_file_hash_str = hex::encode(contribution_file_hash);
     debug!("Contribution hash is {}", contribution_file_hash_str);
@@ -329,7 +330,7 @@ async fn contribute(
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     // Notify contribution to the coordinator for the verification
-    println!("{} {} Notifying coordinator of completed contribution", "[11/11]".bold().dimmed(), SEND); //FIXME: change emoji
+    println!("{}{} Notifying the coordinator of the completed contribution", "[11/11]".bold().dimmed(), EXCLAMATION);
     let post_chunk_req = PostChunkRequest::new(
         round_height,
         locked_locators.next_contribution(),
@@ -411,8 +412,10 @@ async fn contribution_loop(
             }
             ContributorStatus::Finished => {
                 println!(
-                    "{} We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
-                    "Contribution done, thank you!".greend().bold(),
+                    "{} {} {}\nWe will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    SUCCESS,
+                    "Contribution done, thank you!".green().bold(),
+                    SUCCESS,
                     round_height
                 );
                 break;
@@ -472,10 +475,7 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-
     let opt = CeremonyOpt::from_args();
-
-    // FIXME: print the step taking place in the ceremony (e.g. reading challenge, computing hash, etc..)
 
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
@@ -509,7 +509,6 @@ async fn main() {
                 return;
             }
 
-            // FIXME: fix all denominators of steps
             // Perform the entire contribution cycle
             println!("{} {}Generating keypair", "[1/11]".bold().dimmed(), NINJA);
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
@@ -534,7 +533,7 @@ async fn main() {
             .await;
         }
         CeremonyOpt::CloseCeremony(url) => {
-            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+            let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())
                 .await
                 .unwrap()
                 .expect(&format!("{}", "Error while generating the keypair".red().bold()));
@@ -547,7 +546,7 @@ async fn main() {
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(url) => {
-            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+            let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())
                 .await
                 .unwrap()
                 .expect(&format!("{}", "Error while generating the keypair".red().bold()));
@@ -557,7 +556,7 @@ async fn main() {
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::UpdateCoordinator(url) => {
-            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+            let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())
                 .await
                 .unwrap()
                 .expect(&format!("{}", "Error while generating the keypair".red().bold()));
@@ -567,3 +566,6 @@ async fn main() {
         }
     }
 }
+
+
+// FIXME: test client on linux

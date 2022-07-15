@@ -207,7 +207,7 @@ pub async fn get_challenge_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &LockedLocators,
+    request_body: &u64,
 ) -> Result<String> {
     let response = submit_request(
         client,

@@ -51,20 +51,13 @@ impl From<MnemonicWrap> for Mnemonic {
 }
 
 impl Display for MnemonicWrap {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { //FIXME: optimize
-        let mut max_len = 0;
-
-        // Get longest word including its position
-        for (i, word) in self.word_iter().enumerate() { //FIXME: use map + max here
-            let tmp_len = format!("{}. {}  ", i + 1, word).len();
-            if tmp_len > max_len {
-                max_len = tmp_len;
-            }
-        }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Get longest word
+        let max_len = self.word_iter().enumerate().map(|(i, word)| format!("{}. {}  ", i + 1, word)).max_by_key(|x| x.len()).unwrap().len();
 
         // Display
         let stripe = format!("{}", "=".repeat((max_len * 4) - 2));
-        writeln!(f, "{}", stripe);
+        writeln!(f, "{}", stripe)?;
         let mut i = 0;
         let words: Vec<&str> = self.word_iter().collect();
 
@@ -86,7 +79,7 @@ impl Display for MnemonicWrap {
             i += 4;
         }
 
-        write!(f, "{}", stripe);
+        writeln!(f, "{}", stripe)?;
 
         Ok(())
     }
@@ -94,11 +87,13 @@ impl Display for MnemonicWrap {
 
 /// Helper function to get input from the user. Accept an optional [`Regex`] to
 /// check the validity of the reply.
-pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String> {
+pub fn get_user_input<S>(request: S, expected: Option<&Regex>) -> Result<String>
+where S: std::fmt::Display {
     let mut response = String::new();
 
     loop {
-        println!("{}", request);
+        print!("{} ", request);
+        std::io::stdout().flush()?;
         std::io::stdin().read_line(&mut response)?;
         response = response.trim().to_owned();
 
@@ -118,44 +113,44 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
     Ok(response)
 }
 
-/// Generates a new [`KeyPair`] from a mnemonic. If argument `from_mnemonic` is set
-/// then the keypair is generated from the mnemonic provided by the user, otherwise
-/// it's generated randomly.
-pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
-    let mnemonic = if from_mnemonic {
-        let mnemonic_str = get_user_input(
-            format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
-            Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
-        )?;
-
-        Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
-            .map_err(|e| IOError::MnemonicError(e))?
-    } else {
-        // Generate random mnemonic
-        let mut rng = rand_06::thread_rng();
-        let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
-            .map_err(|e| IOError::MnemonicError(e))?.into();
-
-        #[cfg(feature = "cli")]
-        {
-            // Print mnemonic to the user in a different terminal
-            {
-                let mut secret_screen = AlternateScreen::from(std::io::stdout());
-                writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic)?;
-                get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
-            } // End scope, get back to stdout
-
-            // Check if the user has correctly stored the mnemonic
-            #[cfg(not(debug_assertions))]
-            check_mnemonic(&mnemonic)?;
-        }
-        #[cfg(not(feature = "cli"))]
-        std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
-
-        mnemonic.into()
-    };
-
+/// Generates a new [`KeyPair`] from a mnemonic provided by the user.
+pub fn keypair_from_mnemonic() -> Result<KeyPair> {
+    let mnemonic_str = get_user_input(
+        format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
+        Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
+    )?;
+    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
+        .map_err(|e| IOError::MnemonicError(e))?;
     let seed = mnemonic.to_seed_normalized("");
+    
+    Ok(KeyPair::try_from_seed(&seed)?)
+}
+
+/// Generates a new [`KeyPair`] from a randomly generated mnemonic. If argument `is_server` is set than the mnemonic is saved 
+/// to a file, otherwise it gets printed to the user.
+pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
+    // Generate random mnemonic
+    let mut rng = rand_06::thread_rng();
+    let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
+        .map_err(|e| IOError::MnemonicError(e))?.into();
+
+    if is_server {
+        std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
+    } else {
+        // Print mnemonic to the user in a different terminal
+        {
+            let mut secret_screen = AlternateScreen::from(std::io::stdout());
+            writeln!(&mut secret_screen, "Safely store your 24 words mnemonic:\n{}", mnemonic)?;
+            get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
+        } // End scope, get back to stdout
+
+        // Check if the user has correctly stored the mnemonic
+        #[cfg(not(debug_assertions))]
+        check_mnemonic(&mnemonic)?;
+    }
+    let mnemonic: Mnemonic = mnemonic.into();
+    let seed = mnemonic.to_seed_normalized("");
+
     Ok(KeyPair::try_from_seed(&seed)?)
 }
 
@@ -170,7 +165,8 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     }
     indexes.shuffle(&mut rng);
 
-    println!("{}", "Mnemonic verification step".yellow().bold()); //FIXME: this should be done in a sperate terminal window
+    //FIXME: print to alternate screen
+    println!("{}", "Mnemonic verification step".yellow().bold());
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
     for &i in indexes[..3].iter() {
