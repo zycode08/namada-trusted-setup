@@ -1,9 +1,17 @@
-use rusoto_credential::{ChainProvider, ProvideAwsCredentials, AwsCredentials, CredentialsError};
-use rusoto_core::{region::Region, HttpClient, request::TlsError, RusotoError};
-use rusoto_s3::{GetObjectRequest, PutObjectRequest, util::{PreSignedRequestOption, PreSignedRequest}, S3, S3Client, CreateMultipartUploadRequest, StreamingBody, HeadObjectRequest};
-use thiserror::Error;
-use rocket::tokio::io::AsyncReadExt;
 use lazy_static::lazy_static;
+use rocket::tokio::io::AsyncReadExt;
+use rusoto_core::{region::Region, request::TlsError};
+use rusoto_credential::{AwsCredentials, ChainProvider, CredentialsError, ProvideAwsCredentials};
+use rusoto_s3::{
+    util::{PreSignedRequest, PreSignedRequestOption},
+    GetObjectRequest,
+    HeadObjectRequest,
+    PutObjectRequest,
+    S3Client,
+    StreamingBody,
+    S3,
+};
+use thiserror::Error;
 
 lazy_static! {
     static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
@@ -14,9 +22,9 @@ lazy_static! {
         match std::env::var("AWS_S3_ENDPOINT") {
             Ok(endpoint_env) => Region::Custom {
                 name: "custom".to_string(),
-                endpoint: endpoint_env
-                },
-            Err(_) => Region::EuWest1
+                endpoint: endpoint_env,
+            },
+            Err(_) => Region::EuWest1,
         }
     };
 }
@@ -36,7 +44,7 @@ pub enum S3Error {
     #[error("Error in IO: {0}")]
     IOError(#[from] std::io::Error),
     #[error("Upload of challenge to S3 failed: {0}")]
-    UploadError(String)
+    UploadError(String),
 }
 
 type Result<T> = std::result::Result<T, S3Error>;
@@ -46,7 +54,7 @@ pub(crate) struct S3Ctx {
     bucket: String,
     region: Region,
     options: PreSignedRequestOption,
-    credentials: AwsCredentials
+    credentials: AwsCredentials,
 }
 
 impl S3Ctx {
@@ -57,13 +65,13 @@ impl S3Ctx {
         let options = PreSignedRequestOption {
             expires_in: std::time::Duration::from_secs(300),
         };
-        
+
         Ok(Self {
             client,
             bucket: BUCKET.clone(),
             region: REGION.clone(),
             options,
-            credentials
+            credentials,
         })
     }
 
@@ -96,8 +104,11 @@ impl S3Ctx {
             body: Some(StreamingBody::from(challenge)),
             ..Default::default()
         };
-        
-        let upload_result = self.client.put_object(put_object_request).await.map_err(|e| S3Error::UploadError(e.to_string()))?;
+
+        self.client
+            .put_object(put_object_request)
+            .await
+            .map_err(|e| S3Error::UploadError(e.to_string()))?;
 
         let get = GetObjectRequest {
             bucket: self.bucket.clone(),
@@ -132,7 +143,13 @@ impl S3Ctx {
     /// Download an object from S3 as bytes
     async fn get_object(&self, get_request: GetObjectRequest) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
-        let stream = self.client.get_object(get_request).await.map_err(|e| S3Error::DownloadError(e.to_string()))?.body.ok_or(S3Error::EmptyContribution)?;
+        let stream = self
+            .client
+            .get_object(get_request)
+            .await
+            .map_err(|e| S3Error::DownloadError(e.to_string()))?
+            .body
+            .ok_or(S3Error::EmptyContribution)?;
         stream.into_async_read().read_to_end(&mut buffer).await?;
 
         Ok(buffer)
@@ -151,9 +168,6 @@ impl S3Ctx {
             ..Default::default()
         };
 
-        rocket::tokio::try_join!(
-            self.get_object(get_contrib),
-            self.get_object(get_sig)
-        )
+        rocket::tokio::try_join!(self.get_object(get_contrib), self.get_object(get_sig))
     }
 }

@@ -1493,7 +1493,11 @@ impl CoordinatorState {
     ///
     /// Safety checks performed before adding a new contributor to the queue.
     ///
-    pub(crate) fn add_to_queue_checks(&self, participant: &Participant, participant_ip: Option<&IpAddr>) -> Result<(), CoordinatorError> {
+    pub(crate) fn add_to_queue_checks(
+        &self,
+        participant: &Participant,
+        participant_ip: Option<&IpAddr>,
+    ) -> Result<(), CoordinatorError> {
         // Check that the pariticipant IP is not known.
         if let Some(ip) = participant_ip {
             if *IP_BAN && self.is_duplicate_ip(ip) {
@@ -2378,7 +2382,7 @@ impl CoordinatorState {
         let participant_ip = match self
             .contributors_ips
             .iter()
-            .filter(|(ip, contributor)| *contributor == participant)
+            .filter(|(_, contributor)| *contributor == participant)
             .next()
         {
             Some((ip, contrib)) => Some((ip.clone(), contrib.clone())),
@@ -2432,11 +2436,19 @@ impl CoordinatorState {
         time: &dyn TimeSource,
     ) -> Result<Participant, CoordinatorError> {
         // Get the contributor assigned to the closest next round or the one who joined the queue first
-        let (next_contributor, contributor_info) = match self.queue_contributors().iter().filter(|(_, (_, rh, _, _))| rh.is_some()).min_by_key(|(_, (_, rh, _, _))| rh) {
+        let (next_contributor, contributor_info) = match self
+            .queue_contributors()
+            .iter()
+            .filter(|(_, (_, rh, _, _))| rh.is_some())
+            .min_by_key(|(_, (_, rh, _, _))| rh)
+        {
             Some((part, info)) => (part.clone(), info.clone()),
-            None => {
-                self.queue_contributors().iter().min_by_key(|(_, (_, _, _, tj))| tj).cloned().ok_or(CoordinatorError::QueueIsEmpty)?
-            },
+            None => self
+                .queue_contributors()
+                .iter()
+                .min_by_key(|(_, (_, _, _, tj))| tj)
+                .cloned()
+                .ok_or(CoordinatorError::QueueIsEmpty)?,
         };
 
         // Remove participant from queue

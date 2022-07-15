@@ -243,7 +243,11 @@ async fn contribute(
         .await??;
     }
     let contribution = tokio::task::spawn_blocking(move || {
-        get_file_as_byte_vec(contrib_filename.as_str(), round_height, response_locator.contribution_id())
+        get_file_as_byte_vec(
+            contrib_filename.as_str(),
+            round_height,
+            response_locator.contribution_id(),
+        )
     })
     .await??;
 
@@ -273,8 +277,16 @@ async fn contribute(
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
-    let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
-    requests::upload_chunk(client, contribution_url.as_str(), contribution_signature_url.as_str(), contribution, &contribution_file_signature).await?;
+    let (contribution_url, contribution_signature_url) =
+        requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
+    requests::upload_chunk(
+        client,
+        contribution_url.as_str(),
+        contribution_signature_url.as_str(),
+        contribution,
+        &contribution_file_signature,
+    )
+    .await?;
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Compute signature of contributor info
@@ -361,11 +373,18 @@ async fn contribution_loop(
                     .expect("Contribution failed");
             }
             ContributorStatus::Finished => {
-                println!("Contribution done, thank you! We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours it means your contribution didn't pass the verification step.", round_height);
+                println!(
+                    "Contribution done, thank you! We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    round_height
+                );
+                break;
+            }
+            ContributorStatus::Banned => {
+                println!("This contributor has been banned from the ceremony because of an invalid contribution.");
                 break;
             }
             ContributorStatus::Other => {
-                println!("Could not retrieve e valid contributor state. There's a good chance you've been banned from the ceremony.");
+                println!("Did not retrieve e valid contributor state.");
                 break;
             }
         }
@@ -494,8 +513,3 @@ async fn main() {
         }
     }
 }
-
-// FIXME: remove all fixmes
-// FIXME: fix tests
-// FIXME: fix compilation warnings
-// FIXME: fmt

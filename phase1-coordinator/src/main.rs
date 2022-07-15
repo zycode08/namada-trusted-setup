@@ -12,8 +12,8 @@ use phase1_coordinator::environment::Testing;
 use phase1_coordinator::environment::Production;
 
 use rocket::{
-    catchers,
     self,
+    catchers,
     fs::FileServer,
     routes,
     tokio::{self, sync::RwLock},
@@ -31,7 +31,10 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
 
         info!("Updating coordinator...");
         rest::perform_coordinator_update(coordinator.clone()).await?;
-        info!("Update of coordinator completed, {:#?} to the next update round...", UPDATE_TIME);
+        info!(
+            "Update of coordinator completed, {:#?} to the next update round...",
+            UPDATE_TIME
+        );
     }
 }
 
@@ -43,18 +46,37 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
         info!("Verifying contributions...");
         let start = std::time::Instant::now();
         rest::perform_verify_chunks(coordinator.clone()).await?;
-        info!("Verification of contributions completed in {:#?}. {:#?} to the next verification round...", start.elapsed(), UPDATE_TIME);
+        info!(
+            "Verification of contributions completed in {:#?}. {:#?} to the next verification round...",
+            start.elapsed(),
+            UPDATE_TIME
+        );
     }
 }
 
 /// Checks and prints the env variables of interest for the ceremony
 fn print_env() {
     info!("ENV VARIABLES STATE:");
-    info!("AWS_S3_BUCKET: {}", std::env::var("AWS_S3_BUCKET").unwrap_or("MISSING".to_string()));
-    info!("AWS_S3_ENDPOINT: {}", std::env::var("AWS_S3_ENDPOINT").unwrap_or("MISSING".to_string()));
-    info!("NAMADA_MPC_IP_BAN: {}", std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("MISSING".to_string()));
-    info!("NAMADA_MPC_TIMEOUT_SECONDS: {}", std::env::var("NAMADA_MPC_TIMEOUT_SECONDS").unwrap_or("MISSING".to_string()));
-    info!("HEALTH_PATH: {}", std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string()));
+    info!(
+        "AWS_S3_BUCKET: {}",
+        std::env::var("AWS_S3_BUCKET").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "AWS_S3_ENDPOINT: {}",
+        std::env::var("AWS_S3_ENDPOINT").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "NAMADA_MPC_IP_BAN: {}",
+        std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "NAMADA_MPC_TIMEOUT_SECONDS: {}",
+        std::env::var("NAMADA_MPC_TIMEOUT_SECONDS").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "HEALTH_PATH: {}",
+        std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string())
+    );
 }
 
 /// Rocket main function using the [`tokio`] runtime
@@ -130,7 +152,15 @@ pub async fn main() {
         .mount("/", routes)
         .mount("/healthcheck", FileServer::from(health_path))
         .manage(coordinator)
-        .register("/", catchers![rest::invalid_signature, rest::unauthorized, rest::missing_required_header, rest::io_error, rest::unprocessable_entity, rest::mismatching_checksum, rest::invalid_header]);
+        .register("/", catchers![
+            rest::invalid_signature,
+            rest::unauthorized,
+            rest::missing_required_header,
+            rest::io_error,
+            rest::unprocessable_entity,
+            rest::mismatching_checksum,
+            rest::invalid_header
+        ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically

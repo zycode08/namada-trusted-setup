@@ -400,7 +400,7 @@ impl Disk {
                         }
                     }
                 }
-            },
+            }
             Err(e) => tracing::warn!("Could not retrieve contribution summary file: {}", e),
         }
     }

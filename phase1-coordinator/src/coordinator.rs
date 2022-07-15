@@ -778,6 +778,14 @@ impl Coordinator {
     }
 
     ///
+    /// Returns `true` if the given participant has been banned from the ceremony
+    ///
+    #[inline]
+    pub fn is_banned_participant(&self, participant: &Participant) -> bool {
+        self.state.is_banned_participant(&participant)
+    }
+
+    ///
     /// Returns `true` if the given participant is a contributor managed
     /// by the coordinator.
     ///
@@ -1654,7 +1662,9 @@ impl Coordinator {
         contribution_info: ContributionInfo,
     ) -> Result<(), CoordinatorError> {
         self.storage.insert(
-            Locator::ContributionInfoFile { round_height: contribution_info.ceremony_round },
+            Locator::ContributionInfoFile {
+                round_height: contribution_info.ceremony_round,
+            },
             Object::ContributionInfoFile(contribution_info),
         )
     }
