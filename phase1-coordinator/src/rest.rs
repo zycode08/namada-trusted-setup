@@ -588,18 +588,14 @@ pub async fn lock_chunk(
 }
 
 /// Get the challenge key on Amazon S3 from the [Coordinator](`crate::Coordinator`).
-#[post("/contributor/challenge", format = "json", data = "<locked_locators>")]
+#[post("/contributor/challenge", format = "json", data = "<round_height>")]
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: CurrentContributor,
     round_height: LazyJson<u64>,
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
-
-    let challenge_locator = locked_locators.current_contribution();
-    let round_height = challenge_locator.round_height();
-    let chunk_id = challenge_locator.chunk_id();
-    let key = format!("round_{}/chunk_{}/contribution_0.verified", round_height, chunk_id);
+    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
 
     // If challenge is already on S3 (round rollback) immediately return the key
     if let Some(url) = s3_ctx.get_challenge_url(key.clone()).await {
