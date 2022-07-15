@@ -202,7 +202,7 @@ async fn contribute(
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
 
-    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &locked_locators).await?;
+    let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
     debug!("Presigned url: {}", challenge_url);
     let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
