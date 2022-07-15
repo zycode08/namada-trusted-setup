@@ -20,13 +20,14 @@ use rocket::{
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
-    tokio::{sync::RwLock, task},
+    tokio::{sync::RwLock, task, fs},
     Shutdown,
     State,
 };
 
 use sha2::Sha256;
 
+use lazy_static::lazy_static;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
@@ -44,6 +45,13 @@ pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
 pub const SIGNATURE_HEADER: &str = "ATS-Signature";
 pub const CONTENT_LENGTH_HEADER: &str = "Content-Length";
+
+lazy_static! {
+    static ref HEALTH_PATH: String = match std::env::var("HEALTH_PATH") {
+        Ok(path) => path,
+        Err(_) => ".".to_string(),
+    };
+}
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
 
@@ -588,18 +596,14 @@ pub async fn lock_chunk(
 }
 
 /// Get the challenge key on Amazon S3 from the [Coordinator](`crate::Coordinator`).
-#[post("/contributor/challenge", format = "json", data = "<locked_locators>")]
+#[post("/contributor/challenge", format = "json", data = "<round_height>")]
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
     _participant: CurrentContributor,
     round_height: LazyJson<u64>,
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
-
-    let challenge_locator = locked_locators.current_contribution();
-    let round_height = challenge_locator.round_height();
-    let chunk_id = challenge_locator.chunk_id();
-    let key = format!("round_{}/chunk_{}/contribution_0.verified", round_height, chunk_id);
+    let key = format!("round_{}/chunk_0/contribution_0.verified", *round_height);
 
     // If challenge is already on S3 (round rollback) immediately return the key
     if let Some(url) = s3_ctx.get_challenge_url(key.clone()).await {
@@ -860,4 +864,10 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
     Ok(summary)
 }
 
-// FIXME: status endpoint + test
+/// Retrieve healthcheck info. This endpoint is accessible by anyone and does not require a signed request.
+#[get("/healthcheck", format = "json")]
+pub async fn get_healthcheck() -> Result<String> {
+    let content = fs::read_to_string(HEALTH_PATH.as_str()).await.map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+    Ok(content)
+}

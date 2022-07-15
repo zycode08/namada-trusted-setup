@@ -14,7 +14,6 @@ use phase1_coordinator::environment::Production;
 use rocket::{
     self,
     catchers,
-    fs::FileServer,
     routes,
     tokio::{self, sync::RwLock},
 };
@@ -86,11 +85,8 @@ pub async fn main() {
     tracing_subscriber::fmt().with_ansi(tracing_enable_color).init();
     print_env();
 
-    // Get healthcheck file path
-    let health_path = std::env::var("HEALTH_PATH").expect("Missing env variable HEALTH_PATH");
-
     // Set the environment
-    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
+    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
         .await
         .unwrap()
         .expect("Error while generating the keypair");
@@ -132,6 +128,7 @@ pub async fn main() {
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
         rest::get_contributions_info,
+        rest::get_healthcheck
     ];
 
     #[cfg(not(debug_assertions))]
@@ -146,11 +143,11 @@ pub async fn main() {
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
         rest::get_contributions_info,
+        rest::get_healthcheck
     ];
 
     let build_rocket = rocket::build()
         .mount("/", routes)
-        .mount("/healthcheck", FileServer::from(health_path))
         .manage(coordinator)
         .register("/", catchers![
             rest::invalid_signature,
