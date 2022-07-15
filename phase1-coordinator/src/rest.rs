@@ -850,7 +850,7 @@ pub async fn post_contribution_info(
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
-#[get("/contribution_info", format = "json")]
+#[get("/contribution_info")]
 pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
     let summary = task::spawn_blocking(move || read_lock.storage().get_contributions_summary())
@@ -859,3 +859,5 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
 
     Ok(summary)
 }
+
+// FIXME: status endpoint + test

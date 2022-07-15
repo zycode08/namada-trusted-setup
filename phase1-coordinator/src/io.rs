@@ -1,7 +1,8 @@
-use std::io::Write;
+use std::{io::Write, ops::Deref, fmt::Display};
 
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
+use colored::*;
 #[cfg(not(debug_assertions))]
 use rand::prelude::SliceRandom;
 use regex::Regex;
@@ -27,6 +28,69 @@ pub enum IOError {
 }
 
 type Result<T> = std::result::Result<T, IOError>;
+struct MnemonicWrap(Mnemonic);
+
+impl Deref for MnemonicWrap {
+    type Target = Mnemonic;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Mnemonic> for MnemonicWrap {
+    fn from(m: Mnemonic) -> Self {
+        Self(m)
+    }
+}
+
+impl From<MnemonicWrap> for Mnemonic {
+    fn from(m: MnemonicWrap) -> Self {
+        m.0
+    }
+}
+
+impl Display for MnemonicWrap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { //FIXME: optimize
+        let mut max_len = 0;
+
+        // Get longest word including its position
+        for (i, word) in self.word_iter().enumerate() { //FIXME: use map + max here
+            let tmp_len = format!("{}. {}  ", i + 1, word).len();
+            if tmp_len > max_len {
+                max_len = tmp_len;
+            }
+        }
+
+        // Display
+        let stripe = format!("{}", "=".repeat((max_len * 4) - 2));
+        writeln!(f, "{}", stripe);
+        let mut i = 0;
+        let words: Vec<&str> = self.word_iter().collect();
+
+        while i < MNEMONIC_LEN {
+            let mut segments: [String; 4] = [String::new(), String::new(), String::new(), String::new()];
+
+            for j in 0..4 {
+                let tmp = if j < 3 {
+                    format!("{}. {}  ", i + j + 1, words[i + j])
+                } else {
+                    format!("{}. {}", i + j + 1, words[i + j])
+                };
+
+                segments[j] = format!("{:max_len$}", tmp);
+            }
+
+            writeln!(f, "{}{}{}{}", segments[0], segments[1], segments[2], segments[3])?;
+            
+            i += 4;
+        }
+
+        write!(f, "{}", stripe);
+
+        Ok(())
+    }
+}
 
 /// Helper function to get input from the user. Accept an optional [`Regex`] to
 /// check the validity of the reply.
@@ -48,7 +112,7 @@ pub fn get_user_input(request: &str, expected: Option<&Regex>) -> Result<String>
         }
 
         response.clear();
-        println!("Invalid reply, please type a valid answer...");
+        println!("{}", "Invalid reply, please type a valid answer...".red().bold());
     }
 
     Ok(response)
@@ -69,8 +133,8 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
     } else {
         // Generate random mnemonic
         let mut rng = rand_06::thread_rng();
-        let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
-            .map_err(|e| IOError::MnemonicError(e))?;
+        let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
+            .map_err(|e| IOError::MnemonicError(e))?.into();
 
         #[cfg(feature = "cli")]
         {
@@ -88,7 +152,7 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
         #[cfg(not(feature = "cli"))]
         std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
 
-        mnemonic
+        mnemonic.into()
     };
 
     let seed = mnemonic.to_seed_normalized("");
@@ -106,7 +170,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     }
     indexes.shuffle(&mut rng);
 
-    println!("Mnemonic verification step");
+    println!("{}", "Mnemonic verification step".yellow().bold()); //FIXME: this should be done in a sperate terminal window
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
     for &i in indexes[..3].iter() {
@@ -121,7 +185,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
         }
     }
 
-    println!("Verification passed");
+    println!("{}", "Verification passed".green().bold());
 
     Ok(())
 }

@@ -22,6 +22,9 @@ use std::{
 };
 
 use chrono::Utc;
+use colored::*;
+use console::Emoji;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use base64;
 use bs58;
@@ -30,10 +33,24 @@ use regex::Regex;
 
 use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 
-use tracing::{debug, error, info, trace};
+use tracing::{debug, trace};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
+
+const NINJA: Emoji = Emoji("🥷  ", "");
+const TRUCK: Emoji = Emoji("🚚 ", "");
+const LINK: Emoji = Emoji("🔗 ", "");
+const SUCCESS: Emoji = Emoji("🎉 ", "");
+const INFO: Emoji = Emoji("⏱️ ", "");
+const LOCK: Emoji = Emoji("🔒 ", "");
+const RECEIVE: Emoji = Emoji("⚾ ", "");
+const SETUP: Emoji = Emoji("🛠️  ", "");
+const COMPUTE: Emoji = Emoji("🚂 ", "");
+const UPDATE: Emoji = Emoji("🔄 ", "");
+const SEND: Emoji = Emoji("⬆️ ", "");
+
+// FIXME: improve formatting of questions printed to the user (maybe indent println?) maybe remove the lines after the reponsee has been submitted
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -51,6 +68,8 @@ macro_rules! pretty_hash {
         output
     }};
 }
+
+// FIXME: swap colroed with owo-colors
 
 /// Asks the user a few questions to properly setup the contribution
 #[inline(always)]
@@ -127,7 +146,7 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 /// Contest and offline execution branches
 #[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
-    // Print instructions to the user
+    // Print instructions to the user FIXME: improve  style of these prints
     println!(
         "Instructions:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
         contribution_filename, challenge_filename
@@ -196,6 +215,7 @@ async fn contribute(
     heartbeat_handle: &JoinHandle<()>,
 ) -> Result<u64> {
     // Get the necessary info to compute the contribution
+    println!("{} {} Locking chunk", "[4/11]".bold().dimmed(), LOCK);
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
@@ -204,6 +224,7 @@ async fn contribute(
 
     let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &locked_locators).await?;
     debug!("Presigned url: {}", challenge_url);
+    println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE); // FIXME: progress bar here
     let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
@@ -217,6 +238,7 @@ async fn contribute(
     debug!("Challenge length {}", challenge.len());
 
     // Prepare contribution file with the challege hash
+    println!("{} {} Setting up contribution file", "[6/11]".bold().dimmed(), SETUP);
     let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
     let contrib_filename = format!(
         "namada_contribution_round_{}_public_key_{}.params",
@@ -228,6 +250,7 @@ async fn contribute(
     // Ask more questions to the user
     contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
 
+    println!("{} {} Computing contribution", "[7/11]".bold().dimmed(), COMPUTE);
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_another_machine {
@@ -253,12 +276,13 @@ async fn contribute(
 
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
-    info!(
+    println!(
         "Completed contribution in {} seconds",
         (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()
     );
 
     // Update contribution info
+    println!("{} {} Updating contribution info", "[8/11]".bold().dimmed(), UPDATE);
     let contribution_file_hash = calculate_hash(contribution.as_ref());
     let contribution_file_hash_str = hex::encode(contribution_file_hash);
     debug!("Contribution hash is {}", contribution_file_hash_str);
@@ -279,6 +303,7 @@ async fn contribute(
 
     let (contribution_url, contribution_signature_url) =
         requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
+    println!("{} {} Uploading contribution", "[9/11]".bold().dimmed(), SEND); // FIXME: progress bar here
     requests::upload_chunk(
         client,
         contribution_url.as_str(),
@@ -292,9 +317,10 @@ async fn contribute(
     // Compute signature of contributor info
     contrib_info
         .try_sign(keypair)
-        .expect("Error while signing the contribution info");
+        .expect(&format!("{}", "Error while signing the contribution info".red().bold()));
 
     // Write contribution info file and send it to the Coordinator
+    println!("{} {} Uploading contribution info", "[10/11]".bold().dimmed(), SEND);
     async_fs::write(
         format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round),
         &serde_json::to_vec(&contrib_info)?,
@@ -303,6 +329,7 @@ async fn contribute(
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     // Notify contribution to the coordinator for the verification
+    println!("{} {} Notifying coordinator of completed contribution", "[11/11]".bold().dimmed(), SEND); //FIXME: change emoji
     let post_chunk_req = PostChunkRequest::new(
         round_height,
         locked_locators.next_contribution(),
@@ -329,9 +356,10 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
+    println!("{} {}Joining queue", "[3/11]".bold().dimmed(), LINK);
     requests::post_join_queue(&client, &coordinator, &keypair)
         .await
-        .expect("Couldn't join the queue");
+        .expect(&format!("{}", "Couldn't join the queue".red().bold()));
     contrib_info.timestamps.joined_queue = Utc::now();
 
     // Spawn heartbeat task to prevent the Coordinator from
@@ -344,7 +372,7 @@ async fn contribution_loop(
     let heartbeat_handle = tokio::task::spawn(async move {
         loop {
             if let Err(e) = requests::post_heartbeat(&client_cnt, &coordinator_cnt, &keypair_cnt).await {
-                error!("Heartbeat error: {}", e);
+                eprintln!("{}", format!("{}: {}", "Heartbeat error".red().bold(), e.to_string().red().bold()));
             }
             time::sleep(UPDATE_TIME).await;
         }
@@ -356,35 +384,45 @@ async fn contribution_loop(
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
             .await
-            .expect("Couldn't get the status of contributor");
+            .expect(&format!("{}", "Couldn't get the status of contributor".red().bold()));
 
         match queue_status {
             ContributorStatus::Queue(position, size) => {
-                println!(
+                let msg = format!(
                     "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
                     position,
                     size,
                     position * 5
                 );
+
+                let max_len = msg.split("\n").map(|x| x.len()).max().unwrap();
+
+                println!("{} Queue status", INFO);
+                println!("{}", "=".repeat(max_len));
+                println!("{}", msg);
+                println!("{}", "=".repeat(max_len));
+                // FIXME: this should rewrite not append (maybe with the spinner)
+                // FIXME: place a spinner here?
             }
             ContributorStatus::Round => {
                 round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
-                    .expect("Contribution failed");
+                    .expect(&format!("{}", "Contribution failed".red().bold()));
             }
             ContributorStatus::Finished => {
                 println!(
-                    "Contribution done, thank you! We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    "{} We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    "Contribution done, thank you!".greend().bold(),
                     round_height
                 );
                 break;
             }
             ContributorStatus::Banned => {
-                println!("This contributor has been banned from the ceremony because of an invalid contribution.");
+                println!("{}", "This contributor has been banned from the ceremony because of an invalid contribution.".red().bold());
                 break;
             }
             ContributorStatus::Other => {
-                println!("Did not retrieve e valid contributor state.");
+                println!("{}", "Did not retrieve e valid contributor state.".red().bold());
                 break;
             }
         }
@@ -397,8 +435,8 @@ async fn contribution_loop(
 #[inline(always)]
 async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
-        Ok(()) => info!("Ceremony completed!"),
-        Err(e) => error!("{}", e),
+        Ok(()) => println!("{}", "Ceremony completed!".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -407,9 +445,9 @@ async fn get_contributions(coordinator: &Url) {
     match requests::get_contributions_info(coordinator).await {
         Ok(contributions) => {
             let contributions_str = std::str::from_utf8(&contributions).unwrap();
-            info!("Contributions:\n{}", contributions_str)
+            println!("Contributions:\n{}", contributions_str)
         }
-        Err(e) => error!("{}", e),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -417,8 +455,8 @@ async fn get_contributions(coordinator: &Url) {
 #[inline(always)]
 async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_verify_chunks(client, coordinator, keypair).await {
-        Ok(()) => info!("Verification of pending contributions completed"),
-        Err(e) => error!("{}", e),
+        Ok(()) => println!("{}", "Verification of pending contributions completed".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -426,8 +464,8 @@ async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyP
 #[inline(always)]
 async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_update(client, coordinator, keypair).await {
-        Ok(()) => info!("Coordinator updated"),
-        Err(e) => error!("{}", e),
+        Ok(()) => println!("{}", "Coordinator updated".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }
 
@@ -437,14 +475,24 @@ async fn main() {
 
     let opt = CeremonyOpt::from_args();
 
+    // FIXME: print the step taking place in the ceremony (e.g. reading challenge, computing hash, etc..)
+
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
-            if offline {
+            let progress_style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar} {percent} {msg}"); //FIXME: remove from here
+            let progress_bar = ProgressBar::new(100);
+            progress_bar.set_style(progress_style);
+
+            if offline { //FIXME: fix progress bar in here
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
+                progress_bar.set_message("Reading challenge file");
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
                     .await
-                    .expect("Couldn't read the challenge file");
+                    .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
 
+                progress_bar.inc(20);
+
+                // FIXME: continue here with progress bar
                 tokio::task::spawn_blocking(move || {
                     compute_contribution(
                         get_seed_of_randomness().unwrap(),
@@ -454,20 +502,26 @@ async fn main() {
                 })
                 .await
                 .unwrap()
-                .expect("Error in computing randomness");
+                .expect(&format!("{}", "Error in computing randomness".red().bold()));
+
+                progress_bar.finish_with_message("TEst message"); //FIXME: remove message
+
                 return;
             }
 
+            // FIXME: fix all denominators of steps
             // Perform the entire contribution cycle
+            println!("{} {}Generating keypair", "[1/11]".bold().dimmed(), NINJA);
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
+            println!("{} {}Initializing contribution", "[2/11]".bold().dimmed(), TRUCK);
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
                 .unwrap()
-                .expect("Error while initializing the contribution");
+                .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 
@@ -483,7 +537,7 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let client = Client::new();
             close_ceremony(&client, &url.coordinator, &keypair).await;
@@ -496,7 +550,7 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let client = Client::new();
             verify_contributions(&client, &url.coordinator, &keypair).await;
@@ -506,7 +560,7 @@ async fn main() {
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
                 .await
                 .unwrap()
-                .expect("Error while generating the keypair");
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
             let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
