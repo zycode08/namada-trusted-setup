@@ -72,16 +72,21 @@ pub fn generate_keypair(from_mnemonic: bool) -> Result<KeyPair> {
         let mnemonic = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
             .map_err(|e| IOError::MnemonicError(e))?;
 
-        // Print mnemonic to the user in a different terminal
+        #[cfg(feature = "cli")]
         {
-            let mut secret_screen = AlternateScreen::from(std::io::stdout());
-            writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic)?;
-            //get_user_input(format!("Press enter when you've done it...").as_str(), None)?; FIXME: decomment, no needed for Coordinator server
-        } // End scope, get back to stdout
+            // Print mnemonic to the user in a different terminal
+            {
+                let mut secret_screen = AlternateScreen::from(std::io::stdout());
+                writeln!(&mut secret_screen, "Safely store your 24 words mnemonic: {}", mnemonic)?;
+                get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
+            } // End scope, get back to stdout
 
-        // Check if the user has correctly stored the mnemonic FIXME: decomment and fix for coordinator we shouldn't check the mnemonic, save it to a file locally and also adjust the close_ceremony cli command?
-        // #[cfg(not(debug_assertions))]
-        // check_mnemonic(&mnemonic)?;
+            // Check if the user has correctly stored the mnemonic
+            #[cfg(not(debug_assertions))]
+            check_mnemonic(&mnemonic)?;
+        }
+        #[cfg(not(feature = "cli"))]
+        std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
 
         mnemonic
     };

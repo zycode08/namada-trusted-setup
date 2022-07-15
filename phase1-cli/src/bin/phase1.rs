@@ -73,16 +73,6 @@ fn initialize_contribution() -> Result<ContributionInfo> {
         contrib_info.is_incentivized = true;
     };
 
-    if io::get_user_input(
-        "Do you want to take part in the contest? [y/n]",
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase()
-        == "y"
-    {
-        contrib_info.is_contest_participant = true;
-    };
-
     Ok(contrib_info)
 }
 
@@ -196,7 +186,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     Ok(())
 }
 
-/// Performs the contribution sequence
+/// Performs the contribution sequence. Returns the round height of the contribution.
 #[inline(always)]
 async fn contribute(
     client: &Client,
@@ -204,7 +194,7 @@ async fn contribute(
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
-) -> Result<()> {
+) -> Result<u64> {
     // Get the necessary info to compute the contribution
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
@@ -217,7 +207,7 @@ async fn contribute(
     let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
-    // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the contest and offline contrib paths
+    // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the offline contrib path
     let challenge_filename = format!("namada_challenge_round_{}.params", round_height);
     let mut challenge_writer = async_fs::File::create(challenge_filename.as_str()).await?;
     challenge_writer.write_all(&challenge.as_slice()).await?;
@@ -235,14 +225,12 @@ async fn contribute(
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
-    // Ask more questions to the user (only if not contest participant)
-    if !contrib_info.is_contest_participant {
-        contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??
-    }
+    // Ask more questions to the user
+    contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
 
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
-    if contrib_info.is_contest_participant || contrib_info.is_another_machine {
+    if contrib_info.is_another_machine {
         tokio::task::spawn_blocking(move || {
             compute_contribution_offline(contrib_filename_copy.as_str(), challenge_filename.as_str())
         })
@@ -255,9 +243,14 @@ async fn contribute(
         .await??;
     }
     let contribution = tokio::task::spawn_blocking(move || {
-        get_file_as_byte_vec(contrib_filename.as_str(), round_height, response_locator.contribution_id())
+        get_file_as_byte_vec(
+            contrib_filename.as_str(),
+            round_height,
+            response_locator.contribution_id(),
+        )
     })
     .await??;
+
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
     info!(
@@ -284,25 +277,17 @@ async fn contribute(
     let signature = Production.sign(keypair.sigkey(), &contribution_state.signature_message()?)?;
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state)?;
 
-    let (contribution_url, contribution_signature_url) = requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
-    requests::upload_chunk(client, contribution_url.as_str(), contribution_signature_url.as_str(), contribution, &contribution_file_signature).await?;
-
-    let post_chunk_req = PostChunkRequest::new(
-        round_height,
-        locked_locators.next_contribution(),
-        locked_locators.next_contribution_file_signature(),
-    );
-
-    requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
+    let (contribution_url, contribution_signature_url) =
+        requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
+    requests::upload_chunk(
+        client,
+        contribution_url.as_str(),
+        contribution_signature_url.as_str(),
+        contribution,
+        &contribution_file_signature,
+    )
+    .await?;
     contrib_info.timestamps.end_contribution = Utc::now();
-
-    // Interrupt heartbeat, to prevent heartbeating during verification
-    // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
-    //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
-    //  only gets detached from the main execution unit but keeps running in the background until the main
-    //  function returns. This would cause the contributor to send heartbeats even after it has been removed
-    //  from the list of current contributors, causing an error
-    heartbeat_handle.abort();
 
     // Compute signature of contributor info
     contrib_info
@@ -317,7 +302,23 @@ async fn contribute(
     .await?;
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
-    Ok(())
+    // Notify contribution to the coordinator for the verification
+    let post_chunk_req = PostChunkRequest::new(
+        round_height,
+        locked_locators.next_contribution(),
+        locked_locators.next_contribution_file_signature(),
+    );
+    requests::post_contribute_chunk(client, coordinator, keypair, &post_chunk_req).await?;
+
+    // Interrupt heartbeat, to prevent heartbeating during verification
+    // NOTE: need to manually cancel the heartbeat task because, by default, async runtimes use detach on drop strategy
+    //  (see https://blog.yoshuawuyts.com/async-cancellation-1/#cancelling-tasks), meaning that the task
+    //  only gets detached from the main execution unit but keeps running in the background until the main
+    //  function returns. This would cause the contributor to send heartbeats even after it has been removed
+    //  from the list of current contributors, causing an error
+    heartbeat_handle.abort();
+
+    Ok(round_height)
 }
 
 /// Waits in line until it's time to contribute
@@ -349,6 +350,8 @@ async fn contribution_loop(
         }
     });
 
+    let mut round_height = 0;
+
     loop {
         // Check the contributor's position in the queue
         let queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
@@ -365,16 +368,24 @@ async fn contribution_loop(
                 );
             }
             ContributorStatus::Round => {
-                contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
+                round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
                     .await
                     .expect("Contribution failed");
             }
             ContributorStatus::Finished => {
-                println!("Contribution done!");
+                println!(
+                    "Contribution done, thank you! We will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    round_height
+                );
+                break;
+            }
+            ContributorStatus::Banned => {
+                println!("This contributor has been banned from the ceremony because of an invalid contribution.");
                 break;
             }
             ContributorStatus::Other => {
-                println!("Something went wrong!");
+                println!("Did not retrieve e valid contributor state.");
+                break;
             }
         }
 
@@ -502,4 +513,3 @@ async fn main() {
         }
     }
 }
-

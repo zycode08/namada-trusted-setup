@@ -19,9 +19,8 @@ mod transform_ratios;
 pub use transform_ratios::transform_ratios;
 
 use phase1_coordinator::{
-    objects::{round::LockedLocators, Task},
+    objects::round::LockedLocators,
     rest::{ContributorStatus, PostChunkRequest},
-    storage::ContributionLocator,
 };
 
 use reqwest::Url;

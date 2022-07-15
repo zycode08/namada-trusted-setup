@@ -778,6 +778,14 @@ impl Coordinator {
     }
 
     ///
+    /// Returns `true` if the given participant has been banned from the ceremony
+    ///
+    #[inline]
+    pub fn is_banned_participant(&self, participant: &Participant) -> bool {
+        self.state.is_banned_participant(&participant)
+    }
+
+    ///
     /// Returns `true` if the given participant is a contributor managed
     /// by the coordinator.
     ///
@@ -1654,7 +1662,9 @@ impl Coordinator {
         contribution_info: ContributionInfo,
     ) -> Result<(), CoordinatorError> {
         self.storage.insert(
-            Locator::ContributionInfoFile { round_height: contribution_info.ceremony_round },
+            Locator::ContributionInfoFile {
+                round_height: contribution_info.ceremony_round,
+            },
             Object::ContributionInfoFile(contribution_info),
         )
     }
@@ -2275,6 +2285,9 @@ impl Coordinator {
                     &replace_action.tasks,
                 )?;
 
+                // Remove contribution info and trimmed info
+                self.storage.clear_info_files(round.round_height());
+
                 // Assign a replacement contributor from the queue to the dropped tasks for the current round.
                 round.add_replacement_contributor_unsafe(replace_action.replacement_contributor.clone())?;
                 warn!(
@@ -2492,7 +2505,7 @@ impl Coordinator {
     /// Verify a contribution using the coordinator's default verifier.
     /// This is just an interface to [`verify`]
     ///
-    /// #Error
+    /// # Error
     /// This function assumes that the given task has been indeed assigned to the
     /// default verifier.
     pub fn default_verify(&mut self, task: &Task) -> anyhow::Result<()> {

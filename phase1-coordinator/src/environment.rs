@@ -834,6 +834,11 @@ impl Production {
     }
 
     fn generate_namada_env(keypair: &KeyPair) -> Self {
+        let test_timeout = match std::env::var("NAMADA_MPC_TIMEOUT_SECONDS") {
+            Ok(t) => Some(time::Duration::seconds(t.parse::<i64>().unwrap())),
+            Err(_) => None,
+        };
+
         Self {
             environment: Environment {
                 parameters: Parameters::Namada {
@@ -852,10 +857,10 @@ impl Production {
                 maximum_verifiers_per_round: 5,
                 contributor_lock_chunk_limit: 1,
                 verifier_lock_chunk_limit: 5,
-                contributor_seen_timeout: time::Duration::minutes(5),
-                verifier_seen_timeout: time::Duration::days(7),
-                participant_lock_timeout: time::Duration::minutes(20),
-                queue_seen_timeout: time::Duration::minutes(5),
+                contributor_seen_timeout: test_timeout.unwrap_or_else(|| time::Duration::minutes(5)),
+                verifier_seen_timeout: test_timeout.unwrap_or_else(|| time::Duration::days(7)),
+                participant_lock_timeout: test_timeout.unwrap_or_else(|| time::Duration::minutes(20)),
+                queue_seen_timeout: test_timeout.unwrap_or_else(|| time::Duration::minutes(5)),
                 participant_ban_threshold: 5,
                 allow_current_contributors_in_queue: false,
                 allow_current_verifiers_in_queue: true,

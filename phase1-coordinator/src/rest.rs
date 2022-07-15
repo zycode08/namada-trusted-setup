@@ -3,49 +3,41 @@
 use crate::{
     authentication::{Production, Signature},
     objects::{ContributionInfo, LockedLocators, Task},
+    s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
-    ContributionFileSignature,
     CoordinatorError,
     Participant,
-    s3::{S3Ctx, S3Error}
 };
 
 use blake2::Digest;
 use rocket::{
+    catch,
     data::FromData,
     error,
     get,
     http::{ContentType, Status},
-    outcome::IntoOutcome,
     post,
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
-    tokio::{sync::RwLock, task, io::AsyncReadExt},
+    tokio::{sync::RwLock, task},
     Shutdown,
     State,
 };
 
 use sha2::Sha256;
 
-use std::{
-    borrow::Cow,
-    collections::LinkedList,
-    convert::TryFrom,
-    io::Cursor,
-    net::IpAddr,
-    ops::Deref,
-    sync::Arc,
-    time::Duration,
-};
+use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
-use tracing::debug;
+use tracing::warn;
 
 #[cfg(debug_assertions)]
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
+
+pub const UNKNOWN: &str = "Unknown";
 
 // Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
@@ -60,12 +52,14 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
+    #[error("Contribution info is not valid: {0}")]
+    InvalidContributionInfo(String),
     #[error("Header {0} is badly formatted")]
     InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
     InvalidSignature,
     #[error("Io Error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
     MismatchingChecksum(String, String),
     #[error("The required {0} header was missing from the incoming request")]
@@ -79,17 +73,15 @@ pub enum ResponseError {
     #[error("Error with S3: {0}")]
     S3Error(#[from] S3Error),
     #[error("Error with Serde: {0}")]
-    SerdeError(#[from] serde_json::error::Error),
+    SerdeError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
-    #[error("The participant {0} is not allowed to access the endpoint {1}")]
-    UnauthorizedParticipant(Participant, String),
+    #[error("The participant {0} is not allowed to access the endpoint {1} because of: {2}")]
+    UnauthorizedParticipant(Participant, String, String),
     #[error("Could not find contributor with public key {0}")]
     UnknownContributor(String),
     #[error("Could not find the provided Task {0} in coordinator state")]
     UnknownTask(Task),
-    #[error("Error while verifying a contribution: {0}")]
-    VerificationError(String),
     #[error("Digest of request's body is not base64 encoded: {0}")]
     WrongDigestEncoding(#[from] base64::DecodeError),
 }
@@ -103,22 +95,70 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
+            ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
             ResponseError::MissingSigningKey => Status::BadRequest,
-            ResponseError::UnauthorizedParticipant(_, _) => Status::Unauthorized,
+            ResponseError::SerdeError(_) => Status::UnprocessableEntity,
+            ResponseError::UnauthorizedParticipant(_, _, _) => Status::Unauthorized,
             ResponseError::WrongDigestEncoding(_) => Status::BadRequest,
             _ => Status::InternalServerError,
         };
 
         builder
             .status(response_code)
-            .header(ContentType::JSON)
+            .header(ContentType::Text)
             .sized_body(response.len(), Cursor::new(response))
             .ok()
     }
 }
 
 type Result<T> = std::result::Result<T, ResponseError>;
+
+// Custom catchers for Request/Data Guards. These remap custom error codes to the standard ones and call the ResponseError Responder to produce the response. The default catcher is mantained for non-custom errors
+
+#[catch(452)]
+pub fn invalid_signature() -> ResponseError {
+    ResponseError::InvalidSignature
+}
+
+#[catch(453)]
+pub fn unauthorized(req: &Request) -> ResponseError {
+    let participant = req.local_cache(|| Participant::new_contributor(UNKNOWN));
+    let (endpoint, cause) = req.local_cache(|| (String::from(UNKNOWN), String::from(UNKNOWN)));
+
+    ResponseError::UnauthorizedParticipant(participant.clone(), endpoint.to_owned(), cause.to_owned())
+}
+
+#[catch(454)]
+pub fn missing_required_header(req: &Request) -> ResponseError {
+    let header = req.local_cache(|| UNKNOWN);
+    ResponseError::MissingRequiredHeader(header)
+}
+
+#[catch(455)]
+pub fn unprocessable_entity(req: &Request) -> ResponseError {
+    let message = req.local_cache(|| UNKNOWN.to_string());
+    ResponseError::SerdeError(message.to_string())
+}
+
+#[catch(456)]
+pub fn mismatching_checksum(req: &Request) -> ResponseError {
+    let (expected, actual) = req.local_cache(|| (UNKNOWN.to_string(), UNKNOWN.to_string()));
+    ResponseError::MismatchingChecksum(expected.to_owned(), actual.to_owned())
+}
+
+#[catch(457)]
+pub fn invalid_header(req: &Request) -> ResponseError {
+    let header = req.local_cache(|| UNKNOWN);
+    ResponseError::InvalidHeader(header)
+}
+
+#[catch(512)]
+pub fn io_error(req: &Request) -> ResponseError {
+    let message = req.local_cache(|| UNKNOWN.to_string());
+    ResponseError::IoError(message.to_owned())
+}
+
 /// Content info
 pub struct RequestContent<'a> {
     len: usize,
@@ -248,8 +288,101 @@ impl<'r> FromRequest<'r> for Participant {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match request.verify_signature() {
             Ok(pubkey) => Outcome::Success(Participant::new_contributor(pubkey)),
-            Err(e) => Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => Outcome::Failure((Status::new(452), e)),
         }
+    }
+}
+
+/// Implements the signature verification on the incoming unknown contributor request via [`FromRequest`].
+pub struct NewParticipant {
+    participant: Participant,
+    ip_address: Option<IpAddr>,
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for NewParticipant {
+    type Error = ResponseError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let pubkey = match request.verify_signature() {
+            Ok(h) => h,
+            Err(e) => return Outcome::Failure((Status::new(452), e)),
+        };
+
+        // Check that the signature comes from an unknown contributor
+        let coordinator = request
+            .guard::<&State<Coordinator>>()
+            .await
+            .succeeded()
+            .expect("Managed state should always be retrievable");
+        let participant = Participant::new_contributor(pubkey);
+        let ip_address = request.client_ip();
+
+        if let Err(e) = coordinator
+            .read()
+            .await
+            .state()
+            .add_to_queue_checks(&participant, ip_address.as_ref())
+        {
+            // Cache error data for the error catcher
+            request.local_cache(|| participant.clone());
+            request.local_cache(|| (request.uri().to_string(), e.to_string()));
+
+            return Outcome::Failure((
+                Status::new(453),
+                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), e.to_string()),
+            ));
+        }
+
+        Outcome::Success(Self {
+            participant,
+            ip_address,
+        })
+    }
+}
+
+/// Implements the signature verification on the incoming current contributor request via [`FromRequest`].
+pub struct CurrentContributor(Participant);
+
+impl Deref for CurrentContributor {
+    type Target = Participant;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for CurrentContributor {
+    type Error = ResponseError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let pubkey = match request.verify_signature() {
+            Ok(h) => h,
+            Err(e) => return Outcome::Failure((Status::new(452), e)),
+        };
+
+        // Check that the signature comes from the current contributor by matching the public key
+        let coordinator = request
+            .guard::<&State<Coordinator>>()
+            .await
+            .succeeded()
+            .expect("Managed state should always be retrievable");
+        let participant = Participant::new_contributor(pubkey);
+
+        if !coordinator.read().await.is_current_contributor(&participant) {
+            // Cache error data for the error catcher
+            let error_msg = String::from("Participant is not the current contributor");
+            request.local_cache(|| participant.clone());
+            request.local_cache(|| (request.uri().to_string(), error_msg.clone()));
+
+            return Outcome::Failure((
+                Status::new(453),
+                ResponseError::UnauthorizedParticipant(participant, request.uri().to_string(), error_msg),
+            ));
+        }
+
+        Outcome::Success(Self(participant))
     }
 }
 
@@ -263,7 +396,7 @@ impl<'r> FromRequest<'r> for ServerAuth {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let pubkey = match request.verify_signature() {
             Ok(h) => h,
-            Err(e) => return Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => return Outcome::Failure((Status::new(452), e)),
         };
 
         // Check that the signature comes from the coordinator by matching the default verifier key
@@ -275,9 +408,14 @@ impl<'r> FromRequest<'r> for ServerAuth {
         let verifier = Participant::new_verifier(pubkey);
 
         if verifier != coordinator.read().await.environment().coordinator_verifiers()[0] {
+            // Cache error data for the error catcher
+            let error_msg = String::from("Not the coordinator's verifier");
+            request.local_cache(|| verifier.clone());
+            request.local_cache(|| (request.uri().to_string(), error_msg.clone()));
+
             return Outcome::Failure((
-                Status::Unauthorized,
-                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string()),
+                Status::new(453),
+                ResponseError::UnauthorizedParticipant(verifier, request.uri().to_string(), error_msg),
             ));
         }
 
@@ -312,8 +450,11 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         let expected_digest = match headers.get_one(BODY_DIGEST_HEADER) {
             Some(h) => h,
             None => {
+                // Cache error data for the error catcher
+                req.local_cache(|| BODY_DIGEST_HEADER.to_string());
+
                 return rocket::data::Outcome::Failure((
-                    Status::BadRequest,
+                    Status::new(454),
                     ResponseError::MissingRequiredHeader(BODY_DIGEST_HEADER),
                 ));
             }
@@ -322,8 +463,11 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         let content_length = match headers.get_one(CONTENT_LENGTH_HEADER) {
             Some(h) => h,
             None => {
+                // Cache error data for the error catcher
+                req.local_cache(|| CONTENT_LENGTH_HEADER.to_string());
+
                 return rocket::data::Outcome::Failure((
-                    Status::LengthRequired,
+                    Status::new(454),
                     ResponseError::MissingRequiredHeader(CONTENT_LENGTH_HEADER),
                 ));
             }
@@ -331,20 +475,37 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
 
         let expected_content = match RequestContent::try_from_header(content_length, expected_digest) {
             Ok(c) => c,
-            Err(e) => return rocket::data::Outcome::Failure((Status::BadRequest, e)),
+            Err(e) => {
+                // Cache error data for the error catcher
+                let header = match e {
+                    ResponseError::InvalidHeader(h) => h,
+                    _ => UNKNOWN,
+                };
+                req.local_cache(|| header);
+
+                return rocket::data::Outcome::Failure((Status::new(457), e));
+            }
         };
 
         let body = match data.open(expected_content.len.into()).into_bytes().await {
             Ok(bytes) => bytes.into_inner(),
-            Err(e) => return rocket::data::Outcome::Failure((Status::InternalServerError, ResponseError::from(e))),
+            Err(e) => {
+                // Cache error data for the error catcher
+                req.local_cache(|| e.to_string());
+
+                return rocket::data::Outcome::Failure((Status::new(512), ResponseError::IoError(e.to_string())));
+            }
         };
 
         let mut hasher = Sha256::new();
         hasher.update(&body);
         let digest = base64::encode(hasher.finalize());
         if digest != expected_content.digest {
+            // Cache error data for the error catcher
+            req.local_cache(|| (expected_digest.to_owned(), expected_content.digest.to_string()));
+
             return rocket::data::Outcome::Failure((
-                Status::BadRequest,
+                Status::new(456),
                 ResponseError::MismatchingChecksum(expected_digest.to_owned(), expected_content.digest.to_string()),
             ));
         }
@@ -352,7 +513,11 @@ impl<'r, T: DeserializeOwned> FromData<'r> for LazyJson<T> {
         // Deserialize data and pass it to the request handler
         match serde_json::from_slice::<T>(&body) {
             Ok(obj) => rocket::data::Outcome::Success(LazyJson(obj)),
-            Err(e) => rocket::data::Outcome::Failure((Status::UnprocessableEntity, ResponseError::from(e))),
+            Err(e) => {
+                // Cache error data for the error catcher
+                req.local_cache(|| (e.to_string()));
+                rocket::data::Outcome::Failure((Status::new(455), ResponseError::SerdeError(e.to_string())))
+            }
         }
     }
 }
@@ -363,6 +528,7 @@ pub enum ContributorStatus {
     Queue(u64, u64),
     Round,
     Finished,
+    Banned,
     Other,
 }
 
@@ -394,23 +560,25 @@ impl PostChunkRequest {
 
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue")]
-pub async fn join_queue(
-    coordinator: &State<Coordinator>,
-    participant: Participant,
-    contributor_ip: IpAddr, //NOTE: if ip address cannot be retrieved this request is forwarded and fails. If we want to accept requests from unknown ips we should use Option<IpAddr>
-) -> Result<()> {
+pub async fn join_queue(coordinator: &State<Coordinator>, new_participant: NewParticipant) -> Result<()> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.add_to_queue(participant, Some(contributor_ip), 10)).await? {
+    match task::spawn_blocking(move || {
+        write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10)
+    })
+    .await?
+    {
         Ok(()) => Ok(()),
         Err(e) => Err(ResponseError::CoordinatorError(e)),
     }
 }
 
-// FIXME: the following 4 endpoints should only be accessible to the curent contributor?
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
 #[get("/contributor/lock_chunk", format = "json")]
-pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participant) -> Result<Json<LockedLocators>> {
+pub async fn lock_chunk(
+    coordinator: &State<Coordinator>,
+    participant: CurrentContributor,
+) -> Result<Json<LockedLocators>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     match task::spawn_blocking(move || write_lock.try_lock(&participant)).await? {
@@ -423,8 +591,8 @@ pub async fn lock_chunk(coordinator: &State<Coordinator>, participant: Participa
 #[post("/contributor/challenge", format = "json", data = "<locked_locators>")]
 pub async fn get_challenge_url(
     coordinator: &State<Coordinator>,
-    _participant: Participant,
-    locked_locators: LazyJson<LockedLocators>,
+    _participant: CurrentContributor,
+    round_height: LazyJson<u64>,
 ) -> Result<Json<String>> {
     let s3_ctx = S3Ctx::new().await?;
 
@@ -435,14 +603,14 @@ pub async fn get_challenge_url(
 
     // If challenge is already on S3 (round rollback) immediately return the key
     if let Some(url) = s3_ctx.get_challenge_url(key.clone()).await {
-        return Ok(Json(url))
+        return Ok(Json(url));
     }
 
     // Since we don't chunk the parameters, we have one chunk and one allowed contributor per round. Thus the challenge will always be located at round_{i}/chunk_0/contribution_0.verified
     // For example, the 1st challenge (after the initialization) is located at round_1/chunk_0/contribution_0.verified
-    let mut read_lock = (*coordinator).clone().read_owned().await;
-    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(round_height, chunk_id, 0, true)).await? {
-        Ok(challenge_hash) => challenge_hash,
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let challenge = match task::spawn_blocking(move || read_lock.get_challenge(*round_height, 0, 0, true)).await? {
+        Ok(challenge) => challenge,
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
 
@@ -452,10 +620,10 @@ pub async fn get_challenge_url(
     Ok(Json(url))
 }
 
-/// Request the urls where to upload a [Chunk](`crate::objects::Chunk`) contribution and the [`ContributionFileSignature`].
+/// Request the urls where to upload a [Chunk](`crate::objects::Chunk`) contribution and the ContributionFileSignature.
 #[post("/upload/chunk", format = "json", data = "<round_height>")]
 pub async fn get_contribution_url(
-    _participant: Participant,
+    _participant: CurrentContributor,
     round_height: LazyJson<u64>,
 ) -> Result<Json<(String, String)>> {
     let contrib_key = format!("round_{}/chunk_0/contribution_1.unverified", *round_height);
@@ -468,48 +636,34 @@ pub async fn get_contribution_url(
     Ok(Json(urls))
 }
 
-/// Notify the [Coordinator](`crate::Coordinator`) of a finished and uploaded [Contribution](`crate::objects::Contribution`). This will unlock the given [Chunk](`crate::objects::Chunk`) and allow the contributor to take on a new task.
+/// Notify the [Coordinator](`crate::Coordinator`) of a finished and uploaded [Contribution](`crate::objects::Contribution`). This will unlock the given [Chunk](`crate::objects::Chunk`).
 #[post(
     "/contributor/contribute_chunk",
     format = "json",
     data = "<contribute_chunk_request>"
 )]
-pub async fn contribute_chunk(  //FIXME: review locks
+pub async fn contribute_chunk(
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    participant: CurrentContributor,
     contribute_chunk_request: LazyJson<PostChunkRequest>,
-) -> Result<Json<ContributionLocator>> {
+) -> Result<()> {
     // Download contribution and its signature from S3 to local disk from the provided Urls
     let s3_ctx = S3Ctx::new().await?;
     let (contribution, contribution_sig) = s3_ctx.get_contribution(contribute_chunk_request.round_height).await?;
-
-    let mut contribution_signature: ContributionFileSignature = serde_json::from_slice(&contribution_sig)?;
-    let contribution_locator = contribute_chunk_request.contribution_locator.clone();
-
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    if let Err(e) =
-        task::spawn_blocking(move || write_lock.write_contribution(contribution_locator, contribution)).await?
-    {
-        return Err(ResponseError::CoordinatorError(e));
-    }
 
-    write_lock = (*coordinator).clone().write_owned().await;
-    if let Err(e) = task::spawn_blocking(move || {
+    task::spawn_blocking(move || {
+        write_lock.write_contribution(contribute_chunk_request.contribution_locator, contribution)?;
         write_lock.write_contribution_file_signature(
             contribute_chunk_request.contribution_signature_locator,
-            contribution_signature,
-        )
+            serde_json::from_slice(&contribution_sig)?,
+        )?;
+        write_lock.try_contribute(&participant, 0) // Only 1 chunk per round, chunk_id is always 0
     })
     .await?
-    {
-        return Err(ResponseError::CoordinatorError(e));
-    }
+    .map_err(|e| ResponseError::CoordinatorError(e))?;
 
-    write_lock = (*coordinator).clone().write_owned().await;
-    match task::spawn_blocking(move || write_lock.try_contribute(&participant, 0)).await? { // Only 1 chunk per round, chunk_id is always 0
-        Ok(contribution_locator) => Ok(Json(contribution_locator)),
-        Err(e) => Err(ResponseError::CoordinatorError(e)),
-    }
+    Ok(())
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)
@@ -557,15 +711,45 @@ pub async fn stop_coordinator(coordinator: &State<Coordinator>, _auth: ServerAut
 /// Performs the verification of the pending contributions
 pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
+    // Technically, since we don't chunk contributions and we only have one contribution per round, we will always get
+    // one pending verification at max.
     let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
 
     for (task, _) in pending_verifications {
         let mut write_lock = coordinator.clone().write_owned().await;
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
-        if let Err(e) = task::spawn_blocking(move || write_lock.default_verify(&task)).await? {
-            return Err(ResponseError::VerificationError(format!("{}", e))); //FIXME: delete contribution if verification fails?
-            // FIXME: ban participant and ip if verification failed?
+        let verify_response = match task::spawn_blocking(move || write_lock.default_verify(&task)).await {
+            Ok(inner) => inner.map_err(|e| e.to_string()).and(Ok(())),
+            Err(e) => Err(e.to_string()),
+        };
+
+        if let Err(e) = verify_response {
+            warn!("Error while verifying a contribution: {}. Restarting the round...", e);
+            // FIXME: the verify_masp function may panic but the programs doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
+
+            // Get the participant who produced the contribution
+            let mut write_lock = coordinator.clone().write_owned().await;
+            return task::spawn_blocking(move || {
+                let finished_contributor = write_lock
+                    .state()
+                    .current_round_finished_contributors()
+                    .unwrap()
+                    .first()
+                    .unwrap()
+                    .clone();
+
+                // Reset the round to prevent a coordinator stall (the corrupted contribution is not automatically dropped)
+                write_lock
+                    .reset_round()
+                    .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+                // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
+                write_lock
+                    .ban_participant(&finished_contributor)
+                    .map_err(|e| ResponseError::CoordinatorError(e))
+            })
+            .await?;
         }
     }
 
@@ -614,6 +798,10 @@ pub async fn get_contributor_queue_status(
         return Json(ContributorStatus::Finished);
     }
 
+    if read_lock.is_banned_participant(&participant) {
+        return Json(ContributorStatus::Banned);
+    }
+
     // Not in the queue, not finished, nor in the current round
     Json(ContributorStatus::Other)
 }
@@ -622,37 +810,41 @@ pub async fn get_contributor_queue_status(
 #[post("/contributor/contribution_info", format = "json", data = "<request>")]
 pub async fn post_contribution_info(
     coordinator: &State<Coordinator>,
-    participant: Participant,
+    participant: CurrentContributor,
     request: LazyJson<ContributionInfo>,
 ) -> Result<()> {
-    // FIXME: validate round height and pubkey of ContributionInfo before writing to disk?
-    // FIXME: what to do if validation fails?
-
-    // Check participant is registered in the ceremony
-    let read_lock = coordinator.read().await;
-
-    if !(read_lock.is_current_contributor(&participant) || read_lock.is_finished_contributor(&participant)) {
-        // Only the current contributor can upload this file
-        return Err(ResponseError::UnauthorizedParticipant(
-            participant,
-            String::from("/contributor/contribution_info"),
-        ));
+    // Validate info
+    if request.public_key != participant.address() {
+        return Err(ResponseError::InvalidContributionInfo(format!(
+            "Public key in info {} doesnt' match the participant one {}",
+            request.public_key,
+            participant.address()
+        )));
     }
-    drop(read_lock);
 
-    // Write contribution info to file
-    let contribution_info = request.clone();
-    let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || write_lock.write_contribution_info(contribution_info))
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))?;
+    let current_round_height = match coordinator.read().await.current_round_height() {
+        Ok(r) => r,
+        Err(e) => return Err(ResponseError::CoordinatorError(e)),
+    };
 
-    // Append summary to file
-    let contribution_summary = (*request).clone().into();
+    if current_round_height != request.ceremony_round {
+        // NOTE: validation of round_height matters in case of a round rollback
+        return Err(ResponseError::InvalidContributionInfo(format!(
+            "Round height in info {} doesnt' match the current round height {}",
+            request.ceremony_round, current_round_height
+        )));
+    }
+
+    // Write contribution info and summary to file
     let mut write_lock = (*coordinator).clone().write_owned().await;
-    task::spawn_blocking(move || write_lock.update_contribution_summary(contribution_summary))
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    task::spawn_blocking(move || {
+        write_lock.write_contribution_info(request.clone())?;
+
+        write_lock.update_contribution_summary(request.0.into())
+    })
+    .await?
+    .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     Ok(())
 }

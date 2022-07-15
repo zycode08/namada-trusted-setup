@@ -375,8 +375,7 @@ async fn test_contribution() {
     let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 0);
     contribution.resize(contrib_size as usize, 0);
 
-    let contribution_file_signature_locator =
-        ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
+    let contribution_file_signature_locator = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
 
     let response_hash = calculate_hash(contribution.as_ref());
 
