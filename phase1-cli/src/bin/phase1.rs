@@ -75,7 +75,6 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
-    println!("Welcome to the Namada trusted setup ceremony!"); //FIXME: move this to beginning of the ceremony
     let incentivization = io::get_user_input(
         format!("{}{}", QUESTION, "Do you want to participate in the incentivised trusted setup? [y/n]".yellow()),
         Some(&Regex::new(r"^(?i)[yn]$")?),
@@ -479,20 +478,14 @@ async fn main() {
 
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
-            let progress_style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar} {percent} {msg}"); //FIXME: remove from here
-            let progress_bar = ProgressBar::new(100);
-            progress_bar.set_style(progress_style);
-
-            if offline { //FIXME: fix progress bar in here
+            if offline {
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
-                progress_bar.set_message("Reading challenge file");
+                println!("{} {}Reading challenge", "[1/2]".bold().dimmed(), RECEIVE);
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
                     .await
                     .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
 
-                progress_bar.inc(20);
-
-                // FIXME: continue here with progress bar
+                println!("{} {}Computing contribution", "[2/2]".bold().dimmed(), COMPUTE);
                 tokio::task::spawn_blocking(move || {
                     compute_contribution(
                         get_seed_of_randomness().unwrap(),
@@ -504,12 +497,11 @@ async fn main() {
                 .unwrap()
                 .expect(&format!("{}", "Error in computing randomness".red().bold()));
 
-                progress_bar.finish_with_message("TEst message"); //FIXME: remove message
-
                 return;
             }
 
             // Perform the entire contribution cycle
+            println!("Welcome to the Namada trusted setup ceremony!".bold());
             println!("{} {}Generating keypair", "[1/11]".bold().dimmed(), NINJA);
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
