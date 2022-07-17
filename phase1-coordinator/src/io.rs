@@ -140,13 +140,26 @@ pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
         // Print mnemonic to the user in a different terminal
         {
             let mut secret_screen = AlternateScreen::from(std::io::stdout());
-            writeln!(&mut secret_screen, "Safely store your 24 words mnemonic:\n{}", mnemonic)?;
+            println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
             get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
         } // End scope, get back to stdout
 
-        // Check if the user has correctly stored the mnemonic
         #[cfg(not(debug_assertions))]
-        check_mnemonic(&mnemonic)?;
+        {
+            let verification_outcome = {
+                let mut secret_screen = AlternateScreen::from(std::io::stdout());
+                // Check if the user has correctly stored the mnemonic
+                check_mnemonic(&mnemonic)
+            };
+
+            match verification_outcome {
+                Ok(_) => println!("{}", "Verification passed".green().bold()),
+                Err(e) => {
+                    println!("{}", e.to_string().red().bold());
+                    return Err(e);
+                }
+            }
+        }
     }
     let mnemonic: Mnemonic = mnemonic.into();
     let seed = mnemonic.to_seed_normalized("");
@@ -165,7 +178,6 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     }
     indexes.shuffle(&mut rng);
 
-    //FIXME: print to alternate screen
     println!("{}", "Mnemonic verification step".yellow().bold());
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
@@ -180,8 +192,6 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
             return Err(IOError::CheckMnemonicError);
         }
     }
-
-    println!("{}", "Verification passed".green().bold());
 
     Ok(())
 }
