@@ -53,13 +53,14 @@ impl From<MnemonicWrap> for Mnemonic {
 impl Display for MnemonicWrap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Get longest word
-        let max_len = self.word_iter().enumerate().map(|(i, word)| format!("{}. {}  ", i + 1, word)).max_by_key(|x| x.len()).unwrap().len();
+        let max_len = self.word_iter().enumerate().map(|(i, word)| word.len() + 4 + (if i < 10 {1} else {2})).max().unwrap();
 
         // Display
-        let stripe = format!("{}", "=".repeat((max_len * 4) - 2));
-        writeln!(f, "{}", stripe)?;
         let mut i = 0;
         let words: Vec<&str> = self.word_iter().collect();
+        let stripe = format!("{}", "=".repeat((max_len * 4) - 2));
+        let mut result = stripe.clone();
+        result.push_str("\n");
 
         while i < MNEMONIC_LEN {
             let mut segments: [String; 4] = [String::new(), String::new(), String::new(), String::new()];
@@ -74,12 +75,12 @@ impl Display for MnemonicWrap {
                 segments[j] = format!("{:max_len$}", tmp);
             }
 
-            writeln!(f, "{}{}{}{}", segments[0], segments[1], segments[2], segments[3])?;
-            
+            result.push_str(format!("{}{}{}{}\n", segments[0], segments[1], segments[2], segments[3]).as_str());
             i += 4;
         }
 
-        writeln!(f, "{}", stripe)?;
+        result.push_str(stripe.as_str());
+        writeln!(f, "{}", result)?;
 
         Ok(())
     }
@@ -153,7 +154,7 @@ pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
             };
 
             match verification_outcome {
-                Ok(_) => println!("{}", "Verification passed".green().bold()),
+                Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
                 Err(e) => {
                     println!("{}", e.to_string().red().bold());
                     return Err(e);

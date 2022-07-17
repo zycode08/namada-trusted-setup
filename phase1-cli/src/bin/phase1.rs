@@ -401,8 +401,7 @@ async fn contribution_loop(
                 println!("{}", "=".repeat(max_len));
                 println!("{}", msg);
                 println!("{}", "=".repeat(max_len));
-                // FIXME: this should rewrite not append (maybe with the spinner)
-                // FIXME: place a spinner here?
+                // FIXME: this should rewrite not append (maybe with the spinner?)
             }
             ContributorStatus::Round => {
                 round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
@@ -501,7 +500,7 @@ async fn main() {
             }
 
             // Perform the entire contribution cycle
-            println!("Welcome to the Namada trusted setup ceremony!".bold());
+            println!("{}", "Welcome to the Namada trusted setup ceremony!".bold());
             println!("{} {}Generating keypair", "[1/11]".bold().dimmed(), NINJA);
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
@@ -558,6 +557,5 @@ async fn main() {
         }
     }
 }
-
 
 // FIXME: test client on linux
