@@ -10,23 +10,22 @@ use phase1_coordinator::{
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
-    }, ContributionFileSignature,
+    },
+    ContributionFileSignature,
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
+    RequestBuilder,
     Response,
-    Url, RequestBuilder,
+    Url,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{
-    collections::LinkedList,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 use thiserror::Error;
 
-use crate::{ContributionLocator, ContributorStatus, LockedLocators, PostChunkRequest, Task};
+use crate::{ContributorStatus, LockedLocators, PostChunkRequest};
 
 /// Error returned from a request.
 #[derive(Debug, Error)]
@@ -147,15 +146,13 @@ where
 
     loop {
         let response = req.try_clone().expect("Expected request not stream").send().await?;
-    
+
         match decapsulate_response(response).await {
             Ok(response) => return Ok(response),
-            Err(e) => {
-                match e {
-                    RequestError::Proxy(_) => eprintln!("CDN timeout expired, resubmitting the request..."),
-                    _ => return Err(e)
-                }
-            }
+            Err(e) => match e {
+                RequestError::Proxy(_) => eprintln!("CDN timeout expired, resubmitting the request..."),
+                _ => return Err(e),
+            },
         }
     }
 }
@@ -210,7 +207,7 @@ pub async fn get_challenge_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &LockedLocators,
+    request_body: &u64,
 ) -> Result<String> {
     let response = submit_request(
         client,
@@ -237,7 +234,7 @@ pub async fn get_contribution_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &u64
+    request_body: &u64,
 ) -> Result<(String, String)> {
     let response = submit_request::<u64>(
         client,
@@ -253,22 +250,28 @@ pub async fn get_contribution_url(
 
 /// Upload a gneric object to S3.
 async fn upload_object(req: RequestBuilder) -> Result<()> {
-    let mut response = req.send().await?;
+    let response = req.send().await?;
     decapsulate_response(response).await?;
 
     Ok(())
 }
 
 /// Upload a contribution and its signature to Amazon S3.
-pub async fn upload_chunk(client: &Client, contrib_url: &str, contrib_sig_url: &str, contribution: Vec<u8>, contribution_signature: &ContributionFileSignature) -> Result<()> {
+pub async fn upload_chunk(
+    client: &Client,
+    contrib_url: &str,
+    contrib_sig_url: &str,
+    contribution: Vec<u8>,
+    contribution_signature: &ContributionFileSignature,
+) -> Result<()> {
     let json_sig = serde_json::to_vec(&contribution_signature)?;
     let contrib_req = client.put(contrib_url).body(contribution);
-    let contrib_sig_req = client.put(contrib_sig_url).body(json_sig).header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    let contrib_sig_req = client
+        .put(contrib_sig_url)
+        .body(json_sig)
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-    tokio::try_join!(
-        upload_object(contrib_req),
-        upload_object(contrib_sig_req)
-    )?;
+    tokio::try_join!(upload_object(contrib_req), upload_object(contrib_sig_req))?;
 
     Ok(())
 }
@@ -279,8 +282,8 @@ pub async fn post_contribute_chunk(
     coordinator_address: &Url,
     keypair: &KeyPair,
     request_body: &PostChunkRequest,
-) -> Result<ContributionLocator> {
-    let response = submit_request(
+) -> Result<()> {
+    submit_request(
         client,
         coordinator_address,
         "contributor/contribute_chunk",
@@ -289,7 +292,7 @@ pub async fn post_contribute_chunk(
     )
     .await?;
 
-    Ok(response.json::<ContributionLocator>().await?)
+    Ok(())
 }
 
 /// Let the [Coordinator](`phase1-coordinator::Coordinator`) know that the contributor is still alive.

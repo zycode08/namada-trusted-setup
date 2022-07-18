@@ -8,7 +8,7 @@ use crate::{
     CoordinatorError,
     TimeSource,
 };
-// use phase1::ProvingSystem;
+use lazy_static::lazy_static;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,14 @@ use std::{
 };
 use time::{Duration, OffsetDateTime};
 use tracing::*;
+
+lazy_static! {
+    static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
+        Ok(s) if s == "true" => true,
+        Ok(_) => false,
+        Err(_) => false,
+    };
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) enum CoordinatorStatus {
@@ -1095,8 +1103,9 @@ impl CoordinatorState {
             *self = Self {
                 current_metrics,
                 current_round_height: Some(new_round_height),
+                contributors_ips: std::mem::take(&mut self.contributors_ips),
                 queue,
-                banned: self.banned.clone(),
+                banned: std::mem::take(&mut self.banned),
                 ..Self::new(self.environment.clone())
             };
 
@@ -1135,10 +1144,10 @@ impl CoordinatorState {
             *self = Self {
                 current_contributors,
                 current_verifiers: Default::default(),
-
-                queue: self.queue.clone(),
-                banned: self.banned.clone(),
-                dropped: self.dropped.clone(),
+                contributors_ips: std::mem::take(&mut self.contributors_ips),
+                queue: std::mem::take(&mut self.queue),
+                banned: std::mem::take(&mut self.banned),
+                dropped: std::mem::take(&mut self.dropped),
                 ..Self::new(self.environment.clone())
             };
 
@@ -1482,6 +1491,65 @@ impl CoordinatorState {
     }
 
     ///
+    /// Safety checks performed before adding a new contributor to the queue.
+    ///
+    pub(crate) fn add_to_queue_checks(
+        &self,
+        participant: &Participant,
+        participant_ip: Option<&IpAddr>,
+    ) -> Result<(), CoordinatorError> {
+        // Check that the pariticipant IP is not known.
+        if let Some(ip) = participant_ip {
+            if *IP_BAN && self.is_duplicate_ip(ip) {
+                return Err(CoordinatorError::ParticipantIpAlreadyAdded);
+            }
+        }
+
+        // Check that the participant is not banned from participating.
+        if self.banned.contains(participant) {
+            return Err(CoordinatorError::ParticipantBanned);
+        }
+
+        // Check that the participant is not already added to the queue.
+        if self.queue.contains_key(participant) {
+            return Err(CoordinatorError::ParticipantAlreadyAdded);
+        }
+
+        // Check that the participant is not in precommit for the next round.
+        if self.next.contains_key(participant) {
+            return Err(CoordinatorError::ParticipantAlreadyAdded);
+        }
+
+        // Check that the participant hasn't been already seen in the past.
+        for (_, inner) in &self.finished_contributors {
+            if inner.contains_key(participant) {
+                return Err(CoordinatorError::ParticipantAlreadyAdded);
+            }
+        }
+
+        match participant {
+            Participant::Contributor(_) => {
+                // Check if the contributor is authorized.
+                if !self.is_authorized_contributor(participant) {
+                    return Err(CoordinatorError::ParticipantUnauthorized);
+                }
+
+                // Check that the contributor is not in the current round.
+                if !self.environment.allow_current_contributors_in_queue()
+                    && self.current_contributors.contains_key(participant)
+                {
+                    return Err(CoordinatorError::ParticipantInCurrentRoundCannotJoinQueue);
+                }
+            }
+            Participant::Verifier(_) => {
+                return Err(CoordinatorError::ExpectedContributor);
+            }
+        }
+
+        Ok(())
+    }
+
+    ///
     /// Adds the given participant to the queue if they are permitted to participate.
     ///
     #[inline]
@@ -1492,65 +1560,7 @@ impl CoordinatorState {
         mut reliability_score: u8,
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
-        // Check that the pariticipant IP is not known.
-        if std::env::var("NAMADA_MPC_IP_BAN").is_ok() {
-            if let Some(ip) = participant_ip {
-                if self.is_duplicate_ip(&ip) {
-                    return Err(CoordinatorError::ParticipantIpAlreadyAdded);
-                }
-            }
-        }
-
-        // Check that the participant is not banned from participating.
-        if self.banned.contains(&participant) {
-            return Err(CoordinatorError::ParticipantBanned);
-        }
-
-        // Check that the participant is not already added to the queue.
-        if self.queue.contains_key(&participant) {
-            return Err(CoordinatorError::ParticipantAlreadyAdded);
-        }
-
-        // Check that the participant hasn't been already seen in the past.
-        for (k, v) in &self.finished_contributors {
-            for (p, _) in v {
-                if &participant == p {
-                    return Err(CoordinatorError::ParticipantAlreadyAdded);
-                }
-            }
-        }
-
-        // Check that the participant is not in precommit for the next round.
-        if self.next.contains_key(&participant) {
-            return Err(CoordinatorError::ParticipantAlreadyAdded);
-        }
-
-        // Check that the participant hasn't been already seen in the past.
-        for (_, inner) in &self.finished_contributors {
-            if inner.contains_key(&participant) {
-                return Err(CoordinatorError::ParticipantAlreadyAdded);
-            }
-        }
-
-        match &participant {
-            Participant::Contributor(_) => {
-                // Check if the contributor is authorized.
-                if !self.is_authorized_contributor(&participant) {
-                    return Err(CoordinatorError::ParticipantUnauthorized);
-                }
-
-                // Check that the contributor is not in the current round.
-                if !self.environment.allow_current_contributors_in_queue()
-                    && self.current_contributors.contains_key(&participant)
-                {
-                    return Err(CoordinatorError::ParticipantInCurrentRoundCannotJoinQueue);
-                }
-            }
-            Participant::Verifier(_) => {
-                return Err(CoordinatorError::ExpectedContributor);
-            }
-        }
-
+        // NOTE: safety checks are performed directly in the rest api, no need to duplicate them here
         // Add the participant to the queue.
         self.queue.insert(
             participant.clone(),
@@ -2368,10 +2378,11 @@ impl CoordinatorState {
             return Err(CoordinatorError::ParticipantAlreadyBanned);
         }
 
+        // Save participant ip for later ban
         let participant_ip = match self
             .contributors_ips
             .iter()
-            .filter(|(ip, contributor)| *contributor == participant)
+            .filter(|(_, contributor)| *contributor == participant)
             .next()
         {
             Some((ip, contrib)) => Some((ip.clone(), contrib.clone())),
@@ -2379,21 +2390,18 @@ impl CoordinatorState {
         };
 
         // Drop the participant from the queue, precommit, and current round.
-        match self.drop_participant(participant, time)? {
-            DropParticipant::DropCurrent(drop_data) => {
-                // Add the participant to the banned list.
-                self.banned.insert(participant.clone());
-                // Ban contributor's ip, if any
-                if let Some((ip, participant)) = participant_ip {
-                    self.contributors_ips.insert(ip, participant);
-                }
+        let drop = self.drop_participant(participant, time)?;
 
-                debug!("{} was banned from the ceremony", participant);
-
-                Ok(DropParticipant::DropCurrent(drop_data))
-            }
-            _ => Err(CoordinatorError::JustificationInvalid),
+        // Add the participant to the banned list.
+        self.banned.insert(participant.clone());
+        // Ban contributor's ip, if any
+        if let Some((ip, participant)) = participant_ip {
+            self.contributors_ips.insert(ip, participant);
         }
+
+        info!("{} was banned from the ceremony", participant);
+
+        Ok(drop)
     }
 
     ///
@@ -2427,12 +2435,21 @@ impl CoordinatorState {
         bucket_id: u64,
         time: &dyn TimeSource,
     ) -> Result<Participant, CoordinatorError> {
-        // Gets first contributor in queue
-        let (next_contributor, contributor_info) = self
+        // Get the contributor assigned to the closest next round or the one who joined the queue first
+        let (next_contributor, contributor_info) = match self
             .queue_contributors()
-            .first()
-            .cloned()
-            .ok_or(CoordinatorError::QueueIsEmpty)?;
+            .iter()
+            .filter(|(_, (_, rh, _, _))| rh.is_some())
+            .min_by_key(|(_, (_, rh, _, _))| rh)
+        {
+            Some((part, info)) => (part.clone(), info.clone()),
+            None => self
+                .queue_contributors()
+                .iter()
+                .min_by_key(|(_, (_, _, _, tj))| tj)
+                .cloned()
+                .ok_or(CoordinatorError::QueueIsEmpty)?,
+        };
 
         // Remove participant from queue
         self.remove_from_queue(&next_contributor)?;

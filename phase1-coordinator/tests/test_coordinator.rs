@@ -150,6 +150,8 @@ fn build_context() -> TestCtx {
 }
 
 // FIXME: reduce code duplication
+// FIXME: test round rollback and contributor substitution
+// FIXME: test verification of a wrong contribution
 
 /// Add headers and optional body to the request
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
@@ -485,8 +487,7 @@ fn test_contribution() {
     let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 0);
     contribution.resize(contrib_size as usize, 0);
 
-    let contribution_file_signature_locator =
-        ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
+    let contribution_file_signature_locator = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
 
     let response_hash = calculate_hash(contribution.as_ref());
 
