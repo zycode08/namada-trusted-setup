@@ -13,7 +13,6 @@ phase1 = { path = "../phase1" }
 phase1-coordinator = { path = "../phase1-coordinator" }
 setup-utils = { path = "../setup-utils" }
 serde = "1.0.136"
-snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
 
 anyhow = "1.0.57"
 async-stream = "0.3.3"
