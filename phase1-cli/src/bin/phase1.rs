@@ -10,6 +10,8 @@ use phase1_coordinator::{
 use reqwest::{Client, Url};
 
 use anyhow::Result;
+use bytes::Bytes;
+use futures_util::StreamExt;
 use phase1_cli::{requests, CeremonyOpt};
 use serde_json;
 use setup_utils::calculate_hash;
@@ -224,8 +226,18 @@ async fn contribute(
 
     let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
     debug!("Presigned url: {}", challenge_url);
-    println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE); // FIXME: progress bar here
-    let challenge = requests::get_challenge(client, challenge_url.as_str()).await?;
+    println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE);
+    let mut challenge_stream = requests::get_challenge(client, challenge_url.as_str()).await?;
+    let progress_bar = ProgressBar::new(challenge_stream.1); //FIXME:
+    progress_bar.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40} {bytes_per_sec} {total_bytes}")
+    .progress_chars("#>-"));
+    let mut challenge: Vec<u8> = Vec::new();
+    while let Some(b) = challenge_stream.0.next().await {
+        let b = b?;
+        challenge.extend_from_slice(&b);
+        progress_bar.inc(b.len() as u64);
+    }
+    progress_bar.finish();
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the offline contrib path
@@ -247,7 +259,7 @@ async fn contribute(
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
-    // Ask more questions to the user
+    // Compute contribution
     contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
 
     println!("{} {} Computing contribution", "[7/11]".bold().dimmed(), COMPUTE);

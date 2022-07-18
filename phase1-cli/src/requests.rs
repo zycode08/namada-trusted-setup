@@ -13,6 +13,8 @@ use phase1_coordinator::{
     },
     ContributionFileSignature,
 };
+use bytes::Bytes;
+use futures_util::Stream;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
@@ -222,11 +224,12 @@ pub async fn get_challenge_url(
 }
 
 /// Send a request to Amazon S3 to download the next challenge.
-pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<Vec<u8>> {
+pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<(impl Stream<Item = reqwest::Result<Bytes>>, u64)> {
     let req = client.get(challenge_url);
     let response = req.send().await?;
+    let stream_len = response.content_length().unwrap();
 
-    Ok(decapsulate_response(response).await?.bytes().await?.to_vec())
+    Ok((decapsulate_response(response).await?.bytes_stream(), stream_len))
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target Strings where to upload the contribution and its signature.
