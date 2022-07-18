@@ -15,7 +15,6 @@ crate-type = ["cdylib", "rlib"]
 http = "0.2"
 phase1 = { path = "../phase1", default-features = false }
 setup-utils = { path = "../setup-utils", default-features = false }
-setup1-shared = { path = "../setup1-shared" }
 snarkvm-dpc = { git = "https://github.com/AleoHQ/snarkVM.git", branch = "setup_wasm", default-features = false, features = [ "wasm" ], optional = true }
 snarkvm-utilities = { git = "https://github.com/AleoHQ/snarkVM.git", branch = "setup_wasm", default-features = false, optional = true }
 snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c", default-features = false }

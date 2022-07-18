@@ -6,9 +6,6 @@ members = [
   "phase1-coordinator",
   "phase1-wasm",
   "phase1-wasm-keys",
-  "phase2",
-  "setup1-cli-tools",
-  "setup1-shared",
   "setup-utils",
 ]
 
