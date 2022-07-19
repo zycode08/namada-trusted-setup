@@ -26,9 +26,9 @@ use std::{
 };
 
 use chrono::Utc;
-use colored::*;
 use console::Emoji;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
+use owo_colors::OwoColorize;
 
 use base64;
 use bs58;
@@ -73,8 +73,6 @@ macro_rules! pretty_hash {
         output
     }};
 }
-
-// FIXME: swap colored with owo-colors
 
 /// Asks the user a few questions to properly setup the contribution
 #[inline(always)]
@@ -602,4 +600,4 @@ async fn main() {
     }
 }
 
-// FIXME: test client on linux
+// FIXME: test client on linux against AWS server

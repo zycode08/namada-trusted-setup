@@ -2,8 +2,8 @@ use std::{io::Write, ops::Deref, fmt::Display};
 
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
-use colored::*;
 use crossterm::{execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen}};
+use owo_colors::OwoColorize;
 #[cfg(not(debug_assertions))]
 use rand::prelude::SliceRandom;
 use regex::Regex;
