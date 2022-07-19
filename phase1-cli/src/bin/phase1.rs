@@ -10,6 +10,7 @@ use phase1_coordinator::{
 use reqwest::{Client, Url};
 
 use anyhow::Result;
+use async_stream::try_stream;
 use bytes::Bytes;
 use crossterm::{execute, terminal::{Clear, ClearType, ScrollDown}};
 use futures_util::StreamExt;
@@ -27,7 +28,7 @@ use std::{
 use chrono::Utc;
 use colored::*;
 use console::Emoji;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 use base64;
 use bs58;
@@ -35,6 +36,7 @@ use bs58;
 use regex::Regex;
 
 use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
+use tokio_util::io::ReaderStream;
 
 use tracing::{debug, trace};
 
@@ -145,6 +147,14 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
     Ok(buffer)
 }
 
+fn get_progress_bar(len: u64) -> ProgressBar {
+    let progress_bar = ProgressBar::new(len);
+    progress_bar.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40} {bytes_per_sec} {total_bytes}")
+    .progress_chars("#>-"));
+
+    progress_bar
+}
+
 /// Contest and offline execution branches
 #[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
@@ -218,7 +228,7 @@ async fn contribute(
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
-) -> Result<u64> {
+) -> Result<u64> { //FIXME: clones
     // Get the necessary info to compute the contribution
     println!("{} {} Locking chunk", "[4/11]".bold().dimmed(), LOCK);
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
@@ -231,9 +241,7 @@ async fn contribute(
     debug!("Presigned url: {}", challenge_url);
     println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE);
     let mut challenge_stream = requests::get_challenge(client, challenge_url.as_str()).await?;
-    let progress_bar = ProgressBar::new(challenge_stream.1);
-    progress_bar.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40} {bytes_per_sec} {total_bytes}")
-    .progress_chars("#>-"));
+    let progress_bar = get_progress_bar(challenge_stream.1);
     let mut challenge: Vec<u8> = Vec::new();
     while let Some(b) = challenge_stream.0.next().await {
         let b = b?;
@@ -267,6 +275,7 @@ async fn contribute(
 
     println!("{} {} Computing contribution", "[7/11]".bold().dimmed(), COMPUTE);
     let contrib_filename_copy = contrib_filename.clone();
+    let contrib_filename_copy_two = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_another_machine {
         tokio::task::spawn_blocking(move || {
@@ -282,7 +291,7 @@ async fn contribute(
     }
     let contribution = tokio::task::spawn_blocking(move || {
         get_file_as_byte_vec(
-            contrib_filename.as_str(),
+            contrib_filename_copy_two.as_str(),
             round_height,
             response_locator.contribution_id(),
         )
@@ -318,15 +327,31 @@ async fn contribute(
 
     let (contribution_url, contribution_signature_url) =
         requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
-    println!("{} {} Uploading contribution", "[9/11]".bold().dimmed(), SEND); // FIXME: progress bar here, https://github.com/console-rs/indicatif/blob/main/examples/multi.rs
+    println!("{} {} Uploading contribution", "[9/11]".bold().dimmed(), SEND);
+    let contrib_file = async_fs::File::open(contrib_filename.as_str()).await?;
+    let contrib_size = async_fs::metadata(contrib_filename.as_str()).await?.len();
+    let mut stream = ReaderStream::new(contrib_file);
+    let pb = get_progress_bar(contrib_size);
+    let pb_clone = pb.clone();
+
+    let contrib_stream = try_stream! {
+        while let Some(b) = stream.next().await {
+            let b = b?;
+            pb.inc(b.len() as u64);
+            yield b;
+        }
+    };
+
     requests::upload_chunk(
         client,
         contribution_url.as_str(),
         contribution_signature_url.as_str(),
-        contribution,
+        contrib_stream,
+        contrib_size,
         &contribution_file_signature,
     )
     .await?;
+    pb_clone.finish();
     contrib_info.timestamps.end_contribution = Utc::now();
 
     // Compute signature of contributor info
@@ -344,7 +369,7 @@ async fn contribute(
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     // Notify contribution to the coordinator for the verification
-    println!("{}{} Notifying the coordinator of the completed contribution", "[11/11]".bold().dimmed(), EXCLAMATION);
+    println!("{}{}Notifying the coordinator of the completed contribution", "[11/11]".bold().dimmed(), EXCLAMATION);
     let post_chunk_req = PostChunkRequest::new(
         round_height,
         locked_locators.next_contribution(),

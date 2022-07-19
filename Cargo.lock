@@ -2807,6 +2807,7 @@ name = "phase1-cli"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "base64",
  "bs58",
  "bytes",
@@ -2816,6 +2817,7 @@ dependencies = [
  "crossterm",
  "ed25519-compact",
  "fs-err",
+ "futures-core",
  "futures-util",
  "gumdrop",
  "hex",
@@ -2836,6 +2838,7 @@ dependencies = [
  "structopt",
  "thiserror",
  "tokio",
+ "tokio-util 0.7.3",
  "toml",
  "tracing",
  "tracing-subscriber",

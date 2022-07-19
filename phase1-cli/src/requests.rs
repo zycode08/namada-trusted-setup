@@ -260,15 +260,17 @@ async fn upload_object(req: RequestBuilder) -> Result<()> {
 }
 
 /// Upload a contribution and its signature to Amazon S3.
-pub async fn upload_chunk(
+pub async fn upload_chunk<S>(
     client: &Client,
     contrib_url: &str,
     contrib_sig_url: &str,
-    contribution: Vec<u8>,
+    contribution_stream: S,
+    contribution_len: u64,
     contribution_signature: &ContributionFileSignature,
-) -> Result<()> {
+) -> Result<()>
+where S: Stream<Item = std::result::Result<Bytes, std::io::Error>> + std::marker::Send + std::marker::Sync + 'static {
     let json_sig = serde_json::to_vec(&contribution_signature)?;
-    let contrib_req = client.put(contrib_url).body(contribution);
+    let contrib_req = client.put(contrib_url).body(reqwest::Body::wrap_stream(contribution_stream)).header(CONTENT_TYPE, "application/octet-stream").header(CONTENT_LENGTH_HEADER, contribution_len);
     let contrib_sig_req = client
         .put(contrib_sig_url)
         .body(json_sig)
