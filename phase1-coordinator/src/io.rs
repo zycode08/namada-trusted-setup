@@ -3,10 +3,10 @@ use std::{io::Write, ops::Deref, fmt::Display};
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
 use colored::*;
+use crossterm::{execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen}};
 #[cfg(not(debug_assertions))]
 use rand::prelude::SliceRandom;
 use regex::Regex;
-use termion::screen::AlternateScreen;
 use thiserror::Error;
 #[cfg(not(debug_assertions))]
 use tracing::debug;
@@ -140,18 +140,17 @@ pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
     } else {
         // Print mnemonic to the user in a different terminal
         {
-            let mut secret_screen = AlternateScreen::from(std::io::stdout());
+            execute!(std::io::stdout(), EnterAlternateScreen)?;
             println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
             get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
-        } // End scope, get back to stdout
+            execute!(std::io::stdout(), LeaveAlternateScreen)?;
+        }
 
         #[cfg(not(debug_assertions))]
         {
-            let verification_outcome = {
-                let mut secret_screen = AlternateScreen::from(std::io::stdout());
-                // Check if the user has correctly stored the mnemonic
-                check_mnemonic(&mnemonic)
-            };
+            execute!(std::io::stdout(), EnterAlternateScreen)?;
+            let verification_outcome = check_mnemonic(&mnemonic);
+            execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
             match verification_outcome {
                 Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),

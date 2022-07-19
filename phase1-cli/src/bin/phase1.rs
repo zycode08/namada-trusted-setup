@@ -11,6 +11,7 @@ use reqwest::{Client, Url};
 
 use anyhow::Result;
 use bytes::Bytes;
+use crossterm::{execute, terminal::{Clear, ClearType, ScrollDown}};
 use futures_util::StreamExt;
 use phase1_cli::{requests, CeremonyOpt};
 use serde_json;
@@ -148,6 +149,7 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 #[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
     // Print instructions to the user
+    // FIXME: use format!()
     println!(
         "{}:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
         "Instructions".bold().underline(),
@@ -228,7 +230,7 @@ async fn contribute(
     debug!("Presigned url: {}", challenge_url);
     println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE);
     let mut challenge_stream = requests::get_challenge(client, challenge_url.as_str()).await?;
-    let progress_bar = ProgressBar::new(challenge_stream.1); //FIXME:
+    let progress_bar = ProgressBar::new(challenge_stream.1);
     progress_bar.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40} {bytes_per_sec} {total_bytes}")
     .progress_chars("#>-"));
     let mut challenge: Vec<u8> = Vec::new();
@@ -315,7 +317,7 @@ async fn contribute(
 
     let (contribution_url, contribution_signature_url) =
         requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
-    println!("{} {} Uploading contribution", "[9/11]".bold().dimmed(), SEND); // FIXME: progress bar here
+    println!("{} {} Uploading contribution", "[9/11]".bold().dimmed(), SEND); // FIXME: progress bar here, https://github.com/console-rs/indicatif/blob/main/examples/multi.rs
     requests::upload_chunk(
         client,
         contribution_url.as_str(),
@@ -391,6 +393,7 @@ async fn contribution_loop(
     });
 
     let mut round_height = 0;
+    let mut status_count = 1;
 
     loop {
         // Check the contributor's position in the queue
@@ -408,12 +411,14 @@ async fn contribution_loop(
                 );
 
                 let max_len = msg.split("\n").map(|x| x.len()).max().unwrap();
+                let stripe = "=".repeat(max_len);
 
-                println!("{} Queue status", INFO);
-                println!("{}", "=".repeat(max_len));
-                println!("{}", msg);
-                println!("{}", "=".repeat(max_len));
-                // FIXME: this should rewrite not append (maybe with the spinner?)
+                if status_count > 1 {
+                    // Clear previous status from terminal
+                    crossterm::execute!(std::io::stdout(), ScrollDown(6), Clear(ClearType::FromCursorDown)).unwrap();
+                }
+                println!("{} {}{}\n{}\n{}\n{}", INFO, "Queue status, poll #", status_count, stripe, msg, stripe);
+                status_count += 1;
             }
             ContributorStatus::Round => {
                 round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
