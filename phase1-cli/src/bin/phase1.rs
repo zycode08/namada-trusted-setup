@@ -228,7 +228,7 @@ async fn contribute(
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
     heartbeat_handle: &JoinHandle<()>,
-) -> Result<u64> { //FIXME: clones
+) -> Result<u64> {
     // Get the necessary info to compute the contribution
     println!("{} {} Locking chunk", "[4/11]".bold().dimmed(), LOCK);
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
@@ -263,10 +263,10 @@ async fn contribute(
     // Prepare contribution file with the challege hash
     println!("{} {} Setting up contribution file", "[6/11]".bold().dimmed(), SETUP);
     let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
-    let contrib_filename = format!(
+    let contrib_filename = Arc::new(format!(
         "namada_contribution_round_{}_public_key_{}.params",
         round_height, base58_pubkey
-    );
+    ));
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
@@ -274,8 +274,8 @@ async fn contribute(
     contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
 
     println!("{} {} Computing contribution", "[7/11]".bold().dimmed(), COMPUTE);
+
     let contrib_filename_copy = contrib_filename.clone();
-    let contrib_filename_copy_two = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_another_machine {
         tokio::task::spawn_blocking(move || {
@@ -289,9 +289,10 @@ async fn contribute(
         })
         .await??;
     }
+    let contrib_filename_copy = contrib_filename.clone();
     let contribution = tokio::task::spawn_blocking(move || {
         get_file_as_byte_vec(
-            contrib_filename_copy_two.as_str(),
+            contrib_filename_copy.as_str(),
             round_height,
             response_locator.contribution_id(),
         )
