@@ -149,29 +149,30 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 #[inline(always)]
 fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
     // Print instructions to the user
-    // FIXME: use format!()
-    println!(
-        "{}:\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. For this you will also need the content of the file {} also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony",
+    let mut msg = format!(
+        "{}:\n\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. You will also need the content of the file {}, also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony.\n",
         "Instructions".bold().underline(),
         contribution_filename, challenge_filename
     );
-    println!("If you want to use the provided \"contribute --offline\" command follow these steps:");
-    println!(
-        "{:4}1- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"",
-        "", challenge_filename, OFFLINE_CHALLENGE_FILE_NAME
-    );
-    println!(
-        "{:4}2- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"",
-        "", contribution_filename, OFFLINE_CONTRIBUTION_FILE_NAME
-    );
-    println!(
-        "{:4}3- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"",
-        "",
-    );
-    println!(
-        "{:4}4- Copy the content of file \"{}\" back to this directory in the original file \"{}\" (overwrite the entire file)",
-        "", OFFLINE_CONTRIBUTION_FILE_NAME, contribution_filename
-    );
+    msg.push_str("\nIf you want to use the provided \"contribute --offline\" command follow these steps:\n");
+    msg.push_str(
+    format!(
+        "{:4}{}- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"\n",
+        "", "1".bold(), challenge_filename, OFFLINE_CHALLENGE_FILE_NAME
+    ).as_str());
+    msg.push_str(format!(
+        "{:4}{}- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"\n",
+        "", "2".bold(), contribution_filename, OFFLINE_CONTRIBUTION_FILE_NAME
+    ).as_str());
+    msg.push_str(format!(
+        "{:4}{}- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"\n",
+        "", "3".bold()
+    ).as_str());
+    msg.push_str(format!(
+        "{:4}{}- Copy the content of file \"{}\" back to this directory, in the original file \"{}\" (overwrite the entire file)",
+        "", "4".bold(), OFFLINE_CONTRIBUTION_FILE_NAME, contribution_filename
+    ).as_str());
+    println!("{}", msg);
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
