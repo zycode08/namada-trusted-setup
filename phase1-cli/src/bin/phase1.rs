@@ -26,7 +26,6 @@ use std::{
 };
 
 use chrono::Utc;
-use console::Emoji;
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 use owo_colors::OwoColorize;
 
@@ -42,20 +41,6 @@ use tracing::{debug, trace};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
-
-const NINJA: Emoji = Emoji("🥷  ", "");
-const TRUCK: Emoji = Emoji("🚚 ", "");
-const LINK: Emoji = Emoji("🔗 ", "");
-const SUCCESS: Emoji = Emoji("🎉 ", "");
-const INFO: Emoji = Emoji("⏱️ ", "");
-const LOCK: Emoji = Emoji("🔒 ", "");
-const RECEIVE: Emoji = Emoji("⚾ ", "");
-const SETUP: Emoji = Emoji("🛠️  ", "");
-const COMPUTE: Emoji = Emoji("🚂 ", "");
-const UPDATE: Emoji = Emoji("🔄 ", "");
-const SEND: Emoji = Emoji("⬆️ ", "");
-const QUESTION: Emoji = Emoji("❔ ", "");
-const EXCLAMATION: Emoji = Emoji("❕ ", "");
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -79,7 +64,7 @@ macro_rules! pretty_hash {
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
     let incentivization = io::get_user_input(
-        format!("{}{}", QUESTION, "Do you want to participate in the incentivised trusted setup? [y/n]".yellow()),
+        "Do you want to participate in the incentivised trusted setup? [y/n]".yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -100,7 +85,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 /// Asks the user wheter he wants to use a custom seed of randomness or not
 fn get_seed_of_randomness() -> Result<bool> {
     let custom_seed = io::get_user_input(
-        format!("{}{}", QUESTION, "Do you want to input your own seed of randomness? [y/n]".yellow()),
+        "Do you want to input your own seed of randomness? [y/n]".yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -112,7 +97,7 @@ fn get_seed_of_randomness() -> Result<bool> {
 #[inline(always)]
 fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
     let offline = io::get_user_input(
-        format!("{}{}", QUESTION, "Do you want to contribute on another machine? [y/n]".yellow()),
+        "Do you want to contribute on another machine? [y/n]".yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -228,7 +213,7 @@ async fn contribute(
     heartbeat_handle: &JoinHandle<()>,
 ) -> Result<u64> {
     // Get the necessary info to compute the contribution
-    println!("{} {} Locking chunk", "[4/11]".bold().dimmed(), LOCK);
+    println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
@@ -237,7 +222,7 @@ async fn contribute(
 
     let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
     debug!("Presigned url: {}", challenge_url);
-    println!("{} {} Getting challenge", "[5/11]".bold().dimmed(), RECEIVE);
+    println!("{} Getting challenge", "[5/11]".bold().dimmed());
     let mut challenge_stream = requests::get_challenge(client, challenge_url.as_str()).await?;
     let progress_bar = get_progress_bar(challenge_stream.1);
     let mut challenge: Vec<u8> = Vec::new();
@@ -259,7 +244,7 @@ async fn contribute(
     debug!("Challenge length {}", challenge.len());
 
     // Prepare contribution file with the challege hash
-    println!("{} {} Setting up contribution file", "[6/11]".bold().dimmed(), SETUP);
+    println!("{} Setting up contribution file", "[6/11]".bold().dimmed());
     let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
     let contrib_filename = Arc::new(format!(
         "namada_contribution_round_{}_public_key_{}.params",
@@ -271,7 +256,7 @@ async fn contribute(
     // Compute contribution
     contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
 
-    println!("{} {} Computing contribution", "[7/11]".bold().dimmed(), COMPUTE);
+    println!("{} Computing contribution", "[7/11]".bold().dimmed());
 
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
@@ -305,7 +290,7 @@ async fn contribute(
     );
 
     // Update contribution info
-    println!("{}{} Updating contribution info", "[8/11]".bold().dimmed(), UPDATE);
+    println!("{} Updating contribution info", "[8/11]".bold().dimmed());
     let contribution_file_hash = calculate_hash(contribution.as_ref());
     let contribution_file_hash_str = hex::encode(contribution_file_hash);
     debug!("Contribution hash is {}", contribution_file_hash_str);
@@ -326,7 +311,7 @@ async fn contribute(
 
     let (contribution_url, contribution_signature_url) =
         requests::get_contribution_url(client, coordinator, keypair, &round_height).await?;
-    println!("{} {} Uploading contribution", "[9/11]".bold().dimmed(), SEND);
+    println!("{} Uploading contribution", "[9/11]".bold().dimmed());
     let contrib_file = async_fs::File::open(contrib_filename.as_str()).await?;
     let contrib_size = async_fs::metadata(contrib_filename.as_str()).await?.len();
     let mut stream = ReaderStream::new(contrib_file);
@@ -359,7 +344,7 @@ async fn contribute(
         .expect(&format!("{}", "Error while signing the contribution info".red().bold()));
 
     // Write contribution info file and send it to the Coordinator
-    println!("{} {} Uploading contribution info", "[10/11]".bold().dimmed(), SEND);
+    println!("{} Uploading contribution info", "[10/11]".bold().dimmed());
     async_fs::write(
         format!("namada_contributor_info_round_{}.json", contrib_info.ceremony_round),
         &serde_json::to_vec(&contrib_info)?,
@@ -368,7 +353,7 @@ async fn contribute(
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     // Notify contribution to the coordinator for the verification
-    println!("{}{}Notifying the coordinator of the completed contribution", "[11/11]".bold().dimmed(), EXCLAMATION);
+    println!("{} Notifying the coordinator of the completed contribution", "[11/11]".bold().dimmed());
     let post_chunk_req = PostChunkRequest::new(
         round_height,
         locked_locators.next_contribution(),
@@ -395,7 +380,7 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
-    println!("{} {}Joining queue", "[3/11]".bold().dimmed(), LINK);
+    println!("{} Joining queue", "[3/11]".bold().dimmed());
     requests::post_join_queue(&client, &coordinator, &keypair)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
@@ -442,7 +427,7 @@ async fn contribution_loop(
                     // Clear previous status from terminal
                     crossterm::execute!(std::io::stdout(), ScrollDown(6), Clear(ClearType::FromCursorDown)).unwrap();
                 }
-                println!("{} {}{}\n{}\n{}\n{}", INFO, "Queue status, poll #", status_count, stripe, msg, stripe);
+                println!("{}{}\n{}\n{}\n{}", "Queue status, poll #", status_count, stripe, msg, stripe);
                 status_count += 1;
             }
             ContributorStatus::Round => {
@@ -452,10 +437,8 @@ async fn contribution_loop(
             }
             ContributorStatus::Finished => {
                 println!(
-                    "{} {} {}\nWe will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
-                    SUCCESS,
+                    "{} \nWe will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
                     "Contribution done, thank you!".green().bold(),
-                    SUCCESS,
                     round_height
                 );
                 break;
@@ -521,12 +504,12 @@ async fn main() {
         CeremonyOpt::Contribute { url, offline } => {
             if offline {
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
-                println!("{} {}Reading challenge", "[1/2]".bold().dimmed(), RECEIVE);
+                println!("{} Reading challenge", "[1/2]".bold().dimmed());
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
                     .await
                     .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
 
-                println!("{} {}Computing contribution", "[2/2]".bold().dimmed(), COMPUTE);
+                println!("{} Computing contribution", "[2/2]".bold().dimmed());
                 tokio::task::spawn_blocking(move || {
                     compute_contribution(
                         get_seed_of_randomness().unwrap(),
@@ -543,13 +526,13 @@ async fn main() {
 
             // Perform the entire contribution cycle
             println!("{}", "Welcome to the Namada trusted setup ceremony!".bold());
-            println!("{} {}Generating keypair", "[1/11]".bold().dimmed(), NINJA);
+            println!("{} Generating keypair", "[1/11]".bold().dimmed());
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
                 .unwrap()
                 .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
-            println!("{} {}Initializing contribution", "[2/11]".bold().dimmed(), TRUCK);
+            println!("{} Initializing contribution", "[2/11]".bold().dimmed());
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
                 .unwrap()
@@ -600,4 +583,5 @@ async fn main() {
     }
 }
 
-// FIXME: test client on linux against AWS server
+// FIXME: fix compilation warnings
+// FIXME: fmt
