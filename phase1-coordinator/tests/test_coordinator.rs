@@ -206,6 +206,31 @@ fn test_stop_coordinator() {
 }
 
 #[test]
+fn test_get_healthcheck() {
+    // Create status file
+    let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
+    let file_content =
+        "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
+    status_file.write_all(file_content.as_bytes());
+    std::env::set_var("HEALTH_PATH", status_file.path());
+
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    let req = client.get("/healthcheck");
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+
+    // It's impossible to extract the String out of the Body struct of the response, need to pass through serde
+    let response_body: serde_json::Value = response.into_json().unwrap();
+    let response_str = serde_json::to_string(&response_body).unwrap();
+    if response_str != file_content {
+        panic!("JSON status content doesn't match the expected one")
+    }
+}
+
+#[test]
 fn test_get_contributor_queue_status() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
@@ -460,6 +485,7 @@ fn test_wrong_post_contribution_info() {
 ///
 #[test]
 fn test_contribution() {
+    //FIXME: test drop. Need to call the update endpoint on the coordinator
     use setup_utils::calculate_hash;
 
     let ctx = build_context();

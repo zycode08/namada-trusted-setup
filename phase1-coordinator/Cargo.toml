@@ -22,12 +22,14 @@ anyhow = { version = "1.0.37" }
 base64 = "0.13.0"
 bip39 = { version = "1.0.1", default-features = false }
 chrono = "0.4"
+crossterm = "0.24.0"
 ed25519-compact = "1.0.11"
 fs-err = { version = "2.6.0" }
 futures = { version = "0.3" }
 lazy_static = "1.4.0"
 memmap = { version = "0.7.0" }
 once_cell = { version = "1.5.2" }
+owo-colors = "3.4.0"
 rayon = { version = "1.4.1" }
 regex = "1"
 rusoto_core = { version="0.48.0", default_features=false, features=["rustls"] }
@@ -38,7 +40,6 @@ serde-aux = { version = "3.0" }
 serde-diff = { version = "0.4" }
 serde_json = { version = "1.0" }
 serde_with = { version = "1.8", features = ["macros"] }
-termion = "1.5.6"
 thiserror = { version = "1.0" }
 time = { version = "0.3", features = ["serde-human-readable", "macros"] }
 tracing = { version = "0.1" }

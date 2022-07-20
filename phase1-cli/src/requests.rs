@@ -1,5 +1,7 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
+use bytes::Bytes;
+use futures_util::Stream;
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::ContributionInfo,
@@ -222,11 +224,15 @@ pub async fn get_challenge_url(
 }
 
 /// Send a request to Amazon S3 to download the next challenge.
-pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<Vec<u8>> {
+pub async fn get_challenge(
+    client: &Client,
+    challenge_url: &str,
+) -> Result<(impl Stream<Item = reqwest::Result<Bytes>>, u64)> {
     let req = client.get(challenge_url);
     let response = req.send().await?;
+    let stream_len = response.content_length().unwrap();
 
-    Ok(decapsulate_response(response).await?.bytes().await?.to_vec())
+    Ok((decapsulate_response(response).await?.bytes_stream(), stream_len))
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to get the target Strings where to upload the contribution and its signature.
@@ -257,15 +263,23 @@ async fn upload_object(req: RequestBuilder) -> Result<()> {
 }
 
 /// Upload a contribution and its signature to Amazon S3.
-pub async fn upload_chunk(
+pub async fn upload_chunk<S>(
     client: &Client,
     contrib_url: &str,
     contrib_sig_url: &str,
-    contribution: Vec<u8>,
+    contribution_stream: S,
+    contribution_len: u64,
     contribution_signature: &ContributionFileSignature,
-) -> Result<()> {
+) -> Result<()>
+where
+    S: Stream<Item = std::result::Result<Bytes, std::io::Error>> + std::marker::Send + std::marker::Sync + 'static,
+{
     let json_sig = serde_json::to_vec(&contribution_signature)?;
-    let contrib_req = client.put(contrib_url).body(contribution);
+    let contrib_req = client
+        .put(contrib_url)
+        .body(reqwest::Body::wrap_stream(contribution_stream))
+        .header(CONTENT_TYPE, "application/octet-stream")
+        .header(CONTENT_LENGTH_HEADER, contribution_len);
     let contrib_sig_req = client
         .put(contrib_sig_url)
         .body(json_sig)

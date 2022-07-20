@@ -20,6 +20,7 @@ status.json
 namada_contributor_info_round_*
 status.json
 *keypair
+coordinator.mnemonic
 
 # AWS
 aws

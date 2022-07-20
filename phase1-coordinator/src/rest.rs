@@ -20,13 +20,14 @@ use rocket::{
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
-    tokio::{sync::RwLock, task},
+    tokio::{fs, sync::RwLock, task},
     Shutdown,
     State,
 };
 
 use sha2::Sha256;
 
+use lazy_static::lazy_static;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
@@ -44,6 +45,13 @@ pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
 pub const SIGNATURE_HEADER: &str = "ATS-Signature";
 pub const CONTENT_LENGTH_HEADER: &str = "Content-Length";
+
+lazy_static! {
+    static ref HEALTH_PATH: String = match std::env::var("HEALTH_PATH") {
+        Ok(path) => path,
+        Err(_) => ".".to_string(),
+    };
+}
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
 
@@ -846,7 +854,7 @@ pub async fn post_contribution_info(
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
-#[get("/contribution_info", format = "json")]
+#[get("/contribution_info")]
 pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
     let summary = task::spawn_blocking(move || read_lock.storage().get_contributions_summary())
@@ -854,4 +862,14 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
         .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     Ok(summary)
+}
+
+/// Retrieve healthcheck info. This endpoint is accessible by anyone and does not require a signed request.
+#[get("/healthcheck", format = "json")]
+pub async fn get_healthcheck() -> Result<String> {
+    let content = fs::read_to_string(HEALTH_PATH.as_str())
+        .await
+        .map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+    Ok(content)
 }
