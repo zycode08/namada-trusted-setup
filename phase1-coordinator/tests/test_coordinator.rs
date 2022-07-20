@@ -484,7 +484,8 @@ fn test_wrong_post_contribution_info() {
 /// - join_queue with already contributed Ip
 ///
 #[test]
-fn test_contribution() { //FIXME: test drop. Need to call the update endpoint on the coordinator
+fn test_contribution() {
+    //FIXME: test drop. Need to call the update endpoint on the coordinator
     use setup_utils::calculate_hash;
 
     let ctx = build_context();

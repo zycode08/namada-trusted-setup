@@ -20,7 +20,7 @@ use rocket::{
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
-    tokio::{sync::RwLock, task, fs},
+    tokio::{fs, sync::RwLock, task},
     Shutdown,
     State,
 };
@@ -867,7 +867,9 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
 /// Retrieve healthcheck info. This endpoint is accessible by anyone and does not require a signed request.
 #[get("/healthcheck", format = "json")]
 pub async fn get_healthcheck() -> Result<String> {
-    let content = fs::read_to_string(HEALTH_PATH.as_str()).await.map_err(|e| ResponseError::IoError(e.to_string()))?;
+    let content = fs::read_to_string(HEALTH_PATH.as_str())
+        .await
+        .map_err(|e| ResponseError::IoError(e.to_string()))?;
 
     Ok(content)
 }

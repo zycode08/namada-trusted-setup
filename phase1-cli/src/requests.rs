@@ -1,5 +1,7 @@
 //! Requests sent to the [Coordinator](`phase1-coordinator::Coordinator`) server.
 
+use bytes::Bytes;
+use futures_util::Stream;
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::ContributionInfo,
@@ -13,8 +15,6 @@ use phase1_coordinator::{
     },
     ContributionFileSignature,
 };
-use bytes::Bytes;
-use futures_util::Stream;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client,
@@ -224,7 +224,10 @@ pub async fn get_challenge_url(
 }
 
 /// Send a request to Amazon S3 to download the next challenge.
-pub async fn get_challenge(client: &Client, challenge_url: &str) -> Result<(impl Stream<Item = reqwest::Result<Bytes>>, u64)> {
+pub async fn get_challenge(
+    client: &Client,
+    challenge_url: &str,
+) -> Result<(impl Stream<Item = reqwest::Result<Bytes>>, u64)> {
     let req = client.get(challenge_url);
     let response = req.send().await?;
     let stream_len = response.content_length().unwrap();
@@ -268,9 +271,15 @@ pub async fn upload_chunk<S>(
     contribution_len: u64,
     contribution_signature: &ContributionFileSignature,
 ) -> Result<()>
-where S: Stream<Item = std::result::Result<Bytes, std::io::Error>> + std::marker::Send + std::marker::Sync + 'static {
+where
+    S: Stream<Item = std::result::Result<Bytes, std::io::Error>> + std::marker::Send + std::marker::Sync + 'static,
+{
     let json_sig = serde_json::to_vec(&contribution_signature)?;
-    let contrib_req = client.put(contrib_url).body(reqwest::Body::wrap_stream(contribution_stream)).header(CONTENT_TYPE, "application/octet-stream").header(CONTENT_LENGTH_HEADER, contribution_len);
+    let contrib_req = client
+        .put(contrib_url)
+        .body(reqwest::Body::wrap_stream(contribution_stream))
+        .header(CONTENT_TYPE, "application/octet-stream")
+        .header(CONTENT_LENGTH_HEADER, contribution_len);
     let contrib_sig_req = client
         .put(contrib_sig_url)
         .body(json_sig)

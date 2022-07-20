@@ -11,8 +11,10 @@ use reqwest::{Client, Url};
 
 use anyhow::Result;
 use async_stream::try_stream;
-use bytes::Bytes;
-use crossterm::{execute, terminal::{Clear, ClearType, ScrollDown}};
+use crossterm::{
+    execute,
+    terminal::{Clear, ClearType, ScrollDown},
+};
 use futures_util::StreamExt;
 use phase1_cli::{requests, CeremonyOpt};
 use serde_json;
@@ -26,7 +28,7 @@ use std::{
 };
 
 use chrono::Utc;
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
+use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
 use base64;
@@ -132,8 +134,11 @@ fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64)
 
 fn get_progress_bar(len: u64) -> ProgressBar {
     let progress_bar = ProgressBar::new(len);
-    progress_bar.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40} {bytes_per_sec} {total_bytes}")
-    .progress_chars("#>-"));
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] {bar:40} {bytes_per_sec} {total_bytes}")
+            .progress_chars("#>-"),
+    );
 
     progress_bar
 }
@@ -145,7 +150,8 @@ fn compute_contribution_offline(contribution_filename: &str, challenge_filename:
     let mut msg = format!(
         "{}:\n\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. You will also need the content of the file {}, also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony.\n",
         "Instructions".bold().underline(),
-        contribution_filename, challenge_filename
+        contribution_filename,
+        challenge_filename
     );
     msg.push_str("\nIf you want to use the provided \"contribute --offline\" command follow these steps:\n");
     msg.push_str(
@@ -157,10 +163,14 @@ fn compute_contribution_offline(contribution_filename: &str, challenge_filename:
         "{:4}{}- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"\n",
         "", "2".bold(), contribution_filename, OFFLINE_CONTRIBUTION_FILE_NAME
     ).as_str());
-    msg.push_str(format!(
-        "{:4}{}- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"\n",
-        "", "3".bold()
-    ).as_str());
+    msg.push_str(
+        format!(
+            "{:4}{}- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"\n",
+            "",
+            "3".bold()
+        )
+        .as_str(),
+    );
     msg.push_str(format!(
         "{:4}{}- Copy the content of file \"{}\" back to this directory, in the original file \"{}\" (overwrite the entire file)",
         "", "4".bold(), OFFLINE_CONTRIBUTION_FILE_NAME, contribution_filename
@@ -353,7 +363,10 @@ async fn contribute(
     requests::post_contribution_info(client, coordinator, keypair, &contrib_info).await?;
 
     // Notify contribution to the coordinator for the verification
-    println!("{} Notifying the coordinator of the completed contribution", "[11/11]".bold().dimmed());
+    println!(
+        "{} Notifying the coordinator of the completed contribution",
+        "[11/11]".bold().dimmed()
+    );
     let post_chunk_req = PostChunkRequest::new(
         round_height,
         locked_locators.next_contribution(),
@@ -396,7 +409,10 @@ async fn contribution_loop(
     let heartbeat_handle = tokio::task::spawn(async move {
         loop {
             if let Err(e) = requests::post_heartbeat(&client_cnt, &coordinator_cnt, &keypair_cnt).await {
-                eprintln!("{}", format!("{}: {}", "Heartbeat error".red().bold(), e.to_string().red().bold()));
+                eprintln!(
+                    "{}",
+                    format!("{}: {}", "Heartbeat error".red().bold(), e.to_string().red().bold())
+                );
             }
             time::sleep(UPDATE_TIME).await;
         }
@@ -425,9 +441,12 @@ async fn contribution_loop(
 
                 if status_count > 1 {
                     // Clear previous status from terminal
-                    crossterm::execute!(std::io::stdout(), ScrollDown(6), Clear(ClearType::FromCursorDown)).unwrap();
+                    execute!(std::io::stdout(), ScrollDown(6), Clear(ClearType::FromCursorDown)).unwrap();
                 }
-                println!("{}{}\n{}\n{}\n{}", "Queue status, poll #", status_count, stripe, msg, stripe);
+                println!(
+                    "{}{}\n{}\n{}\n{}",
+                    "Queue status, poll #", status_count, stripe, msg, stripe
+                );
                 status_count += 1;
             }
             ContributorStatus::Round => {
@@ -444,7 +463,12 @@ async fn contribution_loop(
                 break;
             }
             ContributorStatus::Banned => {
-                println!("{}", "This contributor has been banned from the ceremony because of an invalid contribution.".red().bold());
+                println!(
+                    "{}",
+                    "This contributor has been banned from the ceremony because of an invalid contribution."
+                        .red()
+                        .bold()
+                );
                 break;
             }
             ContributorStatus::Other => {
@@ -582,6 +606,3 @@ async fn main() {
         }
     }
 }
-
-// FIXME: fix compilation warnings
-// FIXME: fmt

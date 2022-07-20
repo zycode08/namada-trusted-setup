@@ -1,8 +1,11 @@
-use std::{io::Write, ops::Deref, fmt::Display};
+use std::{fmt::Display, io::Write, ops::Deref};
 
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
-use crossterm::{execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen}};
+use crossterm::{
+    execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+};
 use owo_colors::OwoColorize;
 #[cfg(not(debug_assertions))]
 use rand::prelude::SliceRandom;
@@ -53,7 +56,12 @@ impl From<MnemonicWrap> for Mnemonic {
 impl Display for MnemonicWrap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Get longest word
-        let max_len = self.word_iter().enumerate().map(|(i, word)| word.len() + 4 + (if i < 10 {1} else {2})).max().unwrap();
+        let max_len = self
+            .word_iter()
+            .enumerate()
+            .map(|(i, word)| word.len() + 4 + (if i < 10 { 1 } else { 2 }))
+            .max()
+            .unwrap();
 
         // Display
         let mut i = 0;
@@ -89,7 +97,9 @@ impl Display for MnemonicWrap {
 /// Helper function to get input from the user. Accept an optional [`Regex`] to
 /// check the validity of the reply.
 pub fn get_user_input<S>(request: S, expected: Option<&Regex>) -> Result<String>
-where S: std::fmt::Display {
+where
+    S: std::fmt::Display,
+{
     let mut response = String::new();
 
     loop {
@@ -123,17 +133,18 @@ pub fn keypair_from_mnemonic() -> Result<KeyPair> {
     let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
         .map_err(|e| IOError::MnemonicError(e))?;
     let seed = mnemonic.to_seed_normalized("");
-    
+
     Ok(KeyPair::try_from_seed(&seed)?)
 }
 
-/// Generates a new [`KeyPair`] from a randomly generated mnemonic. If argument `is_server` is set than the mnemonic is saved 
+/// Generates a new [`KeyPair`] from a randomly generated mnemonic. If argument `is_server` is set than the mnemonic is saved
 /// to a file, otherwise it gets printed to the user.
 pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
     // Generate random mnemonic
     let mut rng = rand_06::thread_rng();
     let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
-        .map_err(|e| IOError::MnemonicError(e))?.into();
+        .map_err(|e| IOError::MnemonicError(e))?
+        .into();
 
     if is_server {
         std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
