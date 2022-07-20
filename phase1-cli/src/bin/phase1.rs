@@ -73,9 +73,9 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 
     if incentivization == "y" {
         // Ask for personal info
-        contrib_info.full_name = Some(io::get_user_input("Please enter your full name:", None)?);
+        contrib_info.full_name = Some(io::get_user_input("Please enter your full name:".yellow(), None)?);
         contrib_info.email = Some(io::get_user_input(
-            "Please enter your email address:",
+            "Please enter your email address:".yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
         )?);
         contrib_info.is_incentivized = true;
@@ -209,7 +209,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     #[cfg(not(debug_assertions))]
     Computation::contribute_masp(challenge, writer, &rand_source);
 
-    println!("Randomness has been correctly produced in the target file");
+    println!("{}", "Randomness has been correctly produced in the target file".green().bold());
     Ok(())
 }
 
@@ -295,8 +295,9 @@ async fn contribute(
     contrib_info.timestamps.end_computation = Utc::now();
     trace!("Response writer {:?}", response_writer);
     println!(
-        "Completed contribution in {} seconds",
-        (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()
+        "{}",
+        format!("Completed contribution in {} seconds",
+        (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()).green().bold()
     );
 
     // Update contribution info
