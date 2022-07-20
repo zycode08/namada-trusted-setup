@@ -150,12 +150,10 @@ pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
         std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
     } else {
         // Print mnemonic to the user in a different terminal
-        {
-            execute!(std::io::stdout(), EnterAlternateScreen)?;
-            println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
-            get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
-            execute!(std::io::stdout(), LeaveAlternateScreen)?;
-        }
+        execute!(std::io::stdout(), EnterAlternateScreen)?;
+        println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
+        get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
+        execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
         #[cfg(not(debug_assertions))]
         {

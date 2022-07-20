@@ -25,6 +25,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Read,
     sync::Arc,
+    time::Duration
 };
 
 use chrono::Utc;
@@ -552,6 +553,7 @@ async fn main() {
             // Perform the entire contribution cycle
             println!("{}", "Welcome to the Namada trusted setup ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
+            time::sleep(Duration::from_secs(3)).await;
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
                 .unwrap()
