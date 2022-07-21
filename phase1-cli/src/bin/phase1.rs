@@ -25,7 +25,6 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Read,
     sync::Arc,
-    time::Duration
 };
 
 use chrono::Utc;
@@ -146,23 +145,23 @@ fn get_progress_bar(len: u64) -> ProgressBar {
 
 /// Contest and offline execution branches
 #[inline(always)]
-fn compute_contribution_offline(contribution_filename: &str, challenge_filename: &str) -> Result<()> {
+fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
     let mut msg = format!(
         "{}:\n\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. You will also need the content of the file {}, also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony.\n",
         "Instructions".bold().underline(),
-        contribution_filename,
-        challenge_filename
+        OFFLINE_CONTRIBUTION_FILE_NAME,
+        OFFLINE_CHALLENGE_FILE_NAME
     );
     msg.push_str("\nIf you want to use the provided \"contribute --offline\" command follow these steps:\n");
     msg.push_str(
     format!(
-        "{:4}{}- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"\n",
-        "", "1".bold(), challenge_filename, OFFLINE_CHALLENGE_FILE_NAME
+        "{:4}{}- Copy the file \"{}\" in the directory where you will execute the offline command\n",
+        "", "1".bold(), OFFLINE_CHALLENGE_FILE_NAME
     ).as_str());
     msg.push_str(format!(
-        "{:4}{}- Copy the content of file \"{}\" in the directory where you will execute the offline command, in a file named \"{}\"\n",
-        "", "2".bold(), contribution_filename, OFFLINE_CONTRIBUTION_FILE_NAME
+        "{:4}{}- Copy the file \"{}\" in the directory where you will execute the offline command\n",
+        "", "2".bold(), OFFLINE_CONTRIBUTION_FILE_NAME
     ).as_str());
     msg.push_str(
         format!(
@@ -173,8 +172,8 @@ fn compute_contribution_offline(contribution_filename: &str, challenge_filename:
         .as_str(),
     );
     msg.push_str(format!(
-        "{:4}{}- Copy the content of file \"{}\" back to this directory, in the original file \"{}\" (overwrite the entire file)",
-        "", "4".bold(), OFFLINE_CONTRIBUTION_FILE_NAME, contribution_filename
+        "{:4}{}- Copy the file \"{}\" back to this directory (overwrite the entire file)",
+        "", "4".bold(), OFFLINE_CONTRIBUTION_FILE_NAME
     ).as_str());
     println!("{}", msg);
 
@@ -246,7 +245,12 @@ async fn contribute(
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the offline contrib path
-    let challenge_filename = format!("namada_challenge_round_{}.params", round_height);
+    contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
+    let challenge_filename = if contrib_info.is_another_machine {
+        OFFLINE_CHALLENGE_FILE_NAME.to_string()
+    } else {
+        format!("namada_challenge_round_{}.params", round_height)
+    };
     let mut challenge_writer = async_fs::File::create(challenge_filename.as_str()).await?;
     challenge_writer.write_all(&challenge.as_slice()).await?;
 
@@ -257,23 +261,25 @@ async fn contribute(
     // Prepare contribution file with the challege hash
     println!("{} Setting up contribution file", "[6/11]".bold().dimmed());
     let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
-    let contrib_filename = Arc::new(format!(
+    let contrib_filename = if contrib_info.is_another_machine {
+        Arc::new(OFFLINE_CONTRIBUTION_FILE_NAME.to_string())
+    } else {
+        Arc::new(format!(
         "namada_contribution_round_{}_public_key_{}.params",
         round_height, base58_pubkey
-    ));
+    ))
+};
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
     // Compute contribution
-    contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
-
     println!("{} Computing contribution", "[7/11]".bold().dimmed());
 
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_another_machine {
         tokio::task::spawn_blocking(move || {
-            compute_contribution_offline(contrib_filename_copy.as_str(), challenge_filename.as_str())
+            compute_contribution_offline()
         })
         .await??;
     } else {
@@ -553,7 +559,7 @@ async fn main() {
             // Perform the entire contribution cycle
             println!("{}", "Welcome to the Namada trusted setup ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
-            time::sleep(Duration::from_secs(3)).await;
+            io::get_user_input("Press enter to continue".yellow(), None).unwrap();
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
                 .await
                 .unwrap()
