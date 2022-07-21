@@ -557,6 +557,8 @@ async fn main() {
             }
 
             // Perform the entire contribution cycle
+            let banner = async_fs::read_to_string("phase1-cli/ascii_logo.txt").await.unwrap();
+            println!("{}", banner.cyan());
             println!("{}", "Welcome to the Namada trusted setup ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
             io::get_user_input("Press enter to continue".yellow(), None).unwrap();
