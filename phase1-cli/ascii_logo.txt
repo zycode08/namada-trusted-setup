@@ -1,41 +1,19 @@
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-XXXXXXXX0kxxxxxxxxxxxxxxxxxxxk0XXXXXXXXXXXXXXXXXXXXXXXXXXXXKKXXXXXXXXXXXXXXXXXXX
-XXXXXXXXo.                   .oXXXXXXXXXXXXXXXXXXXXXXXXXXXx,:0XXXXXXXXXXXXXXXXXX
-XXXXXXXXl                     lXXXXXXXXXXXXXXXXXXXXXXXXXXd.  ,OXXXXXXXXXXXXXXXXX
-XXXXXXXXl      .........      lXXXXXXXXXXXXXXXXXXXXXXXXKo.    'kXXXXXXXXXXXXXXXX
-XXXXXXXXl     .d000000Od.     lXXXXXXXXXXXXXXXXXXXXXXX0c       .xXXXXXXXXXXXXXXX
-XXXXXKKXl     .kXXXXXXKx.     lXXXXXXXXKXXXXXXXXXXXXX0:         .dXXXXXXKXXXXXXX
-XXXXXXXXl     .kXXXXXXXk.     lXXXXXXXXXXXXXXXXXXXXXO::dxxxxxxxxo;oKXXXXXXXXXXXX
-XXXXXXXXl     .kXXXXXXXk.     lXXXXXXXXXXXXXXXXXXXXk' .oKXXXXXX0:  c0XXXXXXXXXXX
-XXXXXXXXl     .kXXXXXXXk.     lXXXXXXXXXXXXXXXXXXXd.   .lKXXXXO,    ;OXXXXXXXXXX
-XXXXXXXXl     .kXXXXXXXk.     lXXXXXXXXXXXXXXXXXKo.      :0XXk'      ,kXXXXXXXXX
-XXXXXXXXl     .kXXXXXXXk.     lXXXXXXXXXXXXXXXXKc.        ;kd.        .xXXXXXXXX
-XXXXXXKXkcccc:o0XXXXXXKOo::::ckXXXXXXXXKXXXXXXXOlcccccc::cldoccccccccccd0XXXXXXX
-XXXXXXKXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXKXXXXXXX
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-XXXXXXXXKkxxxxk0Oxxxxk0Oxxxxx0XXXXXXXXXXXXXXXXXXXOoooooooooooooooooooox0XXXXXXXX
-XXXXXXXXd.    'l,    .c:     cKXXXXXXXXXXXXXXXXXX:                    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:                    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:      ...'''...     .dXXXXXXXX
-XXXXXXXXd.    .l'     :,     :KXXXXXXXXXXXXXXXXXX:     ,OOdc:lx0d.    .dXXXXXXXX
-XXXXXKKXd.    .l'     :,     :KXXXXXXXXXXXXXXXXXX:     ;Oc    .dd.    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:     ;O:    .dd.    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:     ;00d::ckKd.    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:     ;0XXXXXXXd.    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:     ;0XXXXXXXd.    .dXXXXXXXX
-XXXXXXXXd.    .l'     c;     :KXXXXXXXXXXXXXXXXXX:     ;0XXXXXXXd.    .dXXXXXXXX
-XXXXXXKXOl:cc:okd:cc:cddcc::cxXXXXXXXXXXXXXXXXXXXklllllxXXXXXXXX0dlclld0XXXXXXXX
-XXXXXKXXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXXXXXXXXXX
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-XXXXXXXKOxxxxk0XKkkOKXXXXXXXXXXXXXXXXXXXXXXXXXXXX0xxxxxO0kxxxxk0Oxxxxk0XXXXXXXXX
-XXXXXXXXO,    .lXx. ..,cxKXXXXXXXXXXXXXXXXXXXXXXXl     ;l.    'l,    .oXXXXXXXXX
-XXXXXXXXO'     lXx.      'oKXXXXXXXXXXXXXXXXXXXXXc     ,l.    .l'     lXXXXXXXXX
-XXXXXXXXO'     lXk'        ,kXXXXXXXXXXXXXXXXXXXXo.....:o'....,o;.....dXXXXXXXXX
-XXXXXXXXO'     lXX0ko;      ,OXXXXXXXXXXXXXXXXXXXx::::;oxc;::;lxo;::::kXXXXXXXXX
-XXXXXXXXO'     lXXXXXKo.     cXXXXXXXXXKXXXXXXXXXc     ':.    .l'     lXKKXXXXXX
-XXXXXXXXO'     lXXXXXXKo,,,,,oKXXXXXXXXXXXXXXXXXXc     ,l.    .l'     lXXXXXXXXX
-XXXXXXXXO'     c0000000000000KXXXXXXXXXXXXXXXXXXXd,,,,,ld:,,,':xl,,,,;xXXXXXXXXX
-XXXXXXXXO'                   'kXXXXXXXXXXXXXXXXXXc     'OXXXXXXk.     lXXXXXXXXX
-XXXXXXXXO'                   'OXXXXXXXXXXXXXXXXXXc     'OXXXXXXk.     lXXXXXXXXX
-XXXXXXXXKkddoddddddddddddddddxKXXXXXXXXKXXXXXXXXXkc::c:o0XXXXXX0o:cc:ckXKXXXXXXX
-XXXXXXXXKXXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXXKXXXXXXXXXXXXXXXXXXXXX
+ooooo      ooo       .o.       ooo        ooooo       .o.       oooooooooo.         .o.                                           
+`888b.     `8'      .888.      `88.       .888'      .888.      `888'   `Y8b       .888.                                          
+ 8 `88b.    8      .8"888.      888b     d'888      .8"888.      888      888     .8"888.                                         
+ 8   `88b.  8     .8' `888.     8 Y88. .P  888     .8' `888.     888      888    .8' `888.                                        
+ 8     `88b.8    .88ooo8888.    8  `888'   888    .88ooo8888.    888      888   .88ooo8888.                                       
+ 8       `888   .8'     `888.   8    Y     888   .8'     `888.   888     d88'  .8'     `888.                                      
+o8o        `8  o88o     o8888o o8o        o888o o88o     o8888o o888bood8P'   o88o     o8888o                                     
+                                                                                                                                  
+                                                                                                                                  
+                                                                                                                                  
+ooooooooooooo                                   .                   .o8       .oooooo..o               .                          
+8'   888   `8                                 .o8                  "888      d8P'    `Y8             .o8                          
+     888      oooo d8b oooo  oooo   .oooo.o .o888oo  .ooooo.   .oooo888      Y88bo.       .ooooo.  .o888oo oooo  oooo  oo.ooooo.  
+     888      `888""8P `888  `888  d88(  "8   888   d88' `88b d88' `888       `"Y8888o.  d88' `88b   888   `888  `888   888' `88b 
+     888       888      888   888  `"Y88b.    888   888ooo888 888   888           `"Y88b 888ooo888   888    888   888   888   888 
+     888       888      888   888  o.  )88b   888 . 888    .o 888   888      oo     .d8P 888    .o   888 .  888   888   888   888 
+    o888o     d888b     `V88V"V8P' 8""888P'   "888" `Y8bod8P' `Y8bod88P"     8""88888P'  `Y8bod8P'   "888"  `V88V"V8P'  888bod8P' 
+                                                                                                                        888       
+                                                                                                                       o888o      

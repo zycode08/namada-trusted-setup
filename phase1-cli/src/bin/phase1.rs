@@ -87,12 +87,16 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 /// Asks the user wheter he wants to use a custom seed of randomness or not
 fn get_seed_of_randomness() -> Result<bool> {
     let custom_seed = io::get_user_input(
-        "Do you want to input your own seed of randomness? [y/n]".yellow(),
+        "Do you want to input your own seed of randomness (32 bytes hex encoded)? [y/n]".yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
+    if custom_seed == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -148,7 +152,10 @@ fn get_progress_bar(len: u64) -> ProgressBar {
 fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
     let mut msg = format!(
-        "{}:\n\nYou can find the file {} in the current working directory. Use its content as the prelude of your file and append your contribution to it. You will also need the content of the file {}, also present in this directory. You have 15 minutes of time to compute the randomness, after which you will be dropped out of the ceremony.\n",
+        "{}:\n
+        In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".
+        To contribute, you will need both files. Use the contribution file as prelude and append your contribution to it.
+        Starting from now, you will have 15 minutes of time to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\n",
         "Instructions".bold().underline(),
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
@@ -156,30 +163,34 @@ fn compute_contribution_offline() -> Result<()> {
     msg.push_str("\nIf you want to use the provided \"contribute --offline\" command follow these steps:\n");
     msg.push_str(
     format!(
-        "{:4}{}- Copy the file \"{}\" in the directory where you will execute the offline command\n",
-        "", "1".bold(), OFFLINE_CHALLENGE_FILE_NAME
-    ).as_str());
-    msg.push_str(format!(
-        "{:4}{}- Copy the file \"{}\" in the directory where you will execute the offline command\n",
-        "", "2".bold(), OFFLINE_CONTRIBUTION_FILE_NAME
+        "{:4}{}- Copy both the challenge file \"{}\" and contribution file \"{}\" in the directory where you will execute the offline command\n",
+        "", "1".bold(), 
+        OFFLINE_CHALLENGE_FILE_NAME,
+        OFFLINE_CONTRIBUTION_FILE_NAME
     ).as_str());
     msg.push_str(
         format!(
-            "{:4}{}- Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"\n",
+            "{:4}{}- Execute the command \"{}\"\n",
             "",
-            "3".bold()
+            "2".bold(),
+            "cargo run --release --bin phase1 --features=cli contribute --offline".bold()
         )
         .as_str(),
     );
-    msg.push_str(format!(
-        "{:4}{}- Copy the file \"{}\" back to this directory (overwrite the entire file)",
-        "", "4".bold(), OFFLINE_CONTRIBUTION_FILE_NAME
-    ).as_str());
+    msg.push_str(
+        format!(
+            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previousvicious file)",
+            "",
+            "3".bold(),
+            OFFLINE_CONTRIBUTION_FILE_NAME
+        )
+        .as_str(),
+    );
     println!("{}", msg);
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
-    io::get_user_input("When the file is ready press enter to move on".yellow(), None)?;
+    io::get_user_input("When the contribution file is ready, press enter to upload it and move on".yellow(), None)?;
 
     Ok(())
 }
@@ -209,7 +220,12 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     #[cfg(not(debug_assertions))]
     Computation::contribute_masp(challenge, writer, &rand_source);
 
-    println!("{}", "Randomness has been correctly produced in the target file".green().bold());
+    println!(
+        "{}",
+        "Randomness has been correctly produced in the target file"
+            .green()
+            .bold()
+    );
     Ok(())
 }
 
@@ -265,10 +281,10 @@ async fn contribute(
         Arc::new(OFFLINE_CONTRIBUTION_FILE_NAME.to_string())
     } else {
         Arc::new(format!(
-        "namada_contribution_round_{}_public_key_{}.params",
-        round_height, base58_pubkey
-    ))
-};
+            "namada_contribution_round_{}_public_key_{}.params",
+            round_height, base58_pubkey
+        ))
+    };
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
@@ -278,10 +294,7 @@ async fn contribute(
     let contrib_filename_copy = contrib_filename.clone();
     contrib_info.timestamps.start_computation = Utc::now();
     if contrib_info.is_another_machine {
-        tokio::task::spawn_blocking(move || {
-            compute_contribution_offline()
-        })
-        .await??;
+        tokio::task::spawn_blocking(move || compute_contribution_offline()).await??;
     } else {
         let custom_seed = contrib_info.is_own_seed_of_randomness;
         tokio::task::spawn_blocking(move || {
@@ -303,8 +316,12 @@ async fn contribute(
     trace!("Response writer {:?}", response_writer);
     println!(
         "{}",
-        format!("Completed contribution in {} seconds",
-        (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()).green().bold()
+        format!(
+            "Completed contribution in {} seconds",
+            (contrib_info.timestamps.end_computation - contrib_info.timestamps.start_computation).num_seconds()
+        )
+        .green()
+        .bold()
     );
 
     // Update contribution info
@@ -464,8 +481,10 @@ async fn contribution_loop(
             }
             ContributorStatus::Finished => {
                 println!(
-                    "{} \nWe will now proceed to verifying your contribution. You can check the outcome in a few minutes by looking at round height {}. If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
-                    "Contribution done, thank you!".green().bold(),
+                    "{} \nNext, your contribution will be verified by the coordinator.
+                    You can check the outcome in a few minutes by looking at round height {}.
+                    If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    "Done! Thank you for your contribution!".green().bold(),
                     round_height
                 );
                 break;
@@ -559,7 +578,7 @@ async fn main() {
             // Perform the entire contribution cycle
             let banner = async_fs::read_to_string("phase1-cli/ascii_logo.txt").await.unwrap();
             println!("{}", banner.cyan());
-            println!("{}", "Welcome to the Namada trusted setup ceremony!".bold());
+            println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
             io::get_user_input("Press enter to continue".yellow(), None).unwrap();
             let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
