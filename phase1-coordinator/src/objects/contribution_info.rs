@@ -76,7 +76,7 @@ pub struct ContributionInfo {
     pub full_name: Option<String>,
     // Email of the contributor
     pub email: Option<String>,
-    // ed25519 public key, base64 encoded
+    // ed25519 public key, hex encoded
     pub public_key: String,
     // User participates in incentivized program or not
     pub is_incentivized: bool,

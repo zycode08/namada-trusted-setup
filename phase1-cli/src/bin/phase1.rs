@@ -31,9 +31,6 @@ use chrono::Utc;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
-use base64;
-use bs58;
-
 use regex::Regex;
 
 use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
@@ -276,15 +273,14 @@ async fn contribute(
 
     // Prepare contribution file with the challege hash
     println!("{} Setting up contribution file", "[6/11]".bold().dimmed());
-    let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
     let contrib_filename = if contrib_info.is_another_machine {
         Arc::new(OFFLINE_CONTRIBUTION_FILE_NAME.to_string())
     } else {
         Arc::new(format!(
-            "namada_contribution_round_{}_public_key_{}.params",
-            round_height, base58_pubkey
-        ))
-    };
+        "namada_contribution_round_{}_public_key_{}.params",
+        round_height, keypair.pubkey()
+    ))
+};
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
