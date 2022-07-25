@@ -467,10 +467,6 @@ impl Coordinator {
             self.state.update_round_metrics();
             self.save_state()?;
 
-            // Update the state of the queue.
-            self.state.update_queue()?;
-            self.save_state()?;
-
             // Update the state of current round contributors.
             self.state.update_current_contributors(self.time.as_ref())?;
             self.save_state()?;
@@ -487,6 +483,10 @@ impl Coordinator {
 
             // Ban any participants who meet the coordinator criteria.
             self.state.update_banned_participants()?;
+            self.save_state()?;
+
+            // Update the state of the queue.
+            self.state.update_queue()?;
             self.save_state()?;
 
             // Check if the current round is finished and if the current round is aggregated.
