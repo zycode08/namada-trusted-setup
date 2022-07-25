@@ -41,6 +41,8 @@ use tokio_util::io::ReaderStream;
 
 use tracing::{debug, trace};
 
+use notify_rust::{Notification, Timeout};
+
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
 
@@ -73,7 +75,10 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 
     if incentivization == "y" {
         // Ask for personal info
-        contrib_info.full_name = Some(io::get_user_input("Please enter your full name:".yellow(), None)?);
+        contrib_info.full_name = Some(io::get_user_input(
+            "Please enter your full name:".yellow(),
+            Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
+        )?);
         contrib_info.email = Some(io::get_user_input(
             "Please enter your email address:".yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
@@ -153,9 +158,7 @@ fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
     let mut msg = format!(
         "{}:\n
-        In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".
-        To contribute, you will need both files. Use the contribution file as prelude and append your contribution to it.
-        Starting from now, you will have 15 minutes of time to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\n",
+        In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files. Use the contribution file as prelude and append your contribution to it.\nStarting from now, you will have 15 minutes of time to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\n",
         "Instructions".bold().underline(),
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
@@ -190,7 +193,10 @@ fn compute_contribution_offline() -> Result<()> {
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
-    io::get_user_input("When the contribution file is ready, press enter to upload it and move on".yellow(), None)?;
+    io::get_user_input(
+        "When the contribution file is ready, press enter to upload it and move on".yellow(),
+        None,
+    )?;
 
     Ok(())
 }
@@ -240,6 +246,12 @@ async fn contribute(
 ) -> Result<u64> {
     // Get the necessary info to compute the contribution
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
+    Notification::new()
+        .summary("Namada Trusted Setup")
+        .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
+        .auto_icon()
+        .timeout(Timeout::Never)
+        .show()?;
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
     let response_locator = locked_locators.next_contribution();
@@ -481,9 +493,7 @@ async fn contribution_loop(
             }
             ContributorStatus::Finished => {
                 println!(
-                    "{} \nNext, your contribution will be verified by the coordinator.
-                    You can check the outcome in a few minutes by looking at round height {}.
-                    If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
+                    "{} \nNext, your contribution will be verified by the coordinator.\nYou can check the outcome in a few minutes by looking at round height {}.\nIf you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
                     "Done! Thank you for your contribution!".green().bold(),
                     round_height
                 );
