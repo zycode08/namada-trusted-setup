@@ -975,6 +975,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ct-codecs"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b7eb4404b8195a9abb6356f4ac07d8ba267045c8d6d220ac4dc992e6cc75df"
+
+[[package]]
 name = "ctr"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1358,6 +1364,12 @@ dependencies = [
  "rand_core 0.6.3",
  "subtle",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35354cf6bf9d259374646f419a25c7dd0bb208d291e44dc73db557542fe017fc"
 
 [[package]]
 name = "figment"
@@ -2624,6 +2636,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "orion"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0efc4e7f3220d326a2d87d507510b20b0ecd5469f80f6e985dd6fcefa2de9af1"
+dependencies = [
+ "ct-codecs",
+ "fiat-crypto",
+ "getrandom 0.2.7",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "owo-colors"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2819,6 +2844,7 @@ dependencies = [
  "hex",
  "indicatif",
  "memmap",
+ "orion",
  "owo-colors",
  "phase1",
  "phase1-coordinator",

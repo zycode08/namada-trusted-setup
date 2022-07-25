@@ -124,12 +124,27 @@ where
     Ok(response)
 }
 
+/// Generates a seed from a string representing a mnemonic.
+pub fn seed_from_string(input: &str) -> Result<[u8; 64]> {
+    // Convert to a string of separated words
+    let re = Regex::new(r"[[:digit:]]+[.]\s[[:alpha:]]+")?;
+    let mut words = String::new();
+    for mat in re.find_iter(input) { //FIXME: improve and debug/test
+      words.push_str(mat.as_str().rsplit_once(" ").unwrap().1);
+      words.push_str(" ");
+    }
+    let mnemonic = Mnemonic::parse_in_normalized(Language::English, words.as_str()).map_err(|e| IOError::MnemonicError(e))?;
+
+    Ok(mnemonic.to_seed_normalized(""))
+}
+
 /// Generates a new [`KeyPair`] from a mnemonic provided by the user.
 pub fn keypair_from_mnemonic() -> Result<KeyPair> {
     let mnemonic_str = get_user_input(
         format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
-        Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
+        Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?), //FIXME: update regex
     )?;
+    // FIXME: call seed_from_string here
     let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
         .map_err(|e| IOError::MnemonicError(e))?;
     let seed = mnemonic.to_seed_normalized("");

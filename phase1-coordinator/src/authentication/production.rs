@@ -17,7 +17,6 @@ impl KeyPair {
         let keypair = EdKeyPair::from_seed(seed);
 
         Ok(KeyPair {
-            // FIXME: actually I need to borsh serialize before hex encoding but only on big-endian machines
             pubkey: hex::encode(keypair.pk.deref()),
             sigkey: hex::encode(keypair.sk.deref()),
         })

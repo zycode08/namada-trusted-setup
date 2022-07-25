@@ -16,7 +16,8 @@ use crossterm::{
     terminal::{Clear, ClearType, ScrollDown},
 };
 use futures_util::StreamExt;
-use phase1_cli::{requests, CeremonyOpt};
+use phase1_cli::{requests, CeremonyOpt, keys::StoredKeypair};
+use serde::Serialize;
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
@@ -606,6 +607,24 @@ async fn main() {
 
             let client = Client::new();
             close_ceremony(&client, &url.coordinator, &keypair).await;
+        }
+        CeremonyOpt::ExportKeypair(mnemonic_path) => {
+            let content = async_fs::read_to_string(mnemonic_path.path).await.unwrap();
+            let seed = io::seed_from_string(content.as_str()).unwrap();
+
+            let password = io::get_user_input("Enter the password to encrypt the keypair. Make sure to safely store this password:".yellow(), None).unwrap();
+            // FIXME: hide stdin
+            let confirmation = io::get_user_input("Enter again the password to confirm:".yellow(), None).unwrap();
+            if confirmation != password {
+                eprintln!(
+                    "{}",
+                    format!("{}", "Passwords don't match!".red().bold())
+                );
+            }
+
+            let keypair = StoredKeypair::from_seed(&seed, password);
+            async_fs::write("keypair", toml::to_vec(&keypair).unwrap()).await.unwrap();
+            println!("{}", "Keypair was correctly generated in \"keypair\" file".bold().green());
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
