@@ -16,7 +16,7 @@ use crossterm::{
     terminal::{Clear, ClearType, ScrollDown},
 };
 use futures_util::StreamExt;
-use phase1_cli::{requests, CeremonyOpt, keys::StoredKeypair};
+use phase1_cli::{requests, CeremonyOpt, keys::{self, EncryptedKeypair, TomlConfig}};
 use serde::Serialize;
 use serde_json;
 use setup_utils::calculate_hash;
@@ -612,6 +612,7 @@ async fn main() {
             let content = async_fs::read_to_string(mnemonic_path.path).await.unwrap();
             let seed = io::seed_from_string(content.as_str()).unwrap();
 
+             // FIXME: spawn blocking
             let password = io::get_user_input("Enter the password to encrypt the keypair. Make sure to safely store this password:".yellow(), None).unwrap();
             // FIXME: hide stdin
             let confirmation = io::get_user_input("Enter again the password to confirm:".yellow(), None).unwrap();
@@ -622,9 +623,20 @@ async fn main() {
                 );
             }
 
-            let keypair = StoredKeypair::from_seed(&seed, password);
-            async_fs::write("keypair", toml::to_vec(&keypair).unwrap()).await.unwrap();
-            println!("{}", "Keypair was correctly generated in \"keypair\" file".bold().green());
+            let (keypair, pubkey) = EncryptedKeypair::from_seed(&seed, password);
+            let address = keys::generate_address(&pubkey);
+            let bech_address = keys::bech_encode_address(&address); 
+
+            let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
+            } else {
+                address.clone().to_lowercase()
+            };
+
+            // Write to toml file
+            let toml_config  = TomlConfig::new(alias, keypair, bech_address, address);
+            async_fs::write("keypair.toml", toml::to_string(&toml_config).unwrap()).await.unwrap();
+            println!("{}", "Keypair was correctly generated in \"keypair.toml\" file. You can copy its content to the \"wallet.toml\" file. Refer to the Namada documentation on how to generate a wallet.".bold().green());
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
@@ -651,3 +663,6 @@ async fn main() {
         }
     }
 }
+
+// FIXME: imports
+// FIXME: fmt

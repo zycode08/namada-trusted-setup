@@ -21,6 +21,7 @@ namada_contributor_info_round_*
 status.json
 *keypair
 coordinator.mnemonic
+keypair.toml
 
 # AWS
 aws

@@ -15,6 +15,7 @@ use thiserror::Error;
 use tracing::debug;
 
 const MNEMONIC_LEN: usize = 24;
+const MNEMONIC_REGEX: &str = r"[[:digit:]]+[.]\s[[:alpha:]]+";
 
 #[derive(Debug, Error)]
 pub enum IOError {
@@ -125,22 +126,24 @@ where
 }
 
 /// Generates a seed from a string representing a mnemonic.
-pub fn seed_from_string(input: &str) -> Result<[u8; 64]> {
+pub fn seed_from_string(input: &str) -> Result<[u8; 64]> { //FIXME: test
     // Convert to a string of separated words
-    let re = Regex::new(r"[[:digit:]]+[.]\s[[:alpha:]]+")?;
-    let mut words = String::new();
-    for mat in re.find_iter(input) { //FIXME: improve and debug/test
-      words.push_str(mat.as_str().rsplit_once(" ").unwrap().1);
-      words.push_str(" ");
-    }
+    let re = Regex::new(MNEMONIC_REGEX)?;
+    let words = re.find_iter(input).map(|mat| mat.as_str().rsplit_once(" ").unwrap().1).fold(String::new(), |mut acc, word| {acc.push_str(word); acc.push(' '); acc});
+    
     let mnemonic = Mnemonic::parse_in_normalized(Language::English, words.as_str()).map_err(|e| IOError::MnemonicError(e))?;
+    
+    println!("MNEMONIC"); //FIXME: remove this block
+    for m in mnemonic.word_iter() {
+        println!("{}", m);
+    }
 
     Ok(mnemonic.to_seed_normalized(""))
 }
 
 /// Generates a new [`KeyPair`] from a mnemonic provided by the user.
 pub fn keypair_from_mnemonic() -> Result<KeyPair> {
-    let mnemonic_str = get_user_input(
+    let mnemonic_str = get_user_input( //FIXME: read from file
         format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
         Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?), //FIXME: update regex
     )?;
