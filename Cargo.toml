@@ -1,6 +1,5 @@
 [workspace]
 members = [
-  "phase1-cli",
   "phase1",
   "phase1-cli",
   "phase1-coordinator",
