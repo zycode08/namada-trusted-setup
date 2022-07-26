@@ -609,34 +609,34 @@ async fn main() {
             close_ceremony(&client, &url.coordinator, &keypair).await;
         }
         CeremonyOpt::ExportKeypair(mnemonic_path) => {
-            let content = async_fs::read_to_string(mnemonic_path.path).await.unwrap();
-            let seed = io::seed_from_string(content.as_str()).unwrap();
+             tokio::task::spawn_blocking(|| {
+                let content = fs::read_to_string(mnemonic_path.path).unwrap();
+                let seed = io::seed_from_string(content.as_str()).unwrap();
+            
+                let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".yellow()).unwrap();
+                let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".yellow()).unwrap();
+                if confirmation != password {
+                    eprintln!(
+                        "{}",
+                        format!("{}", "Passwords don't match!".red().bold())
+                    );
+                }
 
-             // FIXME: spawn blocking
-            let password = io::get_user_input("Enter the password to encrypt the keypair. Make sure to safely store this password:".yellow(), None).unwrap();
-            // FIXME: hide stdin
-            let confirmation = io::get_user_input("Enter again the password to confirm:".yellow(), None).unwrap();
-            if confirmation != password {
-                eprintln!(
-                    "{}",
-                    format!("{}", "Passwords don't match!".red().bold())
-                );
-            }
+                let (keypair, pubkey) = EncryptedKeypair::from_seed(&seed, password);
+                let address = keys::generate_address(&pubkey);
+                let bech_address = keys::bech_encode_address(&address); 
 
-            let (keypair, pubkey) = EncryptedKeypair::from_seed(&seed, password);
-            let address = keys::generate_address(&pubkey);
-            let bech_address = keys::bech_encode_address(&address); 
+                let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                    io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
+                } else {
+                    address.clone().to_lowercase()
+                };
 
-            let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
-                io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
-            } else {
-                address.clone().to_lowercase()
-            };
-
-            // Write to toml file
-            let toml_config  = TomlConfig::new(alias, keypair, bech_address, address);
-            async_fs::write("keypair.toml", toml::to_string(&toml_config).unwrap()).await.unwrap();
-            println!("{}", "Keypair was correctly generated in \"keypair.toml\" file. You can copy its content to the \"wallet.toml\" file. Refer to the Namada documentation on how to generate a wallet.".bold().green());
+                // Write to toml file
+                let toml_config  = TomlConfig::new(alias, keypair, bech_address, address);
+                fs::write("keypair.toml", toml::to_string(&toml_config).unwrap()).unwrap();
+                println!("{}", "Keypair was correctly generated in \"keypair.toml\" file. You can copy its content to the \"wallet.toml\" file. Refer to the Namada documentation on how to generate a wallet.".bold().green());
+            }).await.expect(&format!("{}", "Error while generating the keypair".red().bold()));
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;

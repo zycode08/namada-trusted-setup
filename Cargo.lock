@@ -59,7 +59,7 @@ dependencies = [
  "pinentry",
  "rand 0.7.3",
  "rand 0.8.5",
- "rpassword",
+ "rpassword 5.0.1",
  "rust-embed",
  "scrypt",
  "sha2 0.9.9",
@@ -2859,6 +2859,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rocket",
+ "rpassword 7.0.0",
  "rustc_version",
  "serde",
  "serde_json",
@@ -3656,6 +3657,16 @@ name = "rpassword"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffc936cf8a7ea60c58f030fd36a612a48f440610214dc54bc36431f9ea0c3efb"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
+name = "rpassword"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26b763cb66df1c928432cc35053f8bd4cec3335d8559fc16010017d16b3c1680"
 dependencies = [
  "libc",
  "winapi",

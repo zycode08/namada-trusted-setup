@@ -34,6 +34,7 @@ owo-colors = "3.4.0"
 rand = { version = "0.8" }
 regex = "1"
 reqwest = { version = "0.11", features = ["brotli", "json", "stream"] }
+rpassword = "7.0.0"
 serde_json = "1.0.81"
 sha2 = "0.10.2"
 structopt = "0.3"
