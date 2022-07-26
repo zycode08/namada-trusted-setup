@@ -158,7 +158,7 @@ fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
     let mut msg = format!(
         "{}:\n
-        In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files. Use the contribution file as prelude and append your contribution to it.\nStarting from now, you will have 15 minutes of time to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\n",
+        Starting from now, you will have 15 minutes to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\nIn the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files. \n",
         "Instructions".bold().underline(),
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
@@ -205,8 +205,8 @@ fn compute_contribution_offline() -> Result<()> {
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your own seed of randomness, 32 bytes hex encoded".yellow(),
-            Some(&Regex::new(r"[[:xdigit:]]{64}")?),
+            "Enter your own seed of randomness (32 bytes hex encoded)".yellow(),
+            Some(&Regex::new(r"^[A-Fa-f0-9]+${32}")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
 
@@ -492,11 +492,11 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Contribution failed".red().bold()));
             }
             ContributorStatus::Finished => {
-                println!(
-                    "{} \nNext, your contribution will be verified by the coordinator.\nYou can check the outcome in a few minutes by looking at round height {}.\nIf you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
-                    "Done! Thank you for your contribution!".green().bold(),
-                    round_height
-                );
+                println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with contribution hash {}. Let's enable private transactions for any assets.", 
+                "Done! Thank you for your contribution!".green().bold(),
+                round_height,
+                //FIXME: add contribution hash saved in file namada_contributor_info_round_{round_height}.json
+round_height);
                 break;
             }
             ContributorStatus::Banned => {
