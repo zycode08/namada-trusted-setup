@@ -6,7 +6,7 @@ use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use ed25519_compact::{KeyPair, Seed};
+use ed25519_compact::KeyPair;
 
 const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
 const ADDRESS_HRP: &str = "atest";
@@ -15,8 +15,6 @@ const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const FIXED_LEN_STRING_BYTES: usize = 45;
 const PKH_HASH_LEN: usize = 40;
 const PREFIX_IMPLICIT: &str = "imp";
-
-// FIXME: docstrings
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -28,16 +26,20 @@ pub enum DeserializeStoredKeypairError {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct TomlConfig {
-    keys: HashMap<String, EncryptedKeypair>, //FIXME: &str?
-    addresses: HashMap<String ,String>,
-    pkhs: HashMap<String, String>
+/// Represents a Namada wallet toml file.
+pub struct TomlConfig<'a> {
+    #[serde(borrow)]
+    keys: HashMap<&'a str, EncryptedKeypair>,
+    #[serde(borrow)]
+    addresses: HashMap<&'a str ,&'a str>,
+    #[serde(borrow)]
+    pkhs: HashMap<&'a str, &'a str>
 }
 
-impl TomlConfig {
-    pub fn new(alias: String, key: EncryptedKeypair, address: String, pkh: String) -> Self {
-        let mut keys = HashMap::from([(alias.clone(), key)]);
-        let addresses = HashMap::from([(alias.clone(), address)]);
+impl<'a> TomlConfig<'a> {
+    pub fn new(alias: &'a str, key: EncryptedKeypair, address: &'a str, pkh: &'a str) -> Self {
+        let keys = HashMap::from([(alias, key)]);
+        let addresses = HashMap::from([(alias, address)]);
         let pkhs = HashMap::from([(pkh, alias)]); 
 
         Self { keys, addresses, pkhs }
@@ -108,14 +110,13 @@ impl FromStr for EncryptedKeypair {
 }
 
 impl EncryptedKeypair {
-    /// Encrypt a keypair and store it with its salt. Returns the keypair and the pubkey.
-    pub fn from_seed(seed: &[u8], password: impl AsRef<[u8]>) -> (Self, String) {
-        let keypair = KeyPair::from_seed(Seed::from_slice(&seed[.. 32]).unwrap());
+    /// Encrypt a [KeyPair] and store it with its salt
+    pub fn from_keypair(keypair: &KeyPair, password: impl AsRef<[u8]>) -> Self {
         // NOTE: need to append an initial 0 to match the borsh encoding of the enum in the ledger.
         //  Also need to truncate the length to 33 because the private key also contains the pubkey in the
         //  trailing 32 bytes
         let mut sk = vec![0u8];
-        sk.extend_from_slice(&keypair.sk.to_vec()); //FIXME: truncate here
+        sk.extend_from_slice(keypair.sk.as_ref());
         sk.truncate(33);
 
         let salt = kdf::Salt::default();
@@ -125,7 +126,7 @@ impl EncryptedKeypair {
             .expect("Encryption of data shouldn't fail");
         let encrypted_data = [salt.as_ref(), &encrypted_keypair].concat();
 
-        (Self(encrypted_data), hex::encode(keypair.pk.to_vec()))
+        Self(encrypted_data)
     }
 }
 
@@ -136,12 +137,11 @@ fn encryption_key(salt: &kdf::Salt, password: &[u8]) -> kdf::SecretKey {
         .expect("Generation of encryption secret key shouldn't fail")
 }
 
-// FIXME: methods of encrypted keypair?
-/// Generates an address from a provided, hex encoded, public key.
-pub fn generate_address(pk: &str) -> String {
+/// Generates an address from a provided [hex] encoded public key.
+pub fn generate_address(pubkey: &str) -> String {
     // Prepend 0 to match Namada borsh encoding
     let mut adjusted_pk = String::from("0");
-    adjusted_pk.push_str(pk);
+    adjusted_pk.push_str(pubkey);
 
     // Compute hash
     let mut hasher = Sha256::new();
@@ -155,7 +155,7 @@ pub fn generate_address(pk: &str) -> String {
     )
 }
 
-/// Generates a Namada address by Bech32m encoding it.
+/// Generates a Namada address by [bech32] encoding it.
 pub fn bech_encode_address(address: &str) -> String {
     let mut bytes = format!("{}::{}", PREFIX_IMPLICIT, address).into_bytes();
     bytes.resize(FIXED_LEN_STRING_BYTES, b' ');

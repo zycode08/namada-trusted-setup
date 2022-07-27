@@ -157,7 +157,7 @@ pub struct TrimmedContributionInfo {
     public_key: String,
     is_another_machine: bool,
     is_own_seed_of_randomness: bool,
-    pub ceremony_round: u64,
+    ceremony_round: u64,
     contribution_hash: String,
     contribution_hash_signature: String,
     timestamps: TrimmedContributionTimeStamps,
@@ -177,16 +177,21 @@ impl From<ContributionInfo> for TrimmedContributionInfo {
     }
 }
 
-#[cfg(debug_assertions)]
 impl TrimmedContributionInfo {
     pub fn public_key(&self) -> &str {
         self.public_key.as_ref()
     }
 
+    pub fn ceremony_round(&self) -> u64 {
+        self.ceremony_round
+    }
+
+    #[cfg(debug_assertions)]
     pub fn is_another_machine(&self) -> bool {
         self.is_another_machine
     }
 
+    #[cfg(debug_assertions)]
     pub fn is_own_seed_of_randomness(&self) -> bool {
         self.is_own_seed_of_randomness
     }

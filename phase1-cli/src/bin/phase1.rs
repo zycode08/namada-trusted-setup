@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
     io,
-    objects::{ContributionFileSignature, ContributionInfo, ContributionState},
+    objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
     rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
     storage::Object,
 };
@@ -15,14 +15,15 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType, ScrollDown},
 };
+use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{requests, CeremonyOpt, keys::{self, EncryptedKeypair, TomlConfig}};
-use serde::Serialize;
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
     sync::Arc,
@@ -622,8 +623,10 @@ async fn main() {
                     );
                 }
 
-                let (keypair, pubkey) = EncryptedKeypair::from_seed(&seed, password);
-                let address = keys::generate_address(&pubkey);
+                // Generate keypair and address
+                let keypair_struct = EdKeyPair::from_seed(Seed::from_slice(&seed[.. 32]).unwrap());
+                let keypair = EncryptedKeypair::from_keypair(&keypair_struct, password);
+                let address = keys::generate_address(&hex::encode(keypair_struct.pk.to_vec()));
                 let bech_address = keys::bech_encode_address(&address); 
 
                 let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
@@ -633,10 +636,21 @@ async fn main() {
                 };
 
                 // Write to toml file
-                let toml_config  = TomlConfig::new(alias, keypair, bech_address, address);
+                let toml_config  = TomlConfig::new(&alias, keypair, &bech_address, &address);
                 fs::write("keypair.toml", toml::to_string(&toml_config).unwrap()).unwrap();
-                println!("{}", "Keypair was correctly generated in \"keypair.toml\" file. You can copy its content to the \"wallet.toml\" file. Refer to the Namada documentation on how to generate a wallet.".bold().green());
+                println!("{}", "Keypair was correctly generated in the \"keypair.toml\" file. You can copy its content to the \"wallet.toml\" file. Refer to the Namada documentation on how to generate a wallet.".bold().green());
             }).await.expect(&format!("{}", "Error while generating the keypair".red().bold()));
+        }
+        CeremonyOpt::GenerateAddresses(contributors) => {
+            tokio::task::spawn_blocking(move || {
+                let content = fs::read(&contributors.path).unwrap();
+                let contrib_info: Vec<TrimmedContributionInfo> = serde_json::from_slice(&content).unwrap();
+                let addresses: HashMap<String, u32> = contrib_info.iter().map(|contrib | (keys::bech_encode_address(&keys::generate_address(contrib.public_key())), contributors.amount)).collect();
+
+                let content = ["[token.xan.balances]", &toml::to_string(&addresses).unwrap()].join("\n");
+                fs::write("genesis.toml", content).unwrap();
+                println!("{}", "The addresses were correctly generated in the \"genesis.toml\" file.".bold().green());
+            }).await.expect(&format!("{}", "Error while generating the addresses".red().bold()));
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
