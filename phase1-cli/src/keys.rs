@@ -1,12 +1,11 @@
-use std::{fmt::Display, collections::HashMap};
-use std::str::FromStr;
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
-use bech32::{Variant, ToBase32};
+use bech32::{ToBase32, Variant};
+use ed25519_compact::KeyPair;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use ed25519_compact::KeyPair;
 
 const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
 const ADDRESS_HRP: &str = "atest";
@@ -31,16 +30,16 @@ pub struct TomlConfig<'a> {
     #[serde(borrow)]
     keys: HashMap<&'a str, EncryptedKeypair>,
     #[serde(borrow)]
-    addresses: HashMap<&'a str ,&'a str>,
+    addresses: HashMap<&'a str, &'a str>,
     #[serde(borrow)]
-    pkhs: HashMap<&'a str, &'a str>
+    pkhs: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> TomlConfig<'a> {
     pub fn new(alias: &'a str, key: EncryptedKeypair, address: &'a str, pkh: &'a str) -> Self {
         let keys = HashMap::from([(alias, key)]);
         let addresses = HashMap::from([(alias, address)]);
-        let pkhs = HashMap::from([(pkh, alias)]); 
+        let pkhs = HashMap::from([(pkh, alias)]);
 
         Self { keys, addresses, pkhs }
     }
@@ -51,10 +50,7 @@ impl<'a> TomlConfig<'a> {
 pub struct EncryptedKeypair(Vec<u8>);
 
 impl Serialize for EncryptedKeypair {
-    fn serialize<S>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -70,27 +66,17 @@ impl<'de> Deserialize<'de> for EncryptedKeypair {
     {
         use serde::de::Error;
 
-        let keypair_string: String =
-            serde::Deserialize::deserialize(deserializer)
-                .map_err(|err| {
-                    DeserializeStoredKeypairError::InvalidStoredKeypairString(
-                        err.to_string(),
-                    )
-                })
-                .map_err(D::Error::custom)?;
-        if let Some(encrypted) =
-            keypair_string.strip_prefix(ENCRYPTED_KEY_PREFIX)
-        {
+        let keypair_string: String = serde::Deserialize::deserialize(deserializer)
+            .map_err(|err| DeserializeStoredKeypairError::InvalidStoredKeypairString(err.to_string()))
+            .map_err(D::Error::custom)?;
+        if let Some(encrypted) = keypair_string.strip_prefix(ENCRYPTED_KEY_PREFIX) {
             FromStr::from_str(encrypted)
                 .map_err(|err: hex::FromHexError| {
-                    DeserializeStoredKeypairError::InvalidStoredKeypairString(
-                        err.to_string(),
-                    )
+                    DeserializeStoredKeypairError::InvalidStoredKeypairString(err.to_string())
                 })
                 .map_err(D::Error::custom)
         } else {
-            Err(DeserializeStoredKeypairError::MissingPrefix)
-                .map_err(D::Error::custom)
+            Err(DeserializeStoredKeypairError::MissingPrefix).map_err(D::Error::custom)
         }
     }
 }
@@ -122,8 +108,7 @@ impl EncryptedKeypair {
         let salt = kdf::Salt::default();
         let encryption_key = encryption_key(&salt, password.as_ref());
 
-        let encrypted_keypair = aead::seal(&encryption_key, &sk)
-            .expect("Encryption of data shouldn't fail");
+        let encrypted_keypair = aead::seal(&encryption_key, &sk).expect("Encryption of data shouldn't fail");
         let encrypted_data = [salt.as_ref(), &encrypted_keypair].concat();
 
         Self(encrypted_data)
@@ -148,11 +133,7 @@ pub fn generate_address(pubkey: &str) -> String {
     hasher.update(adjusted_pk);
 
     // hex of the first 40 chars of the hash
-    format!(
-        "{:.width$X}",
-        hasher.finalize(),
-        width = PKH_HASH_LEN
-    )
+    format!("{:.width$X}", hasher.finalize(), width = PKH_HASH_LEN)
 }
 
 /// Generates a Namada address by [bech32] encoding it.

@@ -17,7 +17,11 @@ use crossterm::{
 };
 use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
-use phase1_cli::{requests, CeremonyOpt, keys::{self, EncryptedKeypair, TomlConfig}};
+use phase1_cli::{
+    keys::{self, EncryptedKeypair, TomlConfig},
+    requests,
+    CeremonyOpt,
+};
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
@@ -91,11 +95,7 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    if custom_seed == "y" { Ok(true) } else { Ok(false) }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -189,7 +189,10 @@ fn compute_contribution_offline() -> Result<()> {
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
-    io::get_user_input("When the contribution file is ready, press enter to upload it and move on".yellow(), None)?;
+    io::get_user_input(
+        "When the contribution file is ready, press enter to upload it and move on".yellow(),
+        None,
+    )?;
 
     Ok(())
 }
@@ -279,10 +282,11 @@ async fn contribute(
         Arc::new(OFFLINE_CONTRIBUTION_FILE_NAME.to_string())
     } else {
         Arc::new(format!(
-        "namada_contribution_round_{}_public_key_{}.params",
-        round_height, keypair.pubkey()
-    ))
-};
+            "namada_contribution_round_{}_public_key_{}.params",
+            round_height,
+            keypair.pubkey()
+        ))
+    };
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
     response_writer.write_all(challenge_hash.to_vec().as_ref()).await?;
 
@@ -610,10 +614,10 @@ async fn main() {
             close_ceremony(&client, &url.coordinator, &keypair).await;
         }
         CeremonyOpt::ExportKeypair(mnemonic_path) => {
-             tokio::task::spawn_blocking(|| {
+            tokio::task::spawn_blocking(|| {
                 let content = fs::read_to_string(mnemonic_path.path).unwrap();
                 let seed = io::seed_from_string(content.as_str()).unwrap();
-            
+
                 let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".yellow()).unwrap();
                 let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".yellow()).unwrap();
                 if confirmation != password {
@@ -627,7 +631,7 @@ async fn main() {
                 let keypair_struct = EdKeyPair::from_seed(Seed::from_slice(&seed[.. 32]).unwrap());
                 let keypair = EncryptedKeypair::from_keypair(&keypair_struct, password);
                 let address = keys::generate_address(&hex::encode(keypair_struct.pk.to_vec()));
-                let bech_address = keys::bech_encode_address(&address); 
+                let bech_address = keys::bech_encode_address(&address);
 
                 let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
                     io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
@@ -645,12 +649,27 @@ async fn main() {
             tokio::task::spawn_blocking(move || {
                 let content = fs::read(&contributors.path).unwrap();
                 let contrib_info: Vec<TrimmedContributionInfo> = serde_json::from_slice(&content).unwrap();
-                let addresses: HashMap<String, u32> = contrib_info.iter().map(|contrib | (keys::bech_encode_address(&keys::generate_address(contrib.public_key())), contributors.amount)).collect();
+                let addresses: HashMap<String, u32> = contrib_info
+                    .iter()
+                    .map(|contrib| {
+                        (
+                            keys::bech_encode_address(&keys::generate_address(contrib.public_key())),
+                            contributors.amount,
+                        )
+                    })
+                    .collect();
 
                 let content = ["[token.xan.balances]", &toml::to_string(&addresses).unwrap()].join("\n");
                 fs::write("genesis.toml", content).unwrap();
-                println!("{}", "The addresses were correctly generated in the \"genesis.toml\" file.".bold().green());
-            }).await.expect(&format!("{}", "Error while generating the addresses".red().bold()));
+                println!(
+                    "{}",
+                    "The addresses were correctly generated in the \"genesis.toml\" file."
+                        .bold()
+                        .green()
+                );
+            })
+            .await
+            .expect(&format!("{}", "Error while generating the addresses".red().bold()));
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
@@ -677,6 +696,3 @@ async fn main() {
         }
     }
 }
-
-// FIXME: imports
-// FIXME: fmt

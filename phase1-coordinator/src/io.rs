@@ -125,13 +125,21 @@ where
     Ok(response)
 }
 
-/// Generates a seed from a string representing a mnemonic. This string is supposed to have the same format of the 
+/// Generates a seed from a string representing a mnemonic. This string is supposed to have the same format of the
 /// one produced by the fmt method of [MnemonicWrap]
 pub fn seed_from_string(input: &str) -> Result<[u8; 64]> {
     // Convert to a string of separated words
     let re = Regex::new(r"[[:digit:]]+[.]\s[[:alpha:]]+")?;
-    let words = re.find_iter(input).map(|mat| mat.as_str().rsplit_once(" ").unwrap().1).fold(String::new(), |mut acc, word| {acc.push_str(word); acc.push(' '); acc});
-    let mnemonic = Mnemonic::parse_in_normalized(Language::English, words.as_str()).map_err(|e| IOError::MnemonicError(e))?;
+    let words = re
+        .find_iter(input)
+        .map(|mat| mat.as_str().rsplit_once(" ").unwrap().1)
+        .fold(String::new(), |mut acc, word| {
+            acc.push_str(word);
+            acc.push(' ');
+            acc
+        });
+    let mnemonic =
+        Mnemonic::parse_in_normalized(Language::English, words.as_str()).map_err(|e| IOError::MnemonicError(e))?;
 
     Ok(mnemonic.to_seed_normalized(""))
 }
@@ -254,7 +262,6 @@ mod tests {
         17. olive     18. pumpkin   19. trap      20. minute    
         21. history   22. enter     23. immense   24. settle    
         ======================================================";
-
 
         let seed_ok_1 = seed_from_string(mnemonic_ok_1).unwrap();
         let seed_ok_2 = seed_from_string(mnemonic_ok_2).unwrap();

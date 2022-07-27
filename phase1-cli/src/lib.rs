@@ -43,27 +43,23 @@ pub struct CoordinatorUrl {
 }
 
 #[derive(Debug, StructOpt)]
-pub struct MnemonicPath{#[structopt(
-    help = "The path to the mnemonic file",
-    required = true,
-    parse(try_from_str)
-)]
-pub path: PathBuf}
+pub struct MnemonicPath {
+    #[structopt(help = "The path to the mnemonic file", required = true, parse(try_from_str))]
+    pub path: PathBuf,
+}
 
 #[derive(Debug, StructOpt)]
-pub struct Contributors{#[structopt(
-    help = "The path to the contributors.json file",
-    required = true,
-    parse(try_from_str),
-    long
-)]
-pub path: PathBuf,
-#[structopt(
-    help = "The amount of tokens to assign",
-    required = true,
-    long
-)]
-pub amount: u32}
+pub struct Contributors {
+    #[structopt(
+        help = "The path to the contributors.json file",
+        required = true,
+        parse(try_from_str),
+        long
+    )]
+    pub path: PathBuf,
+    #[structopt(help = "The amount of tokens to assign", required = true, long)]
+    pub amount: u32,
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
