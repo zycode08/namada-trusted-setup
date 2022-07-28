@@ -11,7 +11,7 @@ version = "0.3.0"
 [[bin]]
 name = "phase1-coordinator"
 path = "src/main.rs"
-required-features = ["parallel"]
+required-features = ["parallel", "operator"]
 
 [dependencies]
 phase1 = {path = "../phase1"}
