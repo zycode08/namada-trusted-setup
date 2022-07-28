@@ -480,10 +480,6 @@ impl Environment {
     pub(crate) fn storage(&self) -> anyhow::Result<Disk> {
         Ok(Disk::load(self)?)
     }
-
-    pub(crate) fn disable_reliability_zeroing(&self) -> bool {
-        self.disable_reliability_zeroing
-    }
 }
 
 impl From<Testing> for Environment {

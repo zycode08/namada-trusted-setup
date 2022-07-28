@@ -7,7 +7,7 @@ use crate::{
 };
 use phase1::helpers::CurveKind;
 
-use setup_utils::{calculate_hash, GenericArray};
+use setup_utils::calculate_hash;
 
 use std::{io::Write, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace};
@@ -15,7 +15,7 @@ use tracing::{debug, error, info, trace};
 pub const SEED_LENGTH: usize = 32;
 pub type Seed = [u8; SEED_LENGTH];
 
-use blake2::{digest::generic_array::ArrayLength, Blake2b512, Digest};
+use blake2::{Blake2b512, Digest};
 use itertools::Itertools;
 use masp_phase2::MPCParameters;
 
@@ -46,7 +46,7 @@ impl Computation {
         challenge_locator: &Locator,
         response_locator: &Locator,
         contribution_file_signature_locator: &Locator,
-        seed: &Seed,
+        _seed: &Seed,
     ) -> anyhow::Result<()> {
         let start = Instant::now();
         info!(
@@ -201,7 +201,7 @@ impl Computation {
             MPCParameters::read(&mut masp_challenge_reader, false).expect("unable to read MASP Spend params");
 
         trace!("Contributing to MASP Spend...");
-        let mut progress_update_interval: u32 = 0;
+        let progress_update_interval: u32 = 0;
 
         let spend_hash = spend_params.contribute(&mut rng, &progress_update_interval);
         debug!("MASP Spend hash is {}", pretty_hash!(&spend_hash));
@@ -215,7 +215,7 @@ impl Computation {
             MPCParameters::read(&mut masp_challenge_reader, false).expect("unable to read MASP Output params");
 
         trace!("Contributing to MASP Output...");
-        let mut progress_update_interval: u32 = 0;
+        let progress_update_interval: u32 = 0;
 
         let output_hash = output_params.contribute(&mut rng, &progress_update_interval);
         debug!("MASP Output hash is {}", pretty_hash!(&output_hash));
@@ -229,7 +229,7 @@ impl Computation {
             MPCParameters::read(&mut masp_challenge_reader, false).expect("unable to read MASP Convert params");
 
         trace!("Contributing to MASP Convert...");
-        let mut progress_update_interval: u32 = 0;
+        let progress_update_interval: u32 = 0;
         let convert_hash = convert_params.contribute(&mut rng, &progress_update_interval);
         debug!("MASP Convert hash is {}", pretty_hash!(&convert_hash));
         trace!("Contributed to MASP Convert!");

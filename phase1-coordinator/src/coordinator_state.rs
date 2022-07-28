@@ -1557,7 +1557,7 @@ impl CoordinatorState {
         &mut self,
         participant: Participant,
         participant_ip: Option<IpAddr>,
-        mut reliability_score: u8,
+        reliability_score: u8,
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {
         // NOTE: safety checks are performed directly in the rest api, no need to duplicate them here
@@ -2152,7 +2152,7 @@ impl CoordinatorState {
                 .collect();
 
             return Ok(DropParticipant::DropQueue(DropQueueParticipantData {
-                participant: participant.clone(),
+                _participant: participant.clone(),
             }));
         }
 
@@ -2357,7 +2357,7 @@ impl CoordinatorState {
         };
 
         let drop_data = DropCurrentParticpantData {
-            participant: participant.clone(),
+            _participant: participant.clone(),
             storage_action: final_storage_action,
         };
 
@@ -3346,7 +3346,7 @@ pub enum CeremonyStorageAction {
 #[derive(Debug)]
 pub(crate) struct DropCurrentParticpantData {
     /// The participant being dropped.
-    pub participant: Participant,
+    _participant: Participant,
     /// Action to perform to update the round/storage after the drop
     /// to match the current coordinator state.
     pub storage_action: CeremonyStorageAction,
@@ -3355,7 +3355,7 @@ pub(crate) struct DropCurrentParticpantData {
 #[derive(Debug)]
 pub(crate) struct DropQueueParticipantData {
     /// The participant being dropped.
-    pub participant: Participant,
+    _participant: Participant,
 }
 
 /// Returns information/actions for the coordinator to perform in
