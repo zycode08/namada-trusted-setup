@@ -730,7 +730,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 
         if let Err(e) = verify_response {
             warn!("Error while verifying a contribution: {}. Restarting the round...", e);
-            // FIXME: the verify_masp function may panic but the programs doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
+            // FIXME: the verify_masp function may panic but the program doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
 
             // Get the participant who produced the contribution
             let mut write_lock = coordinator.clone().write_owned().await;

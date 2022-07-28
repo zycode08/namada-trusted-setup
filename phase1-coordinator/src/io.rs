@@ -14,6 +14,7 @@ use thiserror::Error;
 #[cfg(not(debug_assertions))]
 use tracing::debug;
 
+const COORDINATOR_MNEMONIC_FILE: &str = "coordinator.mnemonic";
 const MNEMONIC_LEN: usize = 24;
 
 #[derive(Debug, Error)]
@@ -124,15 +125,29 @@ where
     Ok(response)
 }
 
-/// Generates a new [`KeyPair`] from a mnemonic provided by the user.
+/// Generates a seed from a string representing a mnemonic. This string is supposed to have the same format of the
+/// one produced by the fmt method of [MnemonicWrap]
+pub fn seed_from_string(input: &str) -> Result<[u8; 64]> {
+    // Convert to a string of separated words
+    let re = Regex::new(r"[[:digit:]]+[.]\s[[:alpha:]]+")?;
+    let words = re
+        .find_iter(input)
+        .map(|mat| mat.as_str().rsplit_once(" ").unwrap().1)
+        .fold(String::new(), |mut acc, word| {
+            acc.push_str(word);
+            acc.push(' ');
+            acc
+        });
+    let mnemonic =
+        Mnemonic::parse_in_normalized(Language::English, words.as_str()).map_err(|e| IOError::MnemonicError(e))?;
+
+    Ok(mnemonic.to_seed_normalized(""))
+}
+
+/// Generates a new [`KeyPair`] from a mnemonic retrieved from the coordinator.mnemonic file in the current working directory.
 pub fn keypair_from_mnemonic() -> Result<KeyPair> {
-    let mnemonic_str = get_user_input(
-        format!("Please provide a {} words mnemonic for your keypair:", MNEMONIC_LEN).as_str(),
-        Some(&Regex::new(r"^([[:alpha:]]+\s){23}[[:alpha:]]+$")?),
-    )?;
-    let mnemonic = Mnemonic::parse_in_normalized(Language::English, mnemonic_str.as_str())
-        .map_err(|e| IOError::MnemonicError(e))?;
-    let seed = mnemonic.to_seed_normalized("");
+    let mnemonic_str = std::fs::read_to_string(COORDINATOR_MNEMONIC_FILE)?;
+    let seed = seed_from_string(&mnemonic_str)?;
 
     Ok(KeyPair::try_from_seed(&seed)?)
 }
@@ -147,7 +162,7 @@ pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
         .into();
 
     if is_server {
-        std::fs::write("coordinator.mnemonic", mnemonic.to_string())?;
+        std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?;
     } else {
         // Print mnemonic to the user in a different terminal
         execute!(std::io::stdout(), EnterAlternateScreen)?;
@@ -203,4 +218,58 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::seed_from_string;
+
+    #[test]
+    fn test_seed_from_string() {
+        let mnemonic_ok_1 = "Safely store your 24 words mnemonic:
+        ======================================================
+        1. scheme     2. drift      3. lava       4. crystal    
+        5. miracle    6. average    7. admit      8. tuna       
+        9. all        10. initial   11. seat      12. crash     
+        13. mask      14. depend    15. kangaroo  16. dove      
+        17. olive     18. pumpkin   19. trap      20. minute    
+        21. history   22. enter     23. immense   24. settle    
+        ======================================================";
+
+        let mnemonic_ok_2 = "1. scheme     2. drift      3. lava       4. crystal    
+        5. miracle    6. average    7. admit      8. tuna       
+        9. all        10. initial   11. seat      12. crash     
+        13. mask      14. depend    15. kangaroo  16. dove      
+        17. olive     18. pumpkin   19. trap      20. minute    
+        21. history   22. enter     23. immense   24. settle";
+
+        let mnemonic_ok_3 = "Safely store your 24 words mnemonic:
+        ======================================================
+        1. scheme2. drift      3. lava       4. crystal    
+        5. miracle    6. average    7. admit      8. tuna       
+        9. all        10. initial   11. seat      12. crash     
+        13. mask      14. depend    15. kangaroo  16. dove      
+        17. olive     18. pumpkin   19. trap      20. minute    
+        21. history   22. enter     23. immense   24. settle    
+        ======================================================";
+
+        let mnemonic_wrong = "Safely store your 24 words mnemonic:
+        ======================================================
+        1. scheme     drift      3. lava       4. crystal    
+        5. miracle    6. average    7. admit      8. tuna       
+        9. all        10. initial   11. seat      12. crash     
+        13. mask      14. depend    15. kangaroo  16. dove      
+        17. olive     18. pumpkin   19. trap      20. minute    
+        21. history   22. enter     23. immense   24. settle    
+        ======================================================";
+
+        let seed_ok_1 = seed_from_string(mnemonic_ok_1).unwrap();
+        let seed_ok_2 = seed_from_string(mnemonic_ok_2).unwrap();
+        let seed_ok_3 = seed_from_string(mnemonic_ok_3).unwrap();
+        let seed_wrong = seed_from_string(mnemonic_wrong).unwrap();
+
+        assert_eq!(seed_ok_1, seed_ok_2);
+        assert_eq!(seed_ok_2, seed_ok_3);
+        assert_ne!(seed_wrong, seed_ok_1);
+    }
 }
