@@ -3,17 +3,11 @@ use crate::{
     commands::SigningKey,
     environment::Environment,
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        Object,
-        StorageLocator,
-        StorageObject,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, Object, StorageLocator, StorageObject,
     },
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, PublicKey};
+use phase1::helpers::CurveKind;
 use setup_utils::{calculate_hash, GenericArray, U64};
 
 use std::{io::Write, sync::Arc, time::Instant};

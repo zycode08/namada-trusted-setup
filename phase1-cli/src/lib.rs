@@ -1,6 +1,10 @@
 // Documentation
 #![doc = include_str!("../README.md")]
 
+use std::path::PathBuf;
+
+pub mod keys;
+
 pub mod requests;
 
 use phase1_coordinator::{
@@ -24,6 +28,25 @@ pub struct CoordinatorUrl {
 }
 
 #[derive(Debug, StructOpt)]
+pub struct MnemonicPath {
+    #[structopt(help = "The path to the mnemonic file", required = true, parse(try_from_str))]
+    pub path: PathBuf,
+}
+
+#[derive(Debug, StructOpt)]
+pub struct Contributors {
+    #[structopt(
+        help = "The path to the contributors.json file",
+        required = true,
+        parse(try_from_str),
+        long
+    )]
+    pub path: PathBuf,
+    #[structopt(help = "The amount of tokens to assign", required = true, long)]
+    pub amount: u32,
+}
+
+#[derive(Debug, StructOpt)]
 #[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
 pub enum CeremonyOpt {
     #[structopt(about = "Contribute to the ceremony")]
@@ -38,6 +61,10 @@ pub enum CeremonyOpt {
     },
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),
+    #[structopt(about = "Generate a Namada keypair from a mnemonic")]
+    ExportKeypair(MnemonicPath),
+    #[structopt(about = "Generate the list of addresses of the contributors")]
+    GenerateAddresses(Contributors),
     #[structopt(about = "Get a list of all the contributions received")]
     GetContributions(CoordinatorUrl),
     #[cfg(debug_assertions)]
