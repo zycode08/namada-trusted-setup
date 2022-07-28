@@ -27,7 +27,7 @@ get-contributions: # Get the received contributions on local coordinator (0.0.0.
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) get-contributions
 
 run-coordinator:
-	HEALTH_PATH="." RUST_LOG=debug $(CARGO) run --features=parallel,operator --bin phase1-coordinator
+	HEALTH_PATH="." RUST_LOG=debug $(CARGO) run --features=parallel --bin phase1-coordinator
 
 test-coordinator:
 	$(CARGO) test --test test_coordinator -- --test-threads=1

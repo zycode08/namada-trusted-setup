@@ -25,7 +25,6 @@ ed25519-compact = "1.0.11"
 futures-core = "0.3.21"
 futures-util = "0.3.21"
 fs-err = "2.6"
-gumdrop = { version = "0.8.0" }
 hex = { version = "0.4.2" }
 indicatif = "0.16.2"
 memmap = { version = "0.7.0" }
