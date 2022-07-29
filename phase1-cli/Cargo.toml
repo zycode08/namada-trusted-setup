@@ -13,7 +13,6 @@ phase1 = { path = "../phase1" }
 phase1-coordinator = { path = "../phase1-coordinator" }
 setup-utils = { path = "../setup-utils" }
 serde = "1.0.136"
-snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
 
 anyhow = "1.0.57"
 async-stream = "0.3.3"
@@ -25,7 +24,6 @@ ed25519-compact = "1.0.11"
 futures-core = "0.3.21"
 futures-util = "0.3.21"
 fs-err = "2.6"
-gumdrop = { version = "0.8.0" }
 hex = { version = "0.4.2" }
 indicatif = "0.16.2"
 memmap = { version = "0.7.0" }
@@ -55,8 +53,8 @@ rustc_version = "0.4.0"
 
 [features]
 default = []
-cli = ["phase1/cli", "parallel", "setup-utils/cli"]
-parallel = ["phase1/parallel", "setup-utils/parallel"]
+cli = ["phase1/cli", "parallel", "setup-utils/cli", "phase1-coordinator/operator"]
+parallel = ["phase1/parallel", "setup-utils/parallel", "phase1-coordinator/parallel"]
 
 [[bin]]
 name = "phase1"

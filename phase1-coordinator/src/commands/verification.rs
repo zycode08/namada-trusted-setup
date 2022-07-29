@@ -3,17 +3,11 @@ use crate::{
     commands::SigningKey,
     environment::Environment,
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        Object,
-        StorageLocator,
-        StorageObject,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, Object, StorageLocator, StorageObject,
     },
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, PublicKey};
+use phase1::helpers::CurveKind;
 use setup_utils::{calculate_hash, GenericArray, U64};
 
 use std::{io::Write, sync::Arc, time::Instant};
@@ -162,7 +156,7 @@ impl Verification {
     fn verification(
         environment: &Environment,
         storage: &mut Disk,
-        chunk_id: u64,
+        _chunk_id: u64,
         challenge_locator: Locator,
         response_locator: Locator,
         next_challenge_locator: Locator,
@@ -276,7 +270,7 @@ impl Verification {
         debug!("Verifying challenges");
 
         // Check that the challenge hashes match.
-        let challenge_hash = {
+        let _challenge_hash = {
             // Compute the challenge hash using the challenge file.
             let challenge_hash = calculate_hash(challenge_reader.as_ref());
 

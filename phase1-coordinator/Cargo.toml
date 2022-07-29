@@ -18,47 +18,45 @@ phase1 = {path = "../phase1"}
 setup-utils = {path = "../setup-utils"}
 snarkvm-curves = {git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c"}
 
-anyhow = { version = "1.0.37" }
+anyhow = {version = "1.0.37"}
 base64 = "0.13.0"
-bip39 = { version = "1.0.1", default-features = false }
+bip39 = {version = "1.0.1", default-features = false}
 chrono = "0.4"
 crossterm = "0.24.0"
 ed25519-compact = "1.0.11"
-fs-err = { version = "2.6.0" }
-futures = { version = "0.3" }
+fs-err = {version = "2.6.0"}
+futures = {version = "0.3"}
 lazy_static = "1.4.0"
-memmap = { version = "0.7.0" }
-once_cell = { version = "1.5.2" }
+memmap = {version = "0.7.0"}
+once_cell = {version = "1.5.2"}
 owo-colors = "3.4.0"
-rayon = { version = "1.4.1" }
+rayon = {version = "1.4.1"}
 regex = "1"
-rusoto_core = { version="0.48.0", default_features=false, features=["rustls"] }
-rusoto_credential = { version="0.48.0" }
-rusoto_s3 = { version="0.48.0", default_features=false, features=["rustls"] }
-serde = { version = "1.0", features = ["derive"] }
-serde-aux = { version = "3.0" }
-serde-diff = { version = "0.4" }
-serde_json = { version = "1.0" }
-serde_with = { version = "1.8", features = ["macros"] }
-thiserror = { version = "1.0" }
-time = { version = "0.3", features = ["serde-human-readable", "macros"] }
-tracing = { version = "0.1" }
-tracing-subscriber = { version = "0.3" }
+rusoto_core = {version = "0.48.0", default_features = false, features = ["rustls"]}
+rusoto_credential = {version = "0.48.0"}
+rusoto_s3 = {version = "0.48.0", default_features = false, features = ["rustls"]}
+serde = {version = "1.0", features = ["derive"]}
+serde-aux = {version = "3.0"}
+serde-diff = {version = "0.4"}
+serde_json = {version = "1.0"}
+serde_with = {version = "1.8", features = ["macros"]}
+thiserror = {version = "1.0"}
+time = {version = "0.3", features = ["serde-human-readable", "macros"]}
+tracing = {version = "0.1"}
+tracing-subscriber = {version = "0.3"}
 
 # Imports from the crates included in Cargo.toml of `heliaxdev/masp-mpc` on branch `joe/update`
 # Used in the crypto commands of the coordinator
 bellman = {version = "0.11.1", features = ["groth16", "multicore"]}
 blake2 = "0.10.4"
-byteorder = "1"
-exitcode = "1.1.2"
+bls12_381 = "0.6.1"
 getrandom = {version = "0.2.6", features = ["js"]}
 hex = "0.4.2"
 itertools = "0.10.3"
 rand = {version = "0.8.5", default-features = false, features = ["getrandom"]}
-rand-06 = { package = "rand", version = "0.6" } # Used just for compatibility with bip39
+rand-06 = {package = "rand", version = "0.6"}# Used just for compatibility with bip39
 rand_chacha = "0.3.1"
 sha2 = "0.10.2"
-bls12_381 = "0.6.1"
 
 [dependencies.rocket]
 features = ["json"]
@@ -67,11 +65,11 @@ version = "0.5.0-rc.1"
 # Imports MPC functions that will parameterize Powers of Tau to Groth16 (in our context MASP zk-SNARK)
 [dependencies.masp-phase2]
 branch = "master"
-git = "https://github.com/heliaxdev/masp-phase2"
+git = "https://github.com/anoma/masp-phase2"
 
 # Imports the MASP circuits used as input to initialize the MPCParameters
 [dependencies.masp_proofs]
-git = "https://github.com/heliaxdev/masp"
+git = "https://github.com/anoma/masp"
 
 [dependencies.hex-literal]
 optional = true
@@ -82,7 +80,7 @@ serial_test = {version = "0.5"}
 tempfile = "3.3.0"
 
 [features]
-default = []
+default = ["operator"]
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []

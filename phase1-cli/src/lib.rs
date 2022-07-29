@@ -1,26 +1,11 @@
 // Documentation
 #![doc = include_str!("../README.md")]
 
-mod combine;
 use std::path::PathBuf;
-
-pub use combine::combine;
-
-mod contribute;
-pub use contribute::contribute;
 
 pub mod keys;
 
-mod new_challenge;
-pub use new_challenge::new_challenge;
-
 pub mod requests;
-
-mod transform_pok_and_correctness;
-pub use transform_pok_and_correctness::transform_pok_and_correctness;
-
-mod transform_ratios;
-pub use transform_ratios::transform_ratios;
 
 use phase1_coordinator::{
     objects::round::LockedLocators,

@@ -4,8 +4,6 @@ use crate::{
     storage::{ContributionLocator, Disk, DiskObjectReader, Locator, Object, StorageLocator, StorageObject},
     CoordinatorError,
 };
-use phase1::{helpers::CurveKind, Phase1};
-use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
 
 use std::time::Instant;
 use tracing::{debug, error, trace};
@@ -24,7 +22,7 @@ impl Aggregation {
         debug!("Starting aggregation on round {}", round_height);
 
         // Fetch the compressed input setting for the final round file.
-        let compressed_input = environment.compressed_inputs();
+        let _compressed_input = environment.compressed_inputs();
         // Fetch the compressed output setting based on the round height.
         let compressed_output = environment.compressed_outputs();
 
@@ -41,7 +39,7 @@ impl Aggregation {
 
         // Load the contribution files.
         let readers = Self::readers(environment, storage, round)?;
-        let contribution_readers: Vec<_> = readers.iter().map(|r| (r.as_ref(), compressed_output)).collect();
+        let _contribution_readers: Vec<_> = readers.iter().map(|r| (r.as_ref(), compressed_output)).collect();
 
         let elapsed = Instant::now().duration_since(start);
         debug!("Completed aggregation on round {} in {:?}", round_height, elapsed);
