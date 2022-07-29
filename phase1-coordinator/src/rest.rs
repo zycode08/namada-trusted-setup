@@ -2,6 +2,7 @@
 
 use crate::{
     authentication::{Production, Signature},
+    coordinator,
     objects::{ContributionInfo, LockedLocators, Task},
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
@@ -378,9 +379,20 @@ impl<'r> FromRequest<'r> for CurrentContributor {
             .expect("Managed state should always be retrievable");
         let participant = Participant::new_contributor(pubkey);
 
-        if !coordinator.read().await.is_current_contributor(&participant) {
+        let read_lock = coordinator.read().await;
+        if !read_lock.is_current_contributor(&participant) {
             // Cache error data for the error catcher
-            let error_msg = String::from("Participant is not the current contributor");
+            let error_msg = {
+                if read_lock.is_banned_participant(&participant) {
+                    String::from("Participant has been banned from the ceremony")
+                } else if read_lock.is_dropped_participant(&participant) {
+                    String::from("Participant has been dropped from the ceremony")
+                } else {
+                    String::from("Participant is not the current contributor")
+                }
+            };
+            drop(read_lock);
+
             request.local_cache(|| participant.clone());
             request.local_cache(|| (request.uri().to_string(), error_msg.clone()));
 
