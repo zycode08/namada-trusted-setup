@@ -14,7 +14,7 @@ To learn more about the protocol, we recommend the following resources:
 - [Namada's specifications](https://specs.namada.net)
 
 ## Participate in Namada Trusted Setup
-If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) to be notified about the launch.
+If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) and [sign up to the newsletter](https://dev.us7.list-manage.com/subscribe?u=69adafe0399f0f2a434d8924b&id=9e747afc55) to be notified about the launch.
 
 ### Building and contributing from source
 
@@ -36,8 +36,22 @@ cd namada-trusted-setup
 
 Build the binaries and start your contribution with:
 ```
+make contribute https://contribute.namada.net
+```
+or
+```
 cargo run --release --bin phase1 --features cli contribute https://contribute.namada.net
 ```
+
+### Understanding the ceremony
+
+Upon starting the client, you will be asked if you want to participate in the incentivized program. Then, the client will generate a secret mnemonic that derives your key pair. Make sure to back up your mnemonic and keep it in a safe place. This is the only way to prove your contribution and claim your rewards later.
+
+After you save your mnemonic, you will join a queue for the ceremony, and wait until it is your turn. Each round will last between 4-20 min, depending on how each participant chooses to contribute. Your machine needs to be connected to the coordinator at all times, so please close neither your terminal, nor your internet connection.
+
+If the coordinator detects that you are offline for a certain amount of time, you will be kicked out from the queue, and have to start from scratch again. When it is your turn, the challenge will be downloaded from the coordinator and saved to the root folder. 
+
+Then, the client will ask you a couple of questions depending on how you want to contribute: whether you wish to give your own seed of randomness or compute your contribution on another machine. You will have a maximum of 20 minutes to compute your challenge and send your contribution back to the coordinator. Be creative and good luck!
 
 ## Overview of trusted setup ceremonies
 
@@ -55,12 +69,14 @@ For instructions on how to ensure that the ceremony is executed properly, refer 
 ## Directory Structure
 
 This repository contains several Rust crates that implement the different building blocks of the MPC. The high-level structure of the repository is as follows:
-- [`client`](phase1-cli): Rust crate that provides a HTTP client that communicates with the REST API endpoints of the coordinator and uses the necessary cryptographic functions to contribute to the trusted setup.
-- [`coordinator`](phase1-coordinator): Rust crate that provides a coordinator library and a HTTP REST API that allow contributors to interact with the coordinator. The coordinator handles the operational steps of the ceremony like: adding a new contributor to the queue, authentificating a contributor, sending and receiving challenge files, removing inactive contributors, reattributing challenge file to a new contributor after a contributor dropped, verifying contributions, creating new files, etc.
+- [`phase1-cli`](phase1-cli): Rust crate that provides a HTTP client that communicates with the REST API endpoints of the coordinator and uses the necessary cryptographic functions to contribute to the trusted setup.
+- [`phase1-coordinator`](phase1-coordinator): Rust crate that provides a coordinator library and a HTTP REST API that allow contributors to interact with the coordinator. The coordinator handles the operational steps of the ceremony like: adding a new contributor to the queue, authentificating a contributor, sending and receiving challenge files, removing inactive contributors, reattributing challenge file to a new contributor after a contributor dropped, verifying contributions, creating new files, etc.
+- [`phase1`](phase1) and [`setup-utils`](setup-utils): contain utils used in both the client and the coordinator.
+- The remaining files contain configs for CI and deployment to AWS EC2 and S3 bucket.
 
 ## Audits
 
-The original implementation of the coordinator for the Aleo Trusted Setup was audited by: 
+The original implementation of the coordinator for the [Aleo Trusted Setup](https://github.com/AleoHQ/aleo-setup) was audited by: 
 
 - [Least Authority](https://leastauthority.com/blog/audit-of-aleo-trusted-setup-phase-1/)
 
@@ -79,3 +95,8 @@ Unless you explicitly state otherwise, any contribution intentionally
 submitted for inclusion in the work by you, as defined in the Apache-2.0
 license, shall be dual licensed as above, without any additional terms or
 conditions.
+
+## Community support
+
+- [Discord](https://discord.com/invite/anoma) (Questions and discussions on Namada)
+- [Twitter](https://twitter.com/namadanetwork)
