@@ -36,10 +36,6 @@ cd namada-trusted-setup
 
 Build the binaries and start your contribution with:
 ```
-make contribute https://contribute.namada.net
-```
-or
-```
 cargo run --release --bin phase1 --features cli contribute https://contribute.namada.net
 ```
 
