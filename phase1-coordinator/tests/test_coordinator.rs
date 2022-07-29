@@ -1,4 +1,4 @@
-// NOTE: these tests must be run with --test-threads=1 due to the disk storage
+//  NOTE: these tests must be run with --test-threads=1 due to the disk storage
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
@@ -500,10 +500,8 @@ fn test_wrong_post_contribution_info() {
 ///
 #[test]
 fn test_contribution() {
-    // FIXME: test drop. Need to call the update endpoint on the coordinator
     // FIXME: test round rollback and contributor substitution
-    // FIXME: test verification of a wrong contribution
-    // FIXME: how to use AWS in test
+    // FIXME: test verification of a wrong contribution, together with the one above (Need to call the verify endpoint on the coordinator)
     use setup_utils::calculate_hash;
 
     let ctx = build_context();
@@ -521,7 +519,7 @@ fn test_contribution() {
     // Get challenge
     req = client.get(challenge_url);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
+    assert_eq!(response.status(), Status::Ok); //FIXME: breaks here, cannot use local Client, must use another one 
     assert!(response.body().is_some());
     let challenge = response.into_bytes().unwrap();
 
