@@ -2,7 +2,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
     io,
-    objects::{ContributionFileSignature, ContributionInfo, ContributionState},
+    objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
     rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
     storage::Object,
 };
@@ -15,13 +15,19 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType, ScrollDown},
 };
+use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
-use phase1_cli::{requests, CeremonyOpt};
+use phase1_cli::{
+    keys::{self, EncryptedKeypair, TomlConfig},
+    requests,
+    CeremonyOpt,
+};
 use serde_json;
 use setup_utils::calculate_hash;
 use structopt::StructOpt;
 
 use std::{
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
     sync::Arc,
@@ -30,9 +36,6 @@ use std::{
 use chrono::Utc;
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
-
-use base64;
-use bs58;
 
 use regex::Regex;
 
@@ -97,11 +100,7 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    if custom_seed == "y" { Ok(true) } else { Ok(false) }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -288,13 +287,13 @@ async fn contribute(
 
     // Prepare contribution file with the challege hash
     println!("{} Setting up contribution file", "[6/11]".bold().dimmed());
-    let base58_pubkey = bs58::encode(base64::decode(keypair.pubkey())?).into_string();
     let contrib_filename = if contrib_info.is_another_machine {
         Arc::new(OFFLINE_CONTRIBUTION_FILE_NAME.to_string())
     } else {
         Arc::new(format!(
             "namada_contribution_round_{}_public_key_{}.params",
-            round_height, base58_pubkey
+            round_height,
+            keypair.pubkey()
         ))
     };
     let mut response_writer = async_fs::File::create(contrib_filename.as_str()).await?;
@@ -620,6 +619,64 @@ async fn main() {
 
             let client = Client::new();
             close_ceremony(&client, &url.coordinator, &keypair).await;
+        }
+        CeremonyOpt::ExportKeypair(mnemonic_path) => {
+            tokio::task::spawn_blocking(|| {
+                let content = fs::read_to_string(mnemonic_path.path).unwrap();
+                let seed = io::seed_from_string(content.as_str()).unwrap();
+
+                let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".yellow()).unwrap();
+                let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".yellow()).unwrap();
+                if confirmation != password {
+                    eprintln!(
+                        "{}",
+                        format!("{}", "Passwords don't match!".red().bold())
+                    );
+                }
+
+                // Generate keypair and address
+                let keypair_struct = EdKeyPair::from_seed(Seed::from_slice(&seed[.. 32]).unwrap());
+                let keypair = EncryptedKeypair::from_keypair(&keypair_struct, password);
+                let address = keys::generate_address(&hex::encode(keypair_struct.pk.to_vec()));
+                let bech_address = keys::bech_encode_address(&address);
+
+                let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                    io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
+                } else {
+                    address.clone().to_lowercase()
+                };
+
+                // Write to toml file
+                let toml_config  = TomlConfig::new(&alias, keypair, &bech_address, &address);
+                fs::write("keypair.toml", toml::to_string(&toml_config).unwrap()).unwrap();
+                println!("{}", "Keypair was correctly generated in the \"keypair.toml\" file. You can copy its content to the \"wallet.toml\" file. Refer to the Namada documentation on how to generate a wallet.".bold().green());
+            }).await.expect(&format!("{}", "Error while generating the keypair".red().bold()));
+        }
+        CeremonyOpt::GenerateAddresses(contributors) => {
+            tokio::task::spawn_blocking(move || {
+                let content = fs::read(&contributors.path).unwrap();
+                let contrib_info: Vec<TrimmedContributionInfo> = serde_json::from_slice(&content).unwrap();
+                let addresses: HashMap<String, u32> = contrib_info
+                    .iter()
+                    .map(|contrib| {
+                        (
+                            keys::bech_encode_address(&keys::generate_address(contrib.public_key())),
+                            contributors.amount,
+                        )
+                    })
+                    .collect();
+
+                let content = ["[token.xan.balances]", &toml::to_string(&addresses).unwrap()].join("\n");
+                fs::write("genesis.toml", content).unwrap();
+                println!(
+                    "{}",
+                    "The addresses were correctly generated in the \"genesis.toml\" file."
+                        .bold()
+                        .green()
+                );
+            })
+            .await
+            .expect(&format!("{}", "Error while generating the addresses".red().bold()));
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;

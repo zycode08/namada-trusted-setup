@@ -1,7 +1,5 @@
 use crate::authentication::Signature as SigTrait;
-use base64;
 use ed25519_compact::{Error, KeyPair as EdKeyPair, Noise, PublicKey, SecretKey, Seed, Signature};
-use hex;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -19,9 +17,8 @@ impl KeyPair {
         let keypair = EdKeyPair::from_seed(seed);
 
         Ok(KeyPair {
-            //FIXME: encode with Borsh and fix all the base64 and base58 encodings around
-            pubkey: base64::encode(keypair.pk.deref()),
-            sigkey: base64::encode(keypair.sk.deref()),
+            pubkey: hex::encode(keypair.pk.deref()),
+            sigkey: hex::encode(keypair.sk.deref()),
         })
     }
 
@@ -30,8 +27,8 @@ impl KeyPair {
         let keypair = EdKeyPair::generate();
 
         KeyPair {
-            pubkey: base64::encode(keypair.pk.deref()),
-            sigkey: base64::encode(keypair.sk.deref()),
+            pubkey: hex::encode(keypair.pk.deref()),
+            sigkey: hex::encode(keypair.sk.deref()),
         }
     }
 
@@ -70,9 +67,9 @@ impl SigTrait for Production {
 
     /// Signs the given message using the given signing key,
     /// and returns the signature as a [`hex`] encoded string.
-    /// Signing key is expected to be [`base64`] encoded.
+    /// Signing key is expected to be [`hex`] encoded.
     fn sign(&self, signing_key: &str, message: &str) -> anyhow::Result<String> {
-        let signing_key_bytes = base64::decode(signing_key)?;
+        let signing_key_bytes = hex::decode(signing_key)?;
         let signing_key = SecretKey::from_slice(signing_key_bytes.as_ref())?;
 
         let signature = signing_key.sign(message, Some(Noise::generate()));
@@ -82,10 +79,9 @@ impl SigTrait for Production {
 
     /// Verifies the given signature for the given message and public key,
     /// and returns `true` if the signature is valid.
-    /// Public key is expected to be [`base64`] encoded.
-    /// Signature is expected to be [`hex`] encoded.
+    /// Public key and signature are expected to be [`hex`] encoded.
     fn verify(&self, public_key: &str, message: &str, signature: &str) -> bool {
-        let public_key_bytes = base64::decode(public_key).expect("Invalid public key encoding");
+        let public_key_bytes = hex::decode(public_key).expect("Invalid public key encoding");
         let public_key = PublicKey::from_slice(public_key_bytes.as_ref()).expect("Invalid public key");
 
         let signature_bytes = hex::decode(signature).expect("Invalid signature encoding");

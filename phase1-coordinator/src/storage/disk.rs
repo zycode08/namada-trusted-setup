@@ -395,7 +395,7 @@ impl Disk {
                 if let Object::ContributionsInfoSummary(mut s) = o {
                     // NOTE: the vec is ordered for ascending round heights
                     if let Some(contrib) = s.last() {
-                        if contrib.ceremony_round == round_height {
+                        if contrib.ceremony_round() == round_height {
                             s.pop();
                         }
                     }
