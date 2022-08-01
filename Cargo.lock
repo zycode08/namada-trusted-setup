@@ -2306,6 +2306,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rayon",
  "regex",
+ "reqwest",
  "rocket",
  "rusoto_core",
  "rusoto_credential",
