@@ -32,6 +32,7 @@ use phase1_coordinator::{
     Coordinator,
     Participant,
 };
+use reqwest::header::{HeaderValue, CONTENT_TYPE};
 use rocket::{
     http::{ContentType, Header, Status},
     local::blocking::{Client, LocalRequest},
@@ -502,10 +503,12 @@ fn test_wrong_post_contribution_info() {
 fn test_contribution() {
     // FIXME: test round rollback and contributor substitution
     // FIXME: test verification of a wrong contribution, together with the one above (Need to call the verify endpoint on the coordinator)
+    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
     use setup_utils::calculate_hash;
 
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+    let reqwest_client = reqwest::blocking::Client::new();
 
     // Get challenge url
     let locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
@@ -517,11 +520,7 @@ fn test_contribution() {
     let challenge_url: String = response.into_json().unwrap();
 
     // Get challenge
-    req = client.get(challenge_url);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok); //FIXME: breaks here, cannot use local Client, must use another one 
-    assert!(response.body().is_some());
-    let challenge = response.into_bytes().unwrap();
+    let challenge = reqwest_client.get(challenge_url).send().unwrap().bytes().unwrap().to_vec();
 
     // Get contribution url
     req = client.post("/upload/chunk");
@@ -531,8 +530,8 @@ fn test_contribution() {
     assert!(response.body().is_some());
     let (chunk_url, sig_url): (String, String) = response.into_json().unwrap();
 
-    // Upload chunk
-    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 0, false);
+    // Upload chunk and signature
+    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 1, false);
     let challenge_hash = calculate_hash(challenge.as_ref());
 
     let mut contribution: Vec<u8> = Vec::new();
@@ -541,10 +540,10 @@ fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution, &entropy);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 0);
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 1);
     contribution.resize(contrib_size as usize, 0);
 
-    let contribution_file_signature_locator = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
+    let contribution_file_signature_locator = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 1, false);
 
     let response_hash = calculate_hash(contribution.as_ref());
 
@@ -557,17 +556,11 @@ fn test_contribution() {
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
 
-    req = client.post(chunk_url);
-    req = req.body(contribution);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    let response = reqwest_client.put(chunk_url).body(contribution).send().unwrap();
+    assert!(response.status().is_success());
 
-    req = client.post(sig_url);
-    req = req.body(serde_json::to_vec(&contribution_file_signature).unwrap());
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    let response = reqwest_client.put(sig_url).header(CONTENT_TYPE, HeaderValue::from_static("application/json")).body(serde_json::to_vec(&contribution_file_signature).unwrap()).send().unwrap();
+    assert!(response.status().is_success());
 
     // Post contribution info
     let mut contrib_info = ContributionInfo::default();
@@ -599,7 +592,7 @@ fn test_contribution() {
     req = set_request::<PostChunkRequest>(req, &ctx.contributors[0].keypair, Some(&post_chunk));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
+    assert!(response.body().is_none());
 
     // Verify chunk
     req = client.get("/verify");
@@ -627,6 +620,6 @@ fn test_contribution() {
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), CUSTOM_UNAUTHORIZED);
     assert!(response.body().is_some());
 }
