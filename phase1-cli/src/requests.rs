@@ -209,14 +209,14 @@ pub async fn get_challenge_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &u64,
+    round_height: &u64,
 ) -> Result<String> {
     let response = submit_request(
         client,
         coordinator_address,
         "contributor/challenge",
         keypair,
-        Request::Post(Some(request_body)),
+        Request::Post(Some(round_height)),
     )
     .await?;
 
@@ -240,14 +240,14 @@ pub async fn get_contribution_url(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &u64,
+    round_height: &u64,
 ) -> Result<(String, String)> {
     let response = submit_request::<u64>(
         client,
         coordinator_address,
         "upload/chunk",
         keypair,
-        Request::Post(Some(request_body)),
+        Request::Post(Some(round_height)),
     )
     .await?;
 
