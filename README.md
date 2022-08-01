@@ -41,13 +41,16 @@ cargo run --release --bin phase1 --features cli contribute https://contribute.na
 
 ### Understanding the ceremony
 
-Upon starting the client, you will be asked if you want to participate in the incentivized program. Then, the client will generate a secret mnemonic that derives your key pair. Make sure to back up your mnemonic and keep it in a safe place. This is the only way to prove your contribution and claim your rewards later.
+1. Upon starting the client, you will be asked if you want to participate in the incentivized program. Then, the client will generate a secret mnemonic that derives your key pair. Make sure to back up your mnemonic and keep it in a safe place. This is the only way to prove your contribution and claim your rewards later.
 
-After you save your mnemonic, you will join a queue for the ceremony, and wait until it is your turn. Each round will last between 4-20 min, depending on how each participant chooses to contribute. Your machine needs to be connected to the coordinator at all times, so please close neither your terminal, nor your internet connection.
+2. After you save your mnemonic, you will join a queue for the ceremony, and wait until it is your turn. Each round will last between 4-20 min, depending on how each participant chooses to contribute. Your machine needs to be connected to the coordinator at all times, so please close neither your terminal, nor your internet connection. If the coordinator detects that you are offline for a certain amount of time, you will be kicked out from the queue, and have to start from scratch again.
 
-If the coordinator detects that you are offline for a certain amount of time, you will be kicked out from the queue, and have to start from scratch again. When it is your turn, the challenge will be downloaded from the coordinator and saved to the root folder. 
+3. When it is your turn, the challenge will be downloaded from the coordinator and saved to the root folder. 
 
-Then, the client will ask you a couple of questions depending on how you want to contribute: whether you wish to give your own seed of randomness or compute your contribution on another machine. You will have a maximum of 20 minutes to compute your challenge and send your contribution back to the coordinator. Be creative and good luck!
+4. Then, the client will ask you a couple of questions depending on how you want to contribute: whether you wish to give your own seed of randomness or compute your contribution on another machine. You will have a maximum of 20 minutes to compute your challenge and send your contribution back to the coordinator. Be creative and good luck!
+
+### CLI Contribution Flow 
+![Alt text](./ceremony-contribution-diagram.png?raw=true "Ceremony Contribution Flow")
 
 ## Overview of trusted setup ceremonies
 
@@ -61,6 +64,7 @@ in two phases, one which generates the _Powers of Tau_, and one which "specializ
 Note that the generated Powers of Tau can be re-used for any other Phase 2 setup, or for instantiating other mechanisms, such as the [KZG10](https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf) polynomial commitment scheme.
 
 For instructions on how to ensure that the ceremony is executed properly, refer to [`RECOMMENDATIONS.md`](RECOMMENDATIONS.md).
+
 
 ## Directory Structure
 
