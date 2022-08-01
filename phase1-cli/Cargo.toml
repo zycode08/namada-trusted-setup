@@ -1,19 +1,19 @@
 [package]
-name = "phase1-cli"
-version = "0.3.0"
 authors = ["The Aleo Team <hello@aleo.org>"]
 description = "CLI implementation of Phase 1"
-homepage = "https://github.com/AleoHQ/aleo-setup"
-repository = "https://github.com/AleoHQ/aleo-setup"
-license = "MIT/Apache-2.0"
 edition = "2018"
+homepage = "https://github.com/AleoHQ/aleo-setup"
+license = "MIT/Apache-2.0"
+name = "phase1-cli"
+repository = "https://github.com/AleoHQ/aleo-setup"
+version = "0.3.0"
 
 [dependencies]
-phase1 = { path = "../phase1" }
-phase1-coordinator = { path = "../phase1-coordinator" }
-setup-utils = { path = "../setup-utils" }
+phase1 = {path = "../phase1"}
+phase1-coordinator = {path = "../phase1-coordinator"}
 serde = "1.0.136"
-snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+setup-utils = {path = "../setup-utils"}
+snarkvm-curves = {git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c"}
 
 anyhow = "1.0.57"
 async-stream = "0.3.3"
@@ -22,40 +22,41 @@ bytes = "1.1.0"
 chrono = "0.4"
 crossterm = "0.24.0"
 ed25519-compact = "1.0.11"
+fs-err = "2.6"
 futures-core = "0.3.21"
 futures-util = "0.3.21"
-fs-err = "2.6"
-gumdrop = { version = "0.8.0" }
-hex = { version = "0.4.2" }
+gumdrop = {version = "0.8.0"}
+hex = {version = "0.4.2"}
 indicatif = "0.16.2"
-memmap = { version = "0.7.0" }
+memmap = {version = "0.7.0"}
+notify-rust = "4.5.8"
 orion = "0.17.1"
 owo-colors = "3.4.0"
-rand = { version = "0.8" }
+rand = {version = "0.8"}
 regex = "1"
-reqwest = { version = "0.11", features = ["brotli", "json", "stream"] }
+reqwest = {version = "0.11", features = ["brotli", "json", "stream"]}
 rpassword = "7.0.0"
 serde_json = "1.0.81"
 sha2 = "0.10.2"
 structopt = "0.3"
 thiserror = "1.0.30"
 tokio = "1.17.0"
-tokio-util = { version = "0.7.3", features = ["io"] }
+tokio-util = {version = "0.7.3", features = ["io"]}
 toml = "0.5.9"
-tracing = { version = "0.1" }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
+tracing = {version = "0.1"}
+tracing-subscriber = {version = "0.3", features = ["env-filter", "time"]}
 
 [dev-dependencies]
-rocket = { version = "0.5.0-rc.1", features = ["json"] }
-wasm-bindgen-test = { version = "0.3.18" }
+rocket = {version = "0.5.0-rc.1", features = ["json"]}
 toml = "0.5.9"
+wasm-bindgen-test = {version = "0.3.18"}
 
 [build-dependencies]
 rustc_version = "0.4.0"
 
 [features]
-default = []
 cli = ["phase1/cli", "parallel", "setup-utils/cli"]
+default = []
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 
 [[bin]]

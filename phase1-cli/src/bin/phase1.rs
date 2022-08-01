@@ -19,8 +19,7 @@ use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
+    requests, CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -31,6 +30,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Read,
     sync::Arc,
+    time::Instant,
 };
 
 use chrono::Utc;
@@ -100,7 +100,11 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
+    if custom_seed == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -218,6 +222,8 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         RandomSource::Entropy(entropy)
     };
 
+    println!("Computation of your contribution in progress...");
+
     let writer = OpenOptions::new().append(true).open(filename)?;
 
     #[cfg(debug_assertions)]
@@ -245,14 +251,21 @@ async fn contribute(
 ) -> Result<u64> {
     // Get the necessary info to compute the contribution
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
+    let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
+    contrib_info.timestamps.challenge_locked = Utc::now();
     Notification::new()
         .summary("Namada Trusted Setup")
         .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
         .auto_icon()
         .timeout(Timeout::Never)
         .show()?;
-    let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
-    contrib_info.timestamps.challenge_locked = Utc::now();
+    println!("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!");
+    Notification::new()
+        .summary("Namada Trusted Setup")
+        .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
+        .auto_icon()
+        .timeout(Timeout::Never)
+        .show()?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
@@ -400,7 +413,7 @@ async fn contribute(
 
     // Notify contribution to the coordinator for the verification
     println!(
-        "{} Notifying the coordinator of the completed contribution",
+        "{} Notifying the coordinator of your contribution.\nVerification of your contribution in progress...",
         "[11/11]".bold().dimmed()
     );
     let post_chunk_req = PostChunkRequest::new(
@@ -456,6 +469,18 @@ async fn contribution_loop(
 
     let mut round_height = 0;
     let mut status_count = 1;
+    let queue_timer = Instant::now();
+
+    let init_queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
+        .await
+        .expect(&format!("{}", "Couldn't get the status of contributor".red().bold()));
+    let mut init_queue_position = 0;
+    match init_queue_status {
+        ContributorStatus::Queue(position, _) => {
+            init_queue_position = position;
+        }
+        _ => {}
+    }
 
     loop {
         // Check the contributor's position in the queue
@@ -466,10 +491,12 @@ async fn contribution_loop(
         match queue_status {
             ContributorStatus::Queue(position, size) => {
                 let msg = format!(
-                    "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
+                    "Queue position: {}\nQueue size: {}\nExpected waiting time: {} min\nMax waiting time: {}\nElapsed time in queue: {} min",
                     position,
                     size,
-                    position * 5
+                    init_queue_position * 4,
+                    init_queue_position * 20,
+                    queue_timer.elapsed().as_secs()/60
                 );
 
                 let max_len = msg.split("\n").map(|x| x.len()).max().unwrap();
@@ -477,11 +504,11 @@ async fn contribution_loop(
 
                 if status_count > 1 {
                     // Clear previous status from terminal
-                    execute!(std::io::stdout(), ScrollDown(6), Clear(ClearType::FromCursorDown)).unwrap();
+                    execute!(std::io::stdout(), ScrollDown(8), Clear(ClearType::FromCursorDown)).unwrap();
                 }
                 println!(
                     "{}{}\n{}\n{}\n{}",
-                    "Queue status, poll #", status_count, stripe, msg, stripe
+                    "Queue status, poll #", status_count, stripe, msg, stripe,
                 );
                 status_count += 1;
             }
@@ -491,11 +518,15 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Contribution failed".red().bold()));
             }
             ContributorStatus::Finished => {
-                println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with contribution hash {}. Let's enable private transactions for any assets.", 
+                let content = fs::read(&format!("namada_contributor_info_round_{}.json", round_height))
+                    .expect(&format!("{}", "Couldn't read the contributor info file".red().bold()));
+                let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
+
+                println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy", 
                 "Done! Thank you for your contribution!".green().bold(),
                 round_height,
-                //FIXME: add contribution hash saved in file namada_contributor_info_round_{round_height}.json
-round_height);
+contrib_info.contribution_hash,
+);
                 break;
             }
             ContributorStatus::Banned => {
@@ -586,7 +617,7 @@ async fn main() {
 
             // Perform the entire contribution cycle
             let banner = async_fs::read_to_string("phase1-cli/ascii_logo.txt").await.unwrap();
-            println!("{}", banner.cyan());
+            println!("{}", banner.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
             io::get_user_input("Press enter to continue".yellow(), None).unwrap();
