@@ -160,8 +160,7 @@ fn get_progress_bar(len: u64) -> ProgressBar {
 fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
     let mut msg = format!(
-        "{}:\n
-        Starting from now, you will have 15 minutes to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\nIn the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files. \n",
+        "{}:\n\nIn the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files.\n",
         "Instructions".bold().underline(),
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
@@ -209,7 +208,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
             "Enter your own seed of randomness (32 bytes hex encoded)".yellow(),
-            Some(&Regex::new(r"^[A-Fa-f0-9]+${32}")?),
+            Some(&Regex::new(r"[[:xdigit:]]{64}")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
 
@@ -259,7 +258,10 @@ async fn contribute(
         .auto_icon()
         .timeout(Timeout::Never)
         .show()?;
-    println!("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!");
+    println!(
+        "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
+        contrib_info.timestamps.challenge_locked,
+    );
     Notification::new()
         .summary("Namada Trusted Setup")
         .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
@@ -508,7 +510,7 @@ async fn contribution_loop(
                 }
                 println!(
                     "{}{}\n{}\n{}\n{}",
-                    "Queue status, poll #", status_count, stripe, msg, stripe,
+                    "Queue status - poll #", status_count, stripe, msg, stripe,
                 );
                 status_count += 1;
             }
@@ -523,7 +525,7 @@ async fn contribution_loop(
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
                 println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy", 
-                "Done! Thank you for your contribution!".green().bold(),
+                "Done! Thank you for your contribution! Check it out on namada.net!".green().bold(),
                 round_height,
 contrib_info.contribution_hash,
 );
@@ -539,7 +541,7 @@ contrib_info.contribution_hash,
                 break;
             }
             ContributorStatus::Other => {
-                println!("{}", "Did not retrieve e valid contributor state.".red().bold());
+                println!("{}", "Did not retrieve a valid contributor state.".red().bold());
                 break;
             }
         }
