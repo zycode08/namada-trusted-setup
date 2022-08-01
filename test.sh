@@ -12,11 +12,10 @@ done
 
 # Coordinator test
 echo "Cleaning S3 bucket for coordinator test..."
-aws s3 rm s3://trusted-setup-artifacts-local-v1 --recursive
+aws s3 rm s3://$AWS_S3_BUCKET --recursive
 cargo test --test test_coordinator -- --test-threads=1
 
 # e2e test
-# FIXME: uncomment this block after having fixed e2e tests
-# echo "Cleaning S3 bucket for e2e test..."
-# aws s3 rm s3://trusted-setup-artifacts-local-v1 --recursive
-# cargo test --test e2e -- --test-threads=1
+echo "Cleaning S3 bucket for e2e test..."
+aws s3 rm s3://$AWS_S3_BUCKET --recursive
+cargo test --test e2e -- --test-threads=1
