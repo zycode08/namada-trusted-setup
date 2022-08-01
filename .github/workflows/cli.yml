@@ -1,4 +1,4 @@
-name: Build
+name: Build phase-1-cli
 
 on:
   push:
