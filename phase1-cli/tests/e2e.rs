@@ -34,8 +34,8 @@ use rocket::{
 };
 
 use async_stream::try_stream;
-use toml::Value;
 use futures_util::StreamExt;
+use toml::Value;
 
 use phase1_cli::requests;
 use reqwest::{Client, Url};
@@ -370,8 +370,7 @@ async fn test_wrong_post_contribution_info() {
     assert!(response.is_err());
 
     // Non-current-contributor participant
-    let response =
-        requests::post_contribution_info(&client, &url, &ctx.contributors[1].keypair, &contrib_info).await;
+    let response = requests::post_contribution_info(&client, &url, &ctx.contributors[1].keypair, &contrib_info).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -403,15 +402,12 @@ async fn test_contribution() {
     let url = Url::parse(&ctx.coordinator_url).unwrap();
 
     // Get challenge url
-    let challenge_url = requests::get_challenge_url(&client, &url, &ctx.contributors[0].keypair, &ROUND_HEIGHT).await.unwrap();
+    let challenge_url = requests::get_challenge_url(&client, &url, &ctx.contributors[0].keypair, &ROUND_HEIGHT)
+        .await
+        .unwrap();
 
     // Get challenge
-    let mut challenge_stream = requests::get_challenge(
-        &client,
-        challenge_url.as_str(),
-    )
-    .await
-    .unwrap();
+    let mut challenge_stream = requests::get_challenge(&client, challenge_url.as_str()).await.unwrap();
 
     let mut challenge: Vec<u8> = Vec::new();
     while let Some(b) = challenge_stream.0.next().await {
@@ -420,7 +416,10 @@ async fn test_contribution() {
     }
 
     // Get contribution url
-    let (chunk_url, sig_url) = requests::get_contribution_url(&client, &url, &ctx.contributors[0].keypair, &ROUND_HEIGHT).await.unwrap();
+    let (chunk_url, sig_url) =
+        requests::get_contribution_url(&client, &url, &ctx.contributors[0].keypair, &ROUND_HEIGHT)
+            .await
+            .unwrap();
 
     // Upload chunk
     let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 1, false);
@@ -457,31 +456,36 @@ async fn test_contribution() {
             yield vec![b].into();
         }
     };
-    requests::upload_chunk(&client, chunk_url.as_str(), sig_url.as_str(), contrib_stream, contribution_len, &contribution_file_signature).await.unwrap();
+    requests::upload_chunk(
+        &client,
+        chunk_url.as_str(),
+        sig_url.as_str(),
+        contrib_stream,
+        contribution_len,
+        &contribution_file_signature,
+    )
+    .await
+    .unwrap();
 
-     // Post contribution info
-     let mut contrib_info = ContributionInfo::default();
-     contrib_info.full_name = Some(String::from("Test Name"));
-     contrib_info.email = Some(String::from("test@mail.dev"));
-     contrib_info.public_key = ctx.contributors[0].keypair.pubkey().to_owned();
-     contrib_info.ceremony_round = ctx.contributors[0]
-         .locked_locators
-         .as_ref()
-         .unwrap()
-         .current_contribution()
-         .round_height();
-     contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
- 
-     requests::post_contribution_info(&client, &url, &ctx.contributors[0].keypair, &contrib_info)
-         .await
-         .unwrap();
+    // Post contribution info
+    let mut contrib_info = ContributionInfo::default();
+    contrib_info.full_name = Some(String::from("Test Name"));
+    contrib_info.email = Some(String::from("test@mail.dev"));
+    contrib_info.public_key = ctx.contributors[0].keypair.pubkey().to_owned();
+    contrib_info.ceremony_round = ctx.contributors[0]
+        .locked_locators
+        .as_ref()
+        .unwrap()
+        .current_contribution()
+        .round_height();
+    contrib_info.try_sign(&ctx.contributors[0].keypair).unwrap();
+
+    requests::post_contribution_info(&client, &url, &ctx.contributors[0].keypair, &contrib_info)
+        .await
+        .unwrap();
 
     // Contribute
-    let post_chunk = PostChunkRequest::new(
-        ROUND_HEIGHT,
-        contribution_locator,
-        contribution_file_signature_locator,
-    );
+    let post_chunk = PostChunkRequest::new(ROUND_HEIGHT, contribution_locator, contribution_file_signature_locator);
 
     requests::post_contribute_chunk(&client, &url, &ctx.contributors[0].keypair, &post_chunk)
         .await

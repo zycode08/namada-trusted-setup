@@ -429,11 +429,7 @@ fn test_wrong_contribute_chunk() {
 
     // Non-current-contributor
     req = client.post("/contributor/contribute_chunk");
-    req = set_request(
-        req,
-        &ctx.contributors[1].keypair,
-        Some(&r),
-    );
+    req = set_request(req, &ctx.contributors[1].keypair, Some(&r));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
@@ -526,7 +522,13 @@ fn test_contribution() {
     let challenge_url: String = response.into_json().unwrap();
 
     // Get challenge
-    let challenge = reqwest_client.get(challenge_url).send().unwrap().bytes().unwrap().to_vec();
+    let challenge = reqwest_client
+        .get(challenge_url)
+        .send()
+        .unwrap()
+        .bytes()
+        .unwrap()
+        .to_vec();
 
     // Get contribution url
     req = client.post("/upload/chunk");
@@ -565,7 +567,12 @@ fn test_contribution() {
     let response = reqwest_client.put(chunk_url).body(contribution).send().unwrap();
     assert!(response.status().is_success());
 
-    let response = reqwest_client.put(sig_url).header(CONTENT_TYPE, HeaderValue::from_static("application/json")).body(serde_json::to_vec(&contribution_file_signature).unwrap()).send().unwrap();
+    let response = reqwest_client
+        .put(sig_url)
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .body(serde_json::to_vec(&contribution_file_signature).unwrap())
+        .send()
+        .unwrap();
     assert!(response.status().is_success());
 
     // Post contribution info
@@ -588,11 +595,7 @@ fn test_contribution() {
     assert!(response.body().is_none());
 
     // Contribute
-    let post_chunk = PostChunkRequest::new(
-        ROUND_HEIGHT,
-        contribution_locator,
-        contribution_file_signature_locator,
-    );
+    let post_chunk = PostChunkRequest::new(ROUND_HEIGHT, contribution_locator, contribution_file_signature_locator);
 
     req = client.post("/contributor/contribute_chunk");
     req = set_request::<PostChunkRequest>(req, &ctx.contributors[0].keypair, Some(&post_chunk));
