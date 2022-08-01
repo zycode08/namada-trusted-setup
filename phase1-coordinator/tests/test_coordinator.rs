@@ -15,7 +15,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource},
     environment::Testing,
-    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
+    objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
     rest::{
         self,
         ContributorStatus,
@@ -151,10 +151,6 @@ fn build_context() -> TestCtx {
     }
 }
 
-
-// FIXME: check that in e2e tests the error codes are the default ones and not the custom ones as here
-// FIXME: compilation warnings
-
 /// Add headers and optional body to the request
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
 where
@@ -213,7 +209,7 @@ fn test_get_healthcheck() {
     let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
     let file_content =
         "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
-    status_file.write_all(file_content.as_bytes());
+    status_file.write_all(file_content.as_bytes()).unwrap();
     std::env::set_var("HEALTH_PATH", status_file.path());
 
     let ctx = build_context();
@@ -501,8 +497,6 @@ fn test_wrong_post_contribution_info() {
 ///
 #[test]
 fn test_contribution() {
-    // FIXME: test round rollback and contributor substitution
-    // FIXME: test verification of a wrong contribution, together with the one above (Need to call the verify endpoint on the coordinator)
     std::env::set_var("NAMADA_MPC_IP_BAN", "true");
     use setup_utils::calculate_hash;
 
@@ -511,7 +505,7 @@ fn test_contribution() {
     let reqwest_client = reqwest::blocking::Client::new();
 
     // Get challenge url
-    let locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
+    let _locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
     let mut req = client.post("/contributor/challenge");
     req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&ROUND_HEIGHT));
     let response = req.dispatch();
