@@ -208,7 +208,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
             "Enter your own seed of randomness (32 bytes hex encoded)".yellow(),
-            Some(&Regex::new(r"[[:xdigit:]]{64}")?),
+            Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
 
