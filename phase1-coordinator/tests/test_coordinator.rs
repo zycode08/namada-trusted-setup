@@ -1,4 +1,4 @@
-// NOTE: these tests must be run with --test-threads=1 due to the disk storage
+//  NOTE: these tests must be run with --test-threads=1 due to the disk storage
 //	being stored at the same path for all the test instances causing a conflict.
 //	It could be possible to define a separate location (base_dir) for every test
 //	but it's simpler to just run the tests sequentially.
@@ -15,7 +15,7 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource},
     environment::Testing,
-    objects::{ContributionInfo, LockedLocators, Task, TrimmedContributionInfo},
+    objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
     rest::{
         self,
         ContributorStatus,
@@ -32,7 +32,9 @@ use phase1_coordinator::{
     Coordinator,
     Participant,
 };
+use reqwest::header::{HeaderValue, CONTENT_TYPE};
 use rocket::{
+    catchers,
     http::{ContentType, Header, Status},
     local::blocking::{Client, LocalRequest},
     routes,
@@ -106,20 +108,28 @@ fn build_context() -> TestCtx {
         .mount("/", routes![
             rest::join_queue,
             rest::lock_chunk,
-            rest::get_chunk,
-            rest::get_challenge,
-            rest::post_contribution_chunk,
             rest::contribute_chunk,
             rest::update_coordinator,
             rest::heartbeat,
-            rest::get_tasks_left,
             rest::stop_coordinator,
             rest::verify_chunks,
             rest::get_contributor_queue_status,
             rest::post_contribution_info,
             rest::get_contributions_info,
+            rest::get_healthcheck,
+            rest::get_contribution_url,
+            rest::get_challenge_url
         ])
-        .manage(coordinator);
+        .manage(coordinator)
+        .register("/", catchers![
+            rest::invalid_signature,
+            rest::unauthorized,
+            rest::missing_required_header,
+            rest::io_error,
+            rest::unprocessable_entity,
+            rest::mismatching_checksum,
+            rest::invalid_header
+        ]);
 
     // Create participants
     let test_participant1 = TestParticipant {
@@ -148,10 +158,6 @@ fn build_context() -> TestCtx {
         coordinator: coord_verifier,
     }
 }
-
-// FIXME: reduce code duplication
-// FIXME: test round rollback and contributor substitution
-// FIXME: test verification of a wrong contribution
 
 /// Add headers and optional body to the request
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
@@ -211,7 +217,7 @@ fn test_get_healthcheck() {
     let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
     let file_content =
         "{\"hash\":\"2e7f10b5a96f9f1e8c959acbce08483ccd9508e1\",\"timestamp\":\"Tue Jun 21 10:28:35 CEST 2022\"}";
-    status_file.write_all(file_content.as_bytes());
+    status_file.write_all(file_content.as_bytes()).unwrap();
     std::env::set_var("HEALTH_PATH", status_file.path());
 
     let ctx = build_context();
@@ -300,6 +306,7 @@ fn test_update_coordinator() {
 fn test_join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
 
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
@@ -314,7 +321,7 @@ fn test_join_queue() {
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.contributors[1].keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Wrong request, already existing contributor
@@ -322,7 +329,7 @@ fn test_join_queue() {
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 }
 
@@ -336,7 +343,7 @@ fn test_wrong_lock_chunk() {
     let mut req = client.get("/contributor/lock_chunk");
     req = set_request::<u8>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 }
 
@@ -402,18 +409,29 @@ fn test_wrong_contribute_chunk() {
     req = client.post("/contributor/contribute_chunk");
     req = set_request(
         req,
-        &ctx.unknown_participant.keypair,
+        &ctx.contributors[0].keypair,
         Some(&String::from("Unexpected string")),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert!(response.body().is_some());
 
+    let c = ContributionLocator::new(ROUND_HEIGHT, 0, 1, false);
+    let s = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 1, false);
+    let r = PostChunkRequest::new(ROUND_HEIGHT, c, s);
+
     // Non-existing contributor key
     req = client.post("/contributor/contribute_chunk");
-    req = set_request::<i32>(req, &ctx.unknown_participant.keypair, Some(&0));
+    req = set_request::<PostChunkRequest>(req, &ctx.unknown_participant.keypair, Some(&r));
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Non-current-contributor
+    req = client.post("/contributor/contribute_chunk");
+    req = set_request(req, &ctx.contributors[1].keypair, Some(&r));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 }
 
@@ -473,35 +491,55 @@ fn test_wrong_post_contribution_info() {
     assert!(response.body().is_some());
 }
 
-/// To test a full contribution we need to test the 6 involved endpoints sequentially:
+/// Test a full contribution:
 ///
+/// - get_challenge_url
 /// - get_challenge
-/// - post_contribution_chunk
-/// - contribute_chunk
-/// - verify_chunk
+/// - get_contribution_url
+/// - upload_chunk
 /// - post_contributor_info
+/// - post_contribution_chunk
+/// - verify_chunk
 /// - get_contributions_info
 /// - join_queue with already contributed Ip
 ///
 #[test]
 fn test_contribution() {
-    //FIXME: test drop. Need to call the update endpoint on the coordinator
+    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
     use setup_utils::calculate_hash;
 
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+    let reqwest_client = reqwest::blocking::Client::new();
 
-    // Get challenge
-    let locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
-    req = client.post("/contributor/challenge");
-    req = set_request::<LockedLocators>(req, &ctx.contributors[0].keypair, Some(locked_locators));
+    // Get challenge url
+    let _locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
+    let mut req = client.post("/contributor/challenge");
+    req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&ROUND_HEIGHT));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_some());
-    let challenge = response.into_bytes().unwrap();
+    let challenge_url: String = response.into_json().unwrap();
 
-    // Upload chunk
-    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 0, false);
+    // Get challenge
+    let challenge = reqwest_client
+        .get(challenge_url)
+        .send()
+        .unwrap()
+        .bytes()
+        .unwrap()
+        .to_vec();
+
+    // Get contribution url
+    req = client.post("/upload/chunk");
+    req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&ROUND_HEIGHT));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+    let (chunk_url, sig_url): (String, String) = response.into_json().unwrap();
+
+    // Upload chunk and signature
+    let contribution_locator = ContributionLocator::new(ROUND_HEIGHT, 0, 1, false);
     let challenge_hash = calculate_hash(challenge.as_ref());
 
     let mut contribution: Vec<u8> = Vec::new();
@@ -510,10 +548,10 @@ fn test_contribution() {
     Computation::contribute_test_masp(&challenge, &mut contribution, &entropy);
 
     // Initial contribution size is 2332 but the Coordinator expect ANOMA_BASE_FILE_SIZE. Extend to this size with trailing 0s
-    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 0);
+    let contrib_size = Object::anoma_contribution_file_size(ROUND_HEIGHT, 1);
     contribution.resize(contrib_size as usize, 0);
 
-    let contribution_file_signature_locator = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 0, false);
+    let contribution_file_signature_locator = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 1, false);
 
     let response_hash = calculate_hash(contribution.as_ref());
 
@@ -526,32 +564,16 @@ fn test_contribution() {
 
     let contribution_file_signature = ContributionFileSignature::new(signature, contribution_state).unwrap();
 
-    let post_chunk = PostChunkRequest::new(
-        contribution_locator,
-        contribution,
-        contribution_file_signature_locator,
-        contribution_file_signature,
-    );
+    let response = reqwest_client.put(chunk_url).body(contribution).send().unwrap();
+    assert!(response.status().is_success());
 
-    req = client.post("/upload/chunk");
-    req = set_request::<PostChunkRequest>(req, &ctx.contributors[0].keypair, Some(&post_chunk));
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
-
-    // Contribute
-    req = client.post("/contributor/contribute_chunk");
-    req = set_request::<u64>(req, &ctx.contributors[0].keypair, Some(&0));
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_some());
-
-    // Verify chunk
-    req = client.get("/verify");
-    req = set_request::<()>(req, &ctx.coordinator.keypair, None);
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    let response = reqwest_client
+        .put(sig_url)
+        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .body(serde_json::to_vec(&contribution_file_signature).unwrap())
+        .send()
+        .unwrap();
+    assert!(response.status().is_success());
 
     // Post contribution info
     let mut contrib_info = ContributionInfo::default();
@@ -572,6 +594,22 @@ fn test_contribution() {
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
+    // Contribute
+    let post_chunk = PostChunkRequest::new(ROUND_HEIGHT, contribution_locator, contribution_file_signature_locator);
+
+    req = client.post("/contributor/contribute_chunk");
+    req = set_request::<PostChunkRequest>(req, &ctx.contributors[0].keypair, Some(&post_chunk));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
+
+    // Verify chunk
+    req = client.get("/verify");
+    req = set_request::<()>(req, &ctx.coordinator.keypair, None);
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
+
     // Get contributions info
     req = client.get("/contribution_info");
     let response = req.dispatch();
@@ -583,7 +621,7 @@ fn test_contribution() {
     assert_eq!(summary[0].public_key(), ctx.contributors[0].keypair.pubkey());
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
-    assert_eq!(summary[0].ceremony_round, 1);
+    assert_eq!(summary[0].ceremony_round(), 1);
 
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
@@ -591,6 +629,6 @@ fn test_contribution() {
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
     let response = req.dispatch();
-    assert_eq!(response.status(), Status::InternalServerError);
+    assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 }

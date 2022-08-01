@@ -50,8 +50,6 @@ tracing-subscriber = {version = "0.3"}
 bellman = {version = "0.11.1", features = ["groth16", "multicore"]}
 blake2 = "0.10.4"
 bls12_381 = "0.6.1"
-byteorder = "1"
-exitcode = "1.1.2"
 getrandom = {version = "0.2.6", features = ["js"]}
 hex = "0.4.2"
 itertools = "0.10.3"
@@ -80,9 +78,10 @@ version = "0.3.4"
 [dev-dependencies]
 serial_test = {version = "0.5"}
 tempfile = "3.3.0"
+reqwest = { version = "0.11.11", features = ["blocking"] }
 
 [features]
-default = []
+default = ["operator"]
 operator = ["testing", "setup-utils/cli"]
 parallel = ["phase1/parallel", "setup-utils/parallel"]
 testing = []

@@ -645,10 +645,10 @@ impl Round {
     /// Initialize the files for the next challenge
     pub fn initialize_verifier_response_files(
         &self,
-        environment: &Environment,
+        _environment: &Environment,
         storage: &mut Disk,
         participant: &Participant,
-        chunk_id: u64,
+        _chunk_id: u64,
         locators: &LockedLocators,
     ) -> Result<(), CoordinatorError> {
         if !participant.is_verifier() {
