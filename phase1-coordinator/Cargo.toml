@@ -78,6 +78,7 @@ version = "0.3.4"
 [dev-dependencies]
 serial_test = {version = "0.5"}
 tempfile = "3.3.0"
+reqwest = { version = "0.11.11", features = ["blocking"] }
 
 [features]
 default = ["operator"]

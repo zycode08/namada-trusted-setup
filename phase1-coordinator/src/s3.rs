@@ -51,8 +51,8 @@ type Result<T> = std::result::Result<T, S3Error>;
 
 pub(crate) struct S3Ctx {
     client: S3Client,
-    bucket: String,
-    region: Region,
+    bucket: &'static String,
+    region: &'static Region,
     options: PreSignedRequestOption,
     credentials: AwsCredentials,
 }
@@ -68,8 +68,8 @@ impl S3Ctx {
 
         Ok(Self {
             client,
-            bucket: BUCKET.clone(),
-            region: REGION.clone(),
+            bucket: &BUCKET,
+            region: &REGION,
             options,
             credentials,
         })
@@ -90,7 +90,7 @@ impl S3Ctx {
                 ..Default::default()
             };
 
-            Some(get.get_presigned_url(&self.region, &self.credentials, &self.options))
+            Some(get.get_presigned_url(self.region, &self.credentials, &self.options))
         } else {
             None
         }
@@ -116,7 +116,7 @@ impl S3Ctx {
             ..Default::default()
         };
 
-        Ok(get.get_presigned_url(&self.region, &self.credentials, &self.options))
+        Ok(get.get_presigned_url(self.region, &self.credentials, &self.options))
     }
 
     /// Get the urls of a contribution and its signature.
@@ -134,8 +134,8 @@ impl S3Ctx {
 
         // NOTE: urls live for 5 minutes so we cannot cache them for reuse because there's a high chance they expired, we
         //  need to regenerate them every time
-        let contrib_url = get_contrib.get_presigned_url(&self.region, &self.credentials, &self.options);
-        let contrib_sig_url = get_sig.get_presigned_url(&self.region, &self.credentials, &self.options);
+        let contrib_url = get_contrib.get_presigned_url(self.region, &self.credentials, &self.options);
+        let contrib_sig_url = get_sig.get_presigned_url(self.region, &self.credentials, &self.options);
 
         (contrib_url, contrib_sig_url)
     }
