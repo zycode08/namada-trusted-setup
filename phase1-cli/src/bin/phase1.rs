@@ -19,7 +19,8 @@ use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests, CeremonyOpt,
+    requests,
+    CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -100,11 +101,7 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    if custom_seed == "y" { Ok(true) } else { Ok(false) }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -273,7 +270,6 @@ async fn contribute(
     contrib_info.ceremony_round = round_height;
 
     let challenge_url = requests::get_challenge_url(client, coordinator, keypair, &round_height).await?;
-    debug!("Presigned url: {}", challenge_url);
     println!("{} Getting challenge", "[5/11]".bold().dimmed());
     let mut challenge_stream = requests::get_challenge(client, challenge_url.as_str()).await?;
     let progress_bar = get_progress_bar(challenge_stream.1);
@@ -498,7 +494,7 @@ async fn contribution_loop(
                     size,
                     init_queue_position * 4,
                     init_queue_position * 20,
-                    queue_timer.elapsed().as_secs()/60
+                    queue_timer.elapsed().as_secs() / 60
                 );
 
                 let max_len = msg.split("\n").map(|x| x.len()).max().unwrap();

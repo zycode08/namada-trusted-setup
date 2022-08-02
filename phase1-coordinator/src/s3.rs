@@ -24,7 +24,10 @@ lazy_static! {
                 name: "custom".to_string(),
                 endpoint: endpoint_env,
             },
-            Err(_) => Region::EuWest1,
+            Err(_) => Region::Custom {
+                name: "eu-west-1".to_string(),
+                endpoint: format!("{}.s3-accelerate.amazonaws.com", *BUCKET),
+            },
         }
     };
 }
