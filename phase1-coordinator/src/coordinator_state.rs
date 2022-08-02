@@ -3290,6 +3290,16 @@ impl CoordinatorState {
             info.last_seen = time.now_utc();
             Ok(())
         } else {
+            if self.is_banned_participant(participant) {
+                return Err(CoordinatorError::ParticipantBanned);
+            }
+
+            if let Ok(dropped) = self.is_dropped_participant(participant) {
+                if dropped {
+                    return Err(CoordinatorError::ParticipantWasDropped);
+                }
+            }
+
             Err(CoordinatorError::ParticipantNotFound(participant.clone()))
         }
     }
