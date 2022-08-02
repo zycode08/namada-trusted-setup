@@ -415,7 +415,7 @@ async fn contribute(
 
     // Notify contribution to the coordinator for the verification
     println!(
-        "{} Notifying the coordinator of your contribution.\nVerification of your contribution in progress... This might take a minute...",
+        "{} Notifying the coordinator of your uploaded contribution.\nYour contribution is being processed... This might take a minute...",
         "[11/11]".bold().dimmed()
     );
     let post_chunk_req = PostChunkRequest::new(
@@ -525,7 +525,7 @@ async fn contribution_loop(
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
                 println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy", 
-                "Done! Thank you for your contribution! Check it out on namada.net!".green().bold(),
+                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
                 round_height,
 contrib_info.contribution_hash,
 );
