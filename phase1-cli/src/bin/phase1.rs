@@ -184,7 +184,7 @@ fn compute_contribution_offline() -> Result<()> {
     );
     msg.push_str(
         format!(
-            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previousvicious file)",
+            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previous file)",
             "",
             "3".bold(),
             OFFLINE_CONTRIBUTION_FILE_NAME
@@ -221,7 +221,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         RandomSource::Entropy(entropy)
     };
 
-    println!("Computation of your contribution in progress...");
+    println!("Computation of your contribution in progress... This might take a couple of seconds...");
 
     let writer = OpenOptions::new().append(true).open(filename)?;
 
@@ -415,7 +415,7 @@ async fn contribute(
 
     // Notify contribution to the coordinator for the verification
     println!(
-        "{} Notifying the coordinator of your contribution.\nVerification of your contribution in progress...",
+        "{} Notifying the coordinator of your contribution.\nVerification of your contribution in progress... This might take a minute...",
         "[11/11]".bold().dimmed()
     );
     let post_chunk_req = PostChunkRequest::new(
@@ -493,7 +493,7 @@ async fn contribution_loop(
         match queue_status {
             ContributorStatus::Queue(position, size) => {
                 let msg = format!(
-                    "Queue position: {}\nQueue size: {}\nExpected waiting time: {} min\nMax waiting time: {}\nElapsed time in queue: {} min",
+                    "Queue position: {}\nQueue size: {}\nExpected waiting time: {} min\nMax waiting time: {} min\nElapsed time in queue: {} min",
                     position,
                     size,
                     init_queue_position * 4,
