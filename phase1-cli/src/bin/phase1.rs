@@ -19,8 +19,7 @@ use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
+    requests, CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -31,6 +30,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Read,
     sync::Arc,
+    time::Instant,
 };
 
 use chrono::Utc;
@@ -43,6 +43,8 @@ use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 use tokio_util::io::ReaderStream;
 
 use tracing::{debug, trace};
+
+use notify_rust::{Notification, Timeout};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
@@ -76,7 +78,10 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 
     if incentivization == "y" {
         // Ask for personal info
-        contrib_info.full_name = Some(io::get_user_input("Please enter your full name:".yellow(), None)?);
+        contrib_info.full_name = Some(io::get_user_input(
+            "Please enter your full name:".yellow(),
+            Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
+        )?);
         contrib_info.email = Some(io::get_user_input(
             "Please enter your email address:".yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
@@ -95,7 +100,11 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
+    if custom_seed == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -151,10 +160,7 @@ fn get_progress_bar(len: u64) -> ProgressBar {
 fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
     let mut msg = format!(
-        "{}:\n
-        In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".
-        To contribute, you will need both files. Use the contribution file as prelude and append your contribution to it.
-        Starting from now, you will have 15 minutes of time to compute randomness and upload your contribution, after which you will be dropped out of the ceremony.\n",
+        "{}:\n\nIn the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files.\n",
         "Instructions".bold().underline(),
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
@@ -178,7 +184,7 @@ fn compute_contribution_offline() -> Result<()> {
     );
     msg.push_str(
         format!(
-            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previousvicious file)",
+            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previous file)",
             "",
             "3".bold(),
             OFFLINE_CONTRIBUTION_FILE_NAME
@@ -201,8 +207,8 @@ fn compute_contribution_offline() -> Result<()> {
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your own seed of randomness, 32 bytes hex encoded".yellow(),
-            Some(&Regex::new(r"[[:xdigit:]]{64}")?),
+            "Enter your own seed of randomness (32 bytes hex encoded)".yellow(),
+            Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
 
@@ -214,6 +220,8 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         let entropy = io::get_user_input("Enter a random string to be used as entropy:".yellow(), None)?;
         RandomSource::Entropy(entropy)
     };
+
+    println!("Computation of your contribution in progress... This might take a couple of seconds...");
 
     let writer = OpenOptions::new().append(true).open(filename)?;
 
@@ -244,6 +252,22 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
+    Notification::new()
+        .summary("Namada Trusted Setup")
+        .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
+        .auto_icon()
+        .timeout(Timeout::Never)
+        .show()?;
+    println!(
+        "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
+        contrib_info.timestamps.challenge_locked,
+    );
+    Notification::new()
+        .summary("Namada Trusted Setup")
+        .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
+        .auto_icon()
+        .timeout(Timeout::Never)
+        .show()?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
@@ -391,7 +415,7 @@ async fn contribute(
 
     // Notify contribution to the coordinator for the verification
     println!(
-        "{} Notifying the coordinator of the completed contribution",
+        "{} Notifying the coordinator of your uploaded contribution.\nYour contribution is being processed... This might take a minute...",
         "[11/11]".bold().dimmed()
     );
     let post_chunk_req = PostChunkRequest::new(
@@ -447,6 +471,18 @@ async fn contribution_loop(
 
     let mut round_height = 0;
     let mut status_count = 1;
+    let queue_timer = Instant::now();
+
+    let init_queue_status = requests::get_contributor_queue_status(&client, &coordinator, &keypair)
+        .await
+        .expect(&format!("{}", "Couldn't get the status of contributor".red().bold()));
+    let mut init_queue_position = 0;
+    match init_queue_status {
+        ContributorStatus::Queue(position, _) => {
+            init_queue_position = position;
+        }
+        _ => {}
+    }
 
     loop {
         // Check the contributor's position in the queue
@@ -457,10 +493,12 @@ async fn contribution_loop(
         match queue_status {
             ContributorStatus::Queue(position, size) => {
                 let msg = format!(
-                    "Queue position: {}\nQueue size: {}\nEstimated waiting time: {} min",
+                    "Queue position: {}\nQueue size: {}\nExpected waiting time: {} min\nMax waiting time: {} min\nElapsed time in queue: {} min",
                     position,
                     size,
-                    position * 5
+                    init_queue_position * 4,
+                    init_queue_position * 20,
+                    queue_timer.elapsed().as_secs()/60
                 );
 
                 let max_len = msg.split("\n").map(|x| x.len()).max().unwrap();
@@ -468,11 +506,11 @@ async fn contribution_loop(
 
                 if status_count > 1 {
                     // Clear previous status from terminal
-                    execute!(std::io::stdout(), ScrollDown(6), Clear(ClearType::FromCursorDown)).unwrap();
+                    execute!(std::io::stdout(), ScrollDown(8), Clear(ClearType::FromCursorDown)).unwrap();
                 }
                 println!(
                     "{}{}\n{}\n{}\n{}",
-                    "Queue status, poll #", status_count, stripe, msg, stripe
+                    "Queue status - poll #", status_count, stripe, msg, stripe,
                 );
                 status_count += 1;
             }
@@ -482,13 +520,15 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Contribution failed".red().bold()));
             }
             ContributorStatus::Finished => {
-                println!(
-                    "{} \nNext, your contribution will be verified by the coordinator.
-                    You can check the outcome in a few minutes by looking at round height {}.
-                    If you don't see it or the public key doesn't match yours, it means your contribution didn't pass the verification step.",
-                    "Done! Thank you for your contribution!".green().bold(),
-                    round_height
-                );
+                let content = fs::read(&format!("namada_contributor_info_round_{}.json", round_height))
+                    .expect(&format!("{}", "Couldn't read the contributor info file".red().bold()));
+                let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
+
+                println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy", 
+                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
+                round_height,
+contrib_info.contribution_hash,
+);
                 break;
             }
             ContributorStatus::Banned => {
@@ -501,7 +541,7 @@ async fn contribution_loop(
                 break;
             }
             ContributorStatus::Other => {
-                println!("{}", "Did not retrieve e valid contributor state.".red().bold());
+                println!("{}", "Did not retrieve a valid contributor state.".red().bold());
                 break;
             }
         }
@@ -579,7 +619,7 @@ async fn main() {
 
             // Perform the entire contribution cycle
             let banner = async_fs::read_to_string("phase1-cli/ascii_logo.txt").await.unwrap();
-            println!("{}", banner.cyan());
+            println!("{}", banner.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
             io::get_user_input("Press enter to continue".yellow(), None).unwrap();
