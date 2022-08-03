@@ -38,7 +38,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          role-to-assume: arn:aws:iam::375643557360:role/trusted-setup-github-action-ci-master
           aws-region: eu-west-1
       - name: Install sccache (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
@@ -74,7 +74,7 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: ${{ matrix.make.name }}
-        run: make ${{ matrix.make.command }}
+        run: ${{ matrix.make.command }}
       - name: Upload binaries package
         uses: actions/upload-artifact@v3
         with:
@@ -100,10 +100,14 @@ jobs:
         uses: battila7/get-version-action@v2
       - name: Download release artifacts
         uses: actions/download-artifact@v3
+      - name: Move binaries
+        run: |
+          mv release-macos-latest-${{ github.sha }}/phase1 phase1-macos-${{ steps.get_version.outputs.version }}
+          mv release-ubuntu-latest-${{ github.sha }}/phase1 phase1-ubuntu-${{ steps.get_version.outputs.version }}
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          files: release-*-${{ github.sha }}
+          files: ./phase1-*-${{ steps.get_version.outputs.version }}
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Trusted Setup CLI ${{ steps.get_version.outputs.version-without-v }}
