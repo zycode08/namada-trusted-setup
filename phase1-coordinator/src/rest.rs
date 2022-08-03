@@ -2,7 +2,6 @@
 
 use crate::{
     authentication::{Production, Signature},
-    coordinator,
     objects::{ContributionInfo, LockedLocators, Task},
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
