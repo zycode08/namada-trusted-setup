@@ -38,7 +38,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          role-to-assume: arn:aws:iam::375643557360:role/trusted-setup-github-action-ci-master
           aws-region: eu-west-1
       - name: Install sccache (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
