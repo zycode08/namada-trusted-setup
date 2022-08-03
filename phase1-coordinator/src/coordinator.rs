@@ -782,7 +782,19 @@ impl Coordinator {
     ///
     #[inline]
     pub fn is_banned_participant(&self, participant: &Participant) -> bool {
-        self.state.is_banned_participant(&participant)
+        self.state.is_banned_participant(participant)
+    }
+
+    ///
+    /// Returns `true` if the given participant has been dropped from the ceremony,
+    /// `false` if it hasn't or if there's no info about the participant.
+    ///
+    #[inline]
+    pub fn is_dropped_participant(&self, participant: &Participant) -> bool {
+        match self.state.is_dropped_participant(participant) {
+            Ok(dropped) => dropped,
+            Err(_) => false,
+        }
     }
 
     ///
