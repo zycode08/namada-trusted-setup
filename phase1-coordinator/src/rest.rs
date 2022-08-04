@@ -5,24 +5,21 @@ use crate::{
     objects::{ContributionInfo, LockedLocators, Task},
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
-    CoordinatorError,
-    Participant,
+    CoordinatorError, Participant,
 };
 
 use blake2::Digest;
 use rocket::{
     catch,
     data::FromData,
-    error,
-    get,
+    error, get,
     http::{ContentType, Status},
     post,
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
     tokio::{fs, sync::RwLock, task},
-    Shutdown,
-    State,
+    Shutdown, State,
 };
 
 use sha2::Sha256;
@@ -66,6 +63,8 @@ pub enum ResponseError {
     InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
     InvalidSignature,
+    #[error("Authentification token is invalid")]
+    InvalidToken,
     #[error("Io Error: {0}")]
     IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
@@ -102,6 +101,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let response_code = match self {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
+            ResponseError::InvalidToken => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
@@ -578,8 +578,24 @@ impl PostChunkRequest {
 //
 
 /// Add the incoming contributor to the queue of contributors.
-#[post("/contributor/join_queue")]
-pub async fn join_queue(coordinator: &State<Coordinator>, new_participant: NewParticipant) -> Result<()> {
+#[post("/contributor/join_queue", format = "json", data = "<token>")]
+pub async fn join_queue(
+    coordinator: &State<Coordinator>,
+    new_participant: NewParticipant,
+    token: LazyJson<String>,
+) -> Result<()> {
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let tokens = task::spawn_blocking(move || read_lock.storage().get_tokens(1))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    println!("FILLEEEE {}", &tokens);
+    println!("Tokens {}", tokens.contains(token.as_str()));
+    println!("TOKEN: {}", *token);
+    if !tokens.contains(token.as_str()) {
+        return Err(ResponseError::InvalidToken);
+    }
+
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     match task::spawn_blocking(move || {
@@ -599,7 +615,6 @@ pub async fn lock_chunk(
     participant: CurrentContributor,
 ) -> Result<Json<LockedLocators>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
-
     match task::spawn_blocking(move || write_lock.try_lock(&participant)).await? {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),

@@ -6,21 +6,13 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::ContributionInfo,
     rest::{
-        RequestContent,
-        SignatureHeaders,
-        BODY_DIGEST_HEADER,
-        CONTENT_LENGTH_HEADER,
-        PUBKEY_HEADER,
-        SIGNATURE_HEADER,
+        RequestContent, SignatureHeaders, BODY_DIGEST_HEADER, CONTENT_LENGTH_HEADER, PUBKEY_HEADER, SIGNATURE_HEADER,
     },
     ContributionFileSignature,
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
-    Client,
-    RequestBuilder,
-    Response,
-    Url,
+    Client, RequestBuilder, Response, Url,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -177,13 +169,13 @@ async fn decapsulate_response(response: Response) -> Result<Response> {
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to join the queue of contributors.
-pub async fn post_join_queue(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
+pub async fn post_join_queue(client: &Client, coordinator_address: &Url, keypair: &KeyPair, token: &String) -> Result<()> {
     submit_request::<String>(
         client,
         coordinator_address,
         "contributor/join_queue",
         keypair,
-        Request::Post(None),
+        Request::Post(Some(token)),
     )
     .await?;
 

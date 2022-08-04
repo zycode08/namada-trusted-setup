@@ -19,8 +19,7 @@ use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
+    requests, CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -101,7 +100,11 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
+    if custom_seed == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -440,8 +443,15 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
+    // let token = String::from("test");
+    let token = io::get_user_input(
+        "Enter your token my friend".yellow(),
+        Some(&Regex::new(r"[\S\s]+[\S]+").unwrap()),
+    )
+    .unwrap();
+
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    requests::post_join_queue(&client, &coordinator, &keypair)
+    requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
     contrib_info.timestamps.joined_queue = Utc::now();
