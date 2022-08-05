@@ -27,6 +27,7 @@ use sha2::Sha256;
 use lazy_static::lazy_static;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
+use time::OffsetDateTime;
 
 use tracing::warn;
 
@@ -34,6 +35,11 @@ use tracing::warn;
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
+
+#[cfg(debug_assertions)]
+pub const COHORT_TIME: i64 = 60;
+#[cfg(not(debug_assertions))]
+pub const COHORT_TIME: i64 = 86400;
 
 pub const UNKNOWN: &str = "Unknown";
 
@@ -584,17 +590,20 @@ pub async fn join_queue(
     new_participant: NewParticipant,
     token: LazyJson<String>,
 ) -> Result<()> {
-    let read_lock = (*coordinator).clone().read_owned().await;
-    let tokens = task::spawn_blocking(move || read_lock.storage().get_tokens(1))
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))?;
+    let read_lock = coordinator.read().await;
+    // Calculate the cohort number (starting at index 0) in function of COHORT_TIME
+    let ceremony_start_time: OffsetDateTime = read_lock.state().ceremony_start_time();
+    let now: OffsetDateTime = OffsetDateTime::now_utc();
+    let timestamp_diff: i64 = now.unix_timestamp() - ceremony_start_time.unix_timestamp();
+    let cohort: u64 = ((timestamp_diff - (timestamp_diff % COHORT_TIME)) / COHORT_TIME) as u64;
 
-    println!("FILLEEEE {}", &tokens);
-    println!("Tokens {}", tokens.contains(token.as_str()));
-    println!("TOKEN: {}", *token);
+    // Check if the user token is in the current cohort
+    let tokens: String = read_lock.storage().get_tokens(cohort).unwrap();
     if !tokens.contains(token.as_str()) {
         return Err(ResponseError::InvalidToken);
     }
+
+    drop(read_lock);
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 

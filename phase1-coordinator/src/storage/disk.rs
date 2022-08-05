@@ -716,7 +716,7 @@ impl StorageLocator for DiskResolver {
             ),
             Locator::ContributionsInfoSummary => format!("{}/contributors.json", self.base),
             Locator::TokensFile { cohort } => {
-                format!("{}/tokens/namada_tokens_cohort_{}.json", self.base, cohort)
+                format!("./tokens/namada_tokens_cohort_{}.json", cohort)
             }
         };
         // Sanitize the path.

@@ -6,6 +6,7 @@ challenge*
 response*
 phase1radix2m*
 tmp_*
+tokens
 
 .vscode
 **.idea/

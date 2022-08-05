@@ -5,8 +5,7 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError,
-    TimeSource,
+    CoordinatorError, TimeSource,
 };
 use lazy_static::lazy_static;
 
@@ -974,6 +973,8 @@ pub struct CoordinatorState {
     banned: HashSet<Participant>,
     /// The manual lock to hold the coordinator from transitioning to the next round.
     manual_lock: bool,
+    /// The ceremony start time.
+    ceremony_start_time: OffsetDateTime,
 }
 
 impl CoordinatorState {
@@ -998,6 +999,7 @@ impl CoordinatorState {
             dropped: Vec::new(),
             banned: HashSet::new(),
             manual_lock: false,
+            ceremony_start_time: OffsetDateTime::now_utc(),
         }
     }
 
@@ -2505,6 +2507,16 @@ impl CoordinatorState {
     }
 
     ///
+    /// Returns the current round height stored in the coordinator state.
+    ///
+    /// This function returns `0` if the current round height has not been set.
+    ///
+    #[inline]
+    pub fn ceremony_start_time(&self) -> OffsetDateTime {
+        self.ceremony_start_time
+    }
+
+    ///
     /// Updates the state of the queue for all waiting participants.
     ///
     #[inline]
@@ -3388,9 +3400,7 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState,
-        MockTimeSource,
-        SystemTimeSource,
+        CoordinatorState, MockTimeSource, SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {
