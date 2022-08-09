@@ -69,8 +69,8 @@ pub enum ResponseError {
     InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
     InvalidSignature,
-    #[error("Authentification token is invalid")]
-    InvalidToken,
+    #[error("Authentification token for cohort {0} is invalid")]
+    InvalidToken(u64),
     #[error("Io Error: {0}")]
     IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
@@ -107,7 +107,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let response_code = match self {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
-            ResponseError::InvalidToken => Status::BadRequest,
+            ResponseError::InvalidToken(_) => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
@@ -596,11 +596,15 @@ pub async fn join_queue(
     let now: OffsetDateTime = OffsetDateTime::now_utc();
     let timestamp_diff: i64 = now.unix_timestamp() - ceremony_start_time.unix_timestamp();
     let cohort: u64 = ((timestamp_diff - (timestamp_diff % COHORT_TIME)) / COHORT_TIME) as u64;
-
+    println!("Cohort: {}", cohort);
     // Check if the user token is in the current cohort
-    let tokens: String = read_lock.storage().get_tokens(cohort).unwrap();
+    // FIXME: the e2e test "test_join_queue()" fails here
+    let tokens: String = match read_lock.storage().get_tokens(cohort) {
+        Ok(tokens) => tokens,
+        Err(e) => return Err(ResponseError::CoordinatorError(e)),
+    };
     if !tokens.contains(token.as_str()) {
-        return Err(ResponseError::InvalidToken);
+        return Err(ResponseError::InvalidToken(cohort));
     }
 
     drop(read_lock);

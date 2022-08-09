@@ -443,9 +443,8 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
-    // let token = String::from("test");
     let token = io::get_user_input(
-        "Enter your token my friend".yellow(),
+        "Enter your authentification token:".yellow(),
         Some(&Regex::new(r"[\S\s]+[\S]+").unwrap()),
     )
     .unwrap();
