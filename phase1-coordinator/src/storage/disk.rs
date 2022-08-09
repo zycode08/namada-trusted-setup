@@ -715,6 +715,7 @@ impl StorageLocator for DiskResolver {
                 self.base, round_height
             ),
             Locator::ContributionsInfoSummary => format!("{}/contributors.json", self.base),
+            // FIXME: add self.base and also add testing file, otherwise testing file keeps being deleted
             Locator::TokensFile { cohort } => {
                 format!("./tokens/namada_tokens_cohort_{}.json", cohort)
             }
