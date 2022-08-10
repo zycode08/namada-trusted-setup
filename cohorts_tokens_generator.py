@@ -20,7 +20,7 @@ with open(EMAILS_LIST_PATH, newline='') as csvfile:
     reader = csv.reader(csvfile)
     for row in reader:
         emails.append(row[0])
-        # Generate unique token by hashing the email and a random secret
+        # Generate unique token by hashing the email and a random secret: hash(email||secret)
         h = blake2b(digest_size=10)
         h.update(bytes(row[0], 'utf-8') + bytes(secret, 'utf-8'))
         tokens.append(h.hexdigest())
