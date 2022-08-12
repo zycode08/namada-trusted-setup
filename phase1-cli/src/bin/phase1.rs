@@ -444,8 +444,8 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     let token = io::get_user_input(
-        "Enter your authentification token:".yellow(),
-        Some(&Regex::new(r"[\S\s]+[\S]+").unwrap()),
+        "Enter your authentification token (10 bytes hex encoded):".yellow(),
+        Some(&Regex::new(r"^[[:xdigit:]]{20}$").unwrap()),
     )
     .unwrap();
 

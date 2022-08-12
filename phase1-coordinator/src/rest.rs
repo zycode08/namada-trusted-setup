@@ -25,6 +25,7 @@ use rocket::{
 use sha2::Sha256;
 
 use lazy_static::lazy_static;
+use regex::Regex;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -71,6 +72,8 @@ pub enum ResponseError {
     InvalidSignature,
     #[error("Authentification token for cohort {0} is invalid")]
     InvalidToken(u64),
+    #[error("Authentification token has an invalid token format (hexadecimal 10 bytes)")]
+    InvalidTokenFormat,
     #[error("Io Error: {0}")]
     IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
@@ -108,6 +111,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
             ResponseError::InvalidToken(_) => Status::BadRequest,
+            ResponseError::InvalidTokenFormat => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
@@ -597,12 +601,19 @@ pub async fn join_queue(
     let timestamp_diff: i64 = now.unix_timestamp() - ceremony_start_time.unix_timestamp();
     let cohort: u64 = ((timestamp_diff - (timestamp_diff % COHORT_TIME)) / COHORT_TIME) as u64;
     println!("Cohort: {}", cohort);
-    // Check if the user token is in the current cohort
+    // Check if the user token is in the current cohort list of tokens
     // FIXME: the e2e test "test_join_queue()" fails here
     let tokens: String = match read_lock.storage().get_tokens(cohort) {
         Ok(tokens) => tokens,
         Err(e) => return Err(ResponseError::CoordinatorError(e)),
     };
+
+    let regex = Regex::new(r"^[[:xdigit:]]{20}$").unwrap();
+
+    if !regex.is_match(token.as_str()) {
+        return Err(ResponseError::InvalidTokenFormat);
+    }
+
     if !tokens.contains(token.as_str()) {
         return Err(ResponseError::InvalidToken(cohort));
     }
