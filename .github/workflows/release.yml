@@ -104,6 +104,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          files: release-*-*-${{ github.sha }}
+          files: ./**/release-*-*-${{ github.sha }}
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Trusted Setup CLI ${{ steps.get_version.outputs.version-without-v }}
