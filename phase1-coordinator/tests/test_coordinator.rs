@@ -310,16 +310,36 @@ fn test_join_queue() {
 
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
-    // Ok request
+    // Create token file
+    let mut token_file = tempfile::NamedTempFile::new_in(".").unwrap();
+    let file_content = "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]";
+    token_file.write_all(file_content.as_bytes()).unwrap();
+    std::env::set_var("NAMADA_TOKENS_FILE", token_file.path());
+
+    // Wrong request, invalid token
     let mut req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
+    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("7fe7c70eda056784fcf5")));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Wrong request, invalid token format
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("test")));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::BadRequest);
+    assert!(response.body().is_some());
+
+    // Ok request
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("7fe7c70eda056784fcf4")));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Wrong request, IP already in queue
     req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.contributors[1].keypair, None);
+    req = set_request::<String>(req, &ctx.contributors[1].keypair, Some(&format!("7fe7c70eda056784fcf4")));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
@@ -327,7 +347,7 @@ fn test_join_queue() {
     // Wrong request, already existing contributor
     let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
     req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
+    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("7fe7c70eda056784fcf4")));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
@@ -512,6 +532,12 @@ fn test_contribution() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
     let reqwest_client = reqwest::blocking::Client::new();
 
+    // Create token file
+    let mut token_file = tempfile::NamedTempFile::new_in(".").unwrap();
+    let file_content = "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]";
+    token_file.write_all(file_content.as_bytes()).unwrap();
+    std::env::set_var("NAMADA_TOKENS_FILE", token_file.path());
+
     // Get challenge url
     let _locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
     let mut req = client.post("/contributor/challenge");
@@ -627,7 +653,7 @@ fn test_contribution() {
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
 
     req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
+    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("7fe7c70eda056784fcf4")));
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());

@@ -282,14 +282,30 @@ async fn test_join_queue() {
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
 
-    // Ok request
+    // Create token file
+    let mut token_file = tempfile::NamedTempFile::new_in(".").unwrap();
+    let file_content = "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]";
+    token_file.write_all(file_content.as_bytes()).unwrap();
+    std::env::set_var("NAMADA_TOKENS_FILE", token_file.path());
+
+    // Wrong request, invalid token
     let url = Url::parse(&ctx.coordinator_url).unwrap();
-    requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("test"))
+    let mut response = requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("7fe7c70eda056784fcf5"))
+    .await;
+    assert!(response.is_err());
+
+    // Wrong request, invalid token format
+    response = requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("test"))
+    .await;
+    assert!(response.is_err());
+
+    // Ok request
+    requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("7fe7c70eda056784fcf4"))
         .await
         .unwrap();
 
     // Wrong request, already existing contributor
-    let response = requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("test")).await;
+    response = requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("test")).await;
     assert!(response.is_err());
 
     // Drop the server
@@ -385,7 +401,6 @@ async fn test_wrong_post_contribution_info() {
 /// - post_contribution_chunk
 /// - verify_chunk
 /// - get_contributions_info
-/// - join_queue with already contributed Ip
 ///
 #[tokio::test]
 async fn test_contribution() {

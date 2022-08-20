@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io,
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
+    rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME, TOKEN_REGEX},
     storage::Object,
 };
 
@@ -445,7 +445,7 @@ async fn contribution_loop(
 ) {
     let token = io::get_user_input(
         "Enter your authentification token (10 bytes hex encoded):".yellow(),
-        Some(&Regex::new(r"^[[:xdigit:]]{20}$").unwrap()),
+        Some(&Regex::new(TOKEN_REGEX).unwrap()),
     )
     .unwrap();
 

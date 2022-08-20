@@ -2,10 +2,17 @@ use crate::{
     environment::Environment,
     objects::{ContributionFileSignature, ContributionInfo, Round, TrimmedContributionInfo},
     storage::{
-        ContributionLocator, ContributionSignatureLocator, Locator, Object, ObjectReader, ObjectWriter, StorageLocator,
+        ContributionLocator,
+        ContributionSignatureLocator,
+        Locator,
+        Object,
+        ObjectReader,
+        ObjectWriter,
+        StorageLocator,
         StorageObject,
     },
-    CoordinatorError, CoordinatorState,
+    CoordinatorError,
+    CoordinatorState,
 };
 
 use anyhow::Result;
@@ -138,22 +145,6 @@ impl Disk {
         Ok(fs::read(path)?)
     }
 
-    /// Retrieve the json encoded tokens file by cohort
-    pub fn get_tokens(&self, cohort: u64) -> Result<String, CoordinatorError> {
-        // Check that the given locator exists in storage.
-        if !self.exists(&Locator::TokensFile { cohort }) {
-            error!(
-                "Locator missing in call to get() in storage - {:?}",
-                Locator::TokensFile { cohort }
-            );
-            return Err(CoordinatorError::StorageLocatorMissing);
-        }
-
-        let path = self.to_path(&Locator::TokensFile { cohort })?;
-
-        Ok(fs::read_to_string(path)?)
-    }
-
     /// Returns a copy of an object at the given locator in storage, if it exists.
     pub fn get(&self, locator: &Locator) -> Result<Object, CoordinatorError> {
         let path = self.to_path(locator)?;
@@ -247,10 +238,6 @@ impl Disk {
             Locator::ContributionsInfoSummary => {
                 let summary: Vec<TrimmedContributionInfo> = serde_json::from_slice(&file_bytes)?;
                 Ok(Object::ContributionsInfoSummary(summary))
-            }
-            Locator::TokensFile { cohort: _ } => {
-                let token_file: Vec<String> = serde_json::from_slice(&file_bytes)?;
-                Ok(Object::TokensFile(token_file))
             }
         };
 
@@ -715,10 +702,6 @@ impl StorageLocator for DiskResolver {
                 self.base, round_height
             ),
             Locator::ContributionsInfoSummary => format!("{}/contributors.json", self.base),
-            // FIXME: add self.base and also add testing file, otherwise testing file keeps being deleted
-            Locator::TokensFile { cohort } => {
-                format!("./tokens/namada_tokens_cohort_{}.json", cohort)
-            }
         };
         // Sanitize the path.
         LocatorPath::try_from(Path::new(&path))

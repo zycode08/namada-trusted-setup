@@ -3,6 +3,7 @@ use phase1_coordinator::{
     io,
     rest::{self, UPDATE_TIME},
     Coordinator,
+    s3::S3Ctx
 };
 
 #[cfg(debug_assertions)]
@@ -19,9 +20,12 @@ use rocket::{
 };
 
 use anyhow::Result;
-use std::sync::Arc;
+use rusoto_s3::S3Client;
+use std::{sync::Arc, path::{PathBuf, Path}};
 
 use tracing::{error, info};
+
+const TOKENS_PATH: &str = "./tokens";
 
 /// Periodically updates the [`Coordinator`]
 async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
@@ -76,6 +80,15 @@ fn print_env() {
         "HEALTH_PATH: {}",
         std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string())
     );
+}
+
+/// Download tokens from S3, decompress and store them locally.
+async fn get_tokens() -> Result<()> {
+    let s3_ctx = S3Ctx::new().await?;
+    let zip_token = s3_ctx.get_tokens().await?;
+    let mut zip = zip::ZipArchive::new(zip_token)?;
+    
+    zip.extract(TOKENS_PATH)
 }
 
 /// Rocket main function using the [`tokio`] runtime
@@ -159,6 +172,11 @@ pub async fn main() {
             rest::invalid_header
         ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
+
+    // Download token file from S3, only if local folder is missing
+    if std::fs::metadata(TOKENS_PATH).is_err() {
+        get_tokens().await.expect("Error while retrieving tokens");
+    }
 
     // Spawn task to update the coordinator periodically
     let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));

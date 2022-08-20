@@ -43,6 +43,7 @@ pub const COHORT_TIME: i64 = 60;
 pub const COHORT_TIME: i64 = 86400;
 
 pub const UNKNOWN: &str = "Unknown";
+pub const TOKEN_REGEX: &str = r"^[[:xdigit:]]{20}$";
 
 // Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
@@ -54,6 +55,13 @@ lazy_static! {
     static ref HEALTH_PATH: String = match std::env::var("HEALTH_PATH") {
         Ok(path) => path,
         Err(_) => ".".to_string(),
+    };
+}
+
+lazy_static! {
+    static ref TOKENS_FILE: String = match std::env::var("NAMADA_TOKENS_FILE") {
+        Ok(path) => path,
+        Err(_) => panic!("NAMADA_TOKENS_FILE env var must be set!"),
     };
 }
 
@@ -110,7 +118,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let response_code = match self {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
-            ResponseError::InvalidToken(_) => Status::BadRequest,
+            ResponseError::InvalidToken(_) => Status::Unauthorized,
             ResponseError::InvalidTokenFormat => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
@@ -583,6 +591,39 @@ impl PostChunkRequest {
     }
 }
 
+/// Checks the validity of the token for the ceremony.
+async fn token_check(coordinator: Coordinator, token: &String) -> Result<()> {
+    // Check if the token's format is correct
+    let regex = Regex::new(TOKEN_REGEX).unwrap();
+
+    if !regex.is_match(token) {
+        return Err(ResponseError::InvalidTokenFormat);
+    }
+
+    // Calculate the cohort number (starting at index 0) in function of COHORT_TIME
+    let ceremony_start_time = coordinator.read().await.state().ceremony_start_time();
+    let now = OffsetDateTime::now_utc();
+    let timestamp_diff = now.unix_timestamp() - ceremony_start_time.unix_timestamp();
+    let cohort = (timestamp_diff / COHORT_TIME) as u64;
+
+    // Check if the user token is in the current cohort list of tokens
+    #[cfg(debug_assertions)]
+    let tokens_path = std::env::var("NAMADA_TOKENS_FILE").unwrap();
+    #[cfg(not(debug_assertions))]
+    let tokens_path = format!("./tokens/namada_tokens_cohort_{}.json", cohort);
+
+    let tokens: Vec<String> = match rocket::tokio::fs::read_to_string(tokens_path).await {
+        Ok(tokens) => serde_json::from_str(tokens.as_str()).map_err(|e| ResponseError::SerdeError(e.to_string()))?,
+        Err(e) => return Err(ResponseError::IoError(e.to_string())),
+    };
+
+    if !tokens.contains(token) {
+        return Err(ResponseError::InvalidToken(cohort));
+    }
+
+    Ok(())
+}
+
 //
 // -- REST API ENDPOINTS --
 //
@@ -594,31 +635,8 @@ pub async fn join_queue(
     new_participant: NewParticipant,
     token: LazyJson<String>,
 ) -> Result<()> {
-    let read_lock = coordinator.read().await;
-    // Calculate the cohort number (starting at index 0) in function of COHORT_TIME
-    let ceremony_start_time: OffsetDateTime = read_lock.state().ceremony_start_time();
-    let now: OffsetDateTime = OffsetDateTime::now_utc();
-    let timestamp_diff: i64 = now.unix_timestamp() - ceremony_start_time.unix_timestamp();
-    let cohort: u64 = ((timestamp_diff - (timestamp_diff % COHORT_TIME)) / COHORT_TIME) as u64;
-    println!("Cohort: {}", cohort);
-    // Check if the user token is in the current cohort list of tokens
-    // FIXME: the e2e test "test_join_queue()" fails here
-    let tokens: String = match read_lock.storage().get_tokens(cohort) {
-        Ok(tokens) => tokens,
-        Err(e) => return Err(ResponseError::CoordinatorError(e)),
-    };
-
-    let regex = Regex::new(r"^[[:xdigit:]]{20}$").unwrap();
-
-    if !regex.is_match(token.as_str()) {
-        return Err(ResponseError::InvalidTokenFormat);
-    }
-
-    if !tokens.contains(token.as_str()) {
-        return Err(ResponseError::InvalidToken(cohort));
-    }
-
-    drop(read_lock);
+    // Check token
+    token_check(coordinator.deref().to_owned(), &token).await?;
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
