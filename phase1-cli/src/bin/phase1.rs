@@ -249,22 +249,22 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
-    Notification::new()
-        .summary("Namada Trusted Setup")
-        .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
-        .auto_icon()
-        .timeout(Timeout::Never)
-        .show()?;
+    // Notification::new()
+    //     .summary("Namada Trusted Setup")
+    //     .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
+    //     .auto_icon()
+    //     .timeout(Timeout::Never)
+    //     .show()?;
     println!(
         "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
         contrib_info.timestamps.challenge_locked,
     );
-    Notification::new()
-        .summary("Namada Trusted Setup")
-        .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
-        .auto_icon()
-        .timeout(Timeout::Never)
-        .show()?;
+    // Notification::new()
+    //     .summary("Namada Trusted Setup")
+    //     .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
+    //     .auto_icon()
+    //     .timeout(Timeout::Never)
+    //     .show()?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
@@ -654,6 +654,7 @@ async fn main() {
                 let content = fs::read_to_string(mnemonic_path.path).unwrap();
                 let seed = io::seed_from_string(content.as_str()).unwrap();
 
+                // FIXME: add instructions about the next steps, that you will need the mnemonic
                 let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".yellow()).unwrap();
                 let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".yellow()).unwrap();
                 if confirmation != password {
