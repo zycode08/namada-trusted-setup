@@ -55,6 +55,13 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
+    // Create token file
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let file_path = tmp_dir.path().join("namada_tokens_cohort_0.json");
+    let mut token_file = std::fs::File::create(file_path).unwrap();
+    token_file.write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes()).unwrap();
+    std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
+
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
 
@@ -281,12 +288,6 @@ async fn test_join_queue() {
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
-
-    // Create token file
-    let mut token_file = tempfile::NamedTempFile::new_in(".").unwrap();
-    let file_content = "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]";
-    token_file.write_all(file_content.as_bytes()).unwrap();
-    std::env::set_var("NAMADA_TOKENS_FILE", token_file.path());
 
     // Wrong request, invalid token
     let url = Url::parse(&ctx.coordinator_url).unwrap();

@@ -19,6 +19,8 @@ use std::{
 use time::{Duration, OffsetDateTime};
 use tracing::*;
 
+pub const TOKENS_PATH: &str = "./tokens";
+
 lazy_static! {
     static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
         Ok(s) if s == "true" => true,
@@ -975,6 +977,8 @@ pub struct CoordinatorState {
     manual_lock: bool,
     /// The ceremony start time.
     ceremony_start_time: OffsetDateTime,
+    /// The list of valid tokens for each cohort.
+    tokens: Vec<Vec<String>>
 }
 
 impl CoordinatorState {
@@ -983,6 +987,22 @@ impl CoordinatorState {
     ///
     #[inline]
     pub(super) fn new(environment: Environment) -> Self {
+        #[cfg(debug_assertions)]
+        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap();
+        #[cfg(not(debug_assertions))]
+        let tokens_path = TOKENS_PATH;
+
+        let mut tokens: Vec<Vec<String>> = Vec::new();
+        for entry in std::fs::read_dir(tokens_path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_file() {
+                let filename = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
+                let cohort = filename.rsplit('_').next().unwrap().parse::<usize>().unwrap();
+                let file = std::fs::read(path).unwrap();
+                tokens.insert(cohort, serde_json::from_slice(&file).unwrap());
+            }
+        }
+
         Self {
             environment,
             status: CoordinatorStatus::Initializing,
@@ -1000,6 +1020,7 @@ impl CoordinatorState {
             banned: HashSet::new(),
             manual_lock: false,
             ceremony_start_time: OffsetDateTime::now_utc(),
+            tokens
         }
     }
 
@@ -1371,6 +1392,14 @@ impl CoordinatorState {
     #[inline]
     pub(super) fn current_round_metrics(&self) -> Option<RoundMetrics> {
         self.current_metrics.clone()
+    }
+
+    ///
+    /// Returns the list of valid tokens for a given cohort.
+    ///
+    #[inline]
+    pub(super) fn tokens(&self, cohort: usize) -> Option<&Vec<String>> {
+        self.tokens.get(cohort)
     }
 
     ///
