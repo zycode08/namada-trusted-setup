@@ -3,8 +3,8 @@ use phase1_coordinator::{
     coordinator_state::TOKENS_PATH,
     io,
     rest::{self, UPDATE_TIME},
+    s3::S3Ctx,
     Coordinator,
-    s3::S3Ctx
 };
 
 #[cfg(debug_assertions)]
@@ -22,7 +22,10 @@ use rocket::{
 
 use anyhow::Result;
 use rusoto_s3::S3Client;
-use std::{sync::Arc, path::{PathBuf, Path}};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use tracing::{error, info};
 
@@ -82,11 +85,11 @@ fn print_env() {
 }
 
 /// Download tokens from S3, decompress and store them locally.
-async fn get_tokens() -> Result<()> {
+async fn download_tokens() -> Result<()> {
     let s3_ctx = S3Ctx::new().await?;
     let zip_token = s3_ctx.get_tokens().await?;
     let mut zip = zip::ZipArchive::new(zip_token)?;
-    
+
     zip.extract(TOKENS_PATH)
 }
 
@@ -114,7 +117,7 @@ pub async fn main() {
 
     // Download token file from S3, only if local folder is missing
     if std::fs::metadata(TOKENS_PATH).is_err() {
-        get_tokens().await.expect("Error while retrieving tokens");
+        download_tokens().await.expect("Error while retrieving tokens");
     }
 
     // Instantiate and start the coordinator

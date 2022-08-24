@@ -5,7 +5,8 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError, TimeSource,
+    CoordinatorError,
+    TimeSource,
 };
 use lazy_static::lazy_static;
 
@@ -978,21 +979,21 @@ pub struct CoordinatorState {
     /// The ceremony start time.
     ceremony_start_time: OffsetDateTime,
     /// The list of valid tokens for each cohort.
-    tokens: Vec<Vec<String>>
+    tokens: Vec<Vec<String>>,
 }
 
 impl CoordinatorState {
+    /// Reads tokens from disk and generates a vector of them.
     ///
-    /// Creates a new instance of `CoordinatorState`.
-    ///
-    #[inline]
-    pub(super) fn new(environment: Environment) -> Self {
+    /// # Panics
+    /// On every error or [None] value encountered.
+    pub fn get_tokens() -> Vec<Vec<String>> {
         #[cfg(debug_assertions)]
         let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap();
         #[cfg(not(debug_assertions))]
         let tokens_path = TOKENS_PATH;
 
-        let mut tokens: Vec<Vec<String>> = Vec::new();
+        let mut tokens = Vec::new();
         for entry in std::fs::read_dir(tokens_path).unwrap() {
             let path = entry.unwrap().path();
             if path.is_file() {
@@ -1003,6 +1004,14 @@ impl CoordinatorState {
             }
         }
 
+        tokens
+    }
+
+    ///
+    /// Creates a new instance of `CoordinatorState`.
+    ///
+    #[inline]
+    pub(super) fn new(environment: Environment, tokens: Option<Vec<Vec<String>>>) -> Self {
         Self {
             environment,
             status: CoordinatorStatus::Initializing,
@@ -1020,7 +1029,7 @@ impl CoordinatorState {
             banned: HashSet::new(),
             manual_lock: false,
             ceremony_start_time: OffsetDateTime::now_utc(),
-            tokens
+            tokens: tokens.unwrap_or_else(|| CoordinatorState::get_tokens()),
         }
     }
 
@@ -1129,7 +1138,7 @@ impl CoordinatorState {
                 contributors_ips: std::mem::take(&mut self.contributors_ips),
                 queue,
                 banned: std::mem::take(&mut self.banned),
-                ..Self::new(self.environment.clone())
+                ..Self::new(self.environment.clone(), Some(std::mem::take(&mut self.tokens)))
             };
 
             self.initialize(new_round_height);
@@ -1171,7 +1180,7 @@ impl CoordinatorState {
                 queue: std::mem::take(&mut self.queue),
                 banned: std::mem::take(&mut self.banned),
                 dropped: std::mem::take(&mut self.dropped),
-                ..Self::new(self.environment.clone())
+                ..Self::new(self.environment.clone(), Some(std::mem::take(&mut self.tokens)))
             };
 
             self.initialize(current_round_height);
@@ -3429,7 +3438,9 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState, MockTimeSource, SystemTimeSource,
+        CoordinatorState,
+        MockTimeSource,
+        SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {
@@ -3439,7 +3450,7 @@ mod tests {
     #[test]
     fn test_new() {
         // Initialize a new coordinator state.
-        let state = CoordinatorState::new(TEST_ENVIRONMENT.clone());
+        let state = CoordinatorState::new(TEST_ENVIRONMENT.clone(), None);
         assert_eq!(0, state.queue.len());
         assert_eq!(0, state.next.len());
         assert_eq!(None, state.current_round_height);
@@ -3455,7 +3466,7 @@ mod tests {
     #[test]
     fn test_set_current_round_height() {
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(TEST_ENVIRONMENT.clone());
+        let mut state = CoordinatorState::new(TEST_ENVIRONMENT.clone(), None);
         assert_eq!(None, state.current_round_height);
 
         // Set the current round height for coordinator state.
@@ -3475,7 +3486,7 @@ mod tests {
         assert!(contributor.is_contributor());
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
 
         // Add the contributor of the coordinator.
@@ -3519,7 +3530,7 @@ mod tests {
         assert!(contributor_1.is_contributor());
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         let current_round_height = 5;
         state.initialize(current_round_height);
         assert!(state.queue.is_empty());
@@ -3566,7 +3577,7 @@ mod tests {
         assert!(verifier.is_verifier());
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
 
         // Add the verifier of the coordinator.
@@ -3605,7 +3616,7 @@ mod tests {
         let contributor_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
         assert_eq!(None, state.current_round_height);
 
@@ -3660,7 +3671,7 @@ mod tests {
         let environment = TEST_ENVIRONMENT.clone();
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
         assert_eq!(None, state.current_round_height);
 
@@ -3736,7 +3747,7 @@ mod tests {
         let contributor_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
 
         // Add the contributor of the coordinator.
@@ -3777,7 +3788,7 @@ mod tests {
         let contributor_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
         assert_eq!(None, state.current_round_height);
 
@@ -3870,7 +3881,7 @@ mod tests {
         let contributor_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         assert_eq!(0, state.queue.len());
         assert_eq!(None, state.current_round_height);
 
@@ -3960,7 +3971,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor.clone(), Some(contributor_ip), 10, &time)
@@ -4024,7 +4035,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor.clone(), Some(contributor_ip), 10, &time)
@@ -4106,7 +4117,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor_1.clone(), Some(contributor_1_ip), 10, &time)
@@ -4221,7 +4232,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor_1.clone(), Some(contributor_1_ip), 10, &time)
@@ -4368,7 +4379,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor_1.clone(), Some(contributor_1_ip), 10, &time)
@@ -4528,7 +4539,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor_1.clone(), Some(contributor_1_ip), 10, &time)
@@ -4680,7 +4691,7 @@ mod tests {
 
         // Initialize a new coordinator state.
         let current_round_height = 5;
-        let mut state = CoordinatorState::new(environment.clone());
+        let mut state = CoordinatorState::new(environment.clone(), None);
         state.initialize(current_round_height);
         state
             .add_to_queue(contributor_1.clone(), Some(contributor_1_ip), 10, &time)

@@ -62,7 +62,7 @@ impl Disk {
         if !storage.exists(&Locator::CoordinatorState) {
             storage.insert(
                 Locator::CoordinatorState,
-                Object::CoordinatorState(CoordinatorState::new(environment.clone())),
+                Object::CoordinatorState(CoordinatorState::new(environment.clone(), None)),
             )?;
         }
 

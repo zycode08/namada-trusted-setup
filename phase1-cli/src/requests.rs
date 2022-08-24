@@ -6,13 +6,21 @@ use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::ContributionInfo,
     rest::{
-        RequestContent, SignatureHeaders, BODY_DIGEST_HEADER, CONTENT_LENGTH_HEADER, PUBKEY_HEADER, SIGNATURE_HEADER,
+        RequestContent,
+        SignatureHeaders,
+        BODY_DIGEST_HEADER,
+        CONTENT_LENGTH_HEADER,
+        PUBKEY_HEADER,
+        SIGNATURE_HEADER,
     },
     ContributionFileSignature,
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
-    Client, RequestBuilder, Response, Url,
+    Client,
+    RequestBuilder,
+    Response,
+    Url,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
