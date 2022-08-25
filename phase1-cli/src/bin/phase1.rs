@@ -19,8 +19,7 @@ use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
+    requests, CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -44,8 +43,6 @@ use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 use tokio_util::io::ReaderStream;
 
 use tracing::{debug, trace};
-
-use notify_rust::{Notification, Timeout};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
@@ -101,7 +98,11 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
+    if custom_seed == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
@@ -249,22 +250,10 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
-    // Notification::new()
-    //     .summary("Namada Trusted Setup")
-    //     .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
-    //     .auto_icon()
-    //     .timeout(Timeout::Never)
-    //     .show()?;
     println!(
         "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
         contrib_info.timestamps.challenge_locked,
     );
-    // Notification::new()
-    //     .summary("Namada Trusted Setup")
-    //     .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
-    //     .auto_icon()
-    //     .timeout(Timeout::Never)
-    //     .show()?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
