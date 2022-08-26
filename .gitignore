@@ -15,7 +15,9 @@ tokens*
 **/*.DS_Store
 
 **/*.env
+venv
 status.json
+mc_campaign_settings.json
 
 # Contribution artifacts
 *.params

@@ -3,9 +3,6 @@ from tracemalloc import start
 from mailchimp_marketing.api_client import ApiClientError
 import mailchimp_marketing as MailchimpMarketing
 import json
-import csv
-from hashlib import blake2b
-import math
 import os
 from dotenv import load_dotenv
 import datetime
@@ -19,33 +16,36 @@ MAILCHIMP_SERVER_PREFIX = os.getenv('MAILCHIMP_SERVER_PREFIX')
 MAILCHIMP_TS_LIST_ID = os.getenv('MAILCHIMP_TS_LIST_ID')
 # Add the start date in the following example format: "2022-09-30 12:00:00"
 CEREMONY_START_DATE = os.getenv('CEREMONY_START_DATE')
+NUMBER_OF_COHORTS = int(os.getenv('NUMBER_OF_COHORTS'))
+TOKENS_PATH = os.getenv('TOKENS_PATH')
 ceremony_start_date = datetime.datetime.strptime(
     CEREMONY_START_DATE, "%Y-%m-%d %H:%M:%S")
 
-# Change the following settings for each new campaign you want to schedule
-campaign_settings = {
-    "subject_line": "subject_line",
-    "preview_text": "preview_text",
-    "title": "title",
-    "from_name": "from_name",
-    "reply_to": "newsletter@anoma.network",
-    "template_id": 10276251
-}
+campaign_settings_file = open('mc_campaign_settings.json')
+campaign_settings = json.load(campaign_settings_file)
 
-# FIXME: testing purposes only, remove me
-email = "hiwz2ster@gmail.com"
-token = "test_token"
-emails = ["hiwz2ster@gmail.com"]
-cohort = 1
-number_of_cohorts = 5
 
 def cohort_tag(cohort): return "ts_cohort_" + str(cohort)
 
-# To schedule reminders, change the formula below that sends on the start time of the cohort 
+
 def calculate_cohort_datetime(ceremony_start_date: datetime, cohort: int):
     return ceremony_start_date + datetime.timedelta(days=cohort)
 
+
+def calculate_cohort_reminder_1_week(ceremony_start_date: datetime, cohort: int):
+    return calculate_cohort_datetime(ceremony_start_date, cohort) - datetime.timedelta(days=7)
+
+
+def calculate_cohort_reminder_1_day(ceremony_start_date: datetime, cohort: int):
+    return calculate_cohort_datetime(ceremony_start_date, cohort) - datetime.timedelta(days=1)
+
+
+def calculate_cohort_reminder_1_hour(ceremony_start_date: datetime, cohort: int):
+    return calculate_cohort_datetime(ceremony_start_date, cohort) - datetime.timedelta(hours=1)
+
 # Update member list's merge tags: TS_TOKEN, TS_CO_DATE
+
+
 def update_member_merge_tags(email: string, token: string, cohort_datetime: datetime):
     try:
         client = MailchimpMarketing.Client()
@@ -62,7 +62,9 @@ def update_member_merge_tags(email: string, token: string, cohort_datetime: date
     except ApiClientError as error:
         print("Error: {}".format(error.text))
 
-# Create and schedule a campaign 
+# Create and schedule a campaign
+
+
 def create_and_schedule_campaign(campaign_settings, emails, cohort_tag, cohort_datetime):
     try:
         client = MailchimpMarketing.Client()
@@ -94,19 +96,39 @@ def create_and_schedule_campaign(campaign_settings, emails, cohort_tag, cohort_d
         print("Error: {}".format(error.text))
 
 
-for cohort in range(number_of_cohorts):
-    with open("tokens_test/namada_cohort_{}.json".format(cohort)) as f:
-        cohort_file = json.load(f)
-        cohort_datetime = calculate_cohort_datetime(
-            ceremony_start_date, cohort)
-        emails = []
-        print(cohort_tag(cohort))
-        for i in range(len(cohort_file)):
-            email = cohort_file[i][0]
-            emails.append(email)
-            token = cohort_file[i][1]
-            # update_member_merge_tags(email, token, cohort_datetime)
-            print("update_member_merge_tags: ", email, token, cohort_datetime)
-        # create_and_schedule_campaign(campaign_settings, emails, cohort_tag(cohort), cohort_datetime)
-        print("create_and_schedule_campaign: ", campaign_settings, emails,
-              cohort_tag(cohort), cohort_datetime)
+def schedule_campaign_for_cohorts(calculate_cohort_datetime_function, campaign_settings):
+    for cohort in range(NUMBER_OF_COHORTS):
+        with open("{}/namada_cohort_{}.json".format(TOKENS_PATH, cohort)) as f:
+            cohort_file = json.load(f)
+            cohort_datetime = calculate_cohort_datetime_function(
+                ceremony_start_date, cohort)
+            emails = []
+            print(cohort_tag(cohort))
+            for i in range(len(cohort_file)):
+                email = cohort_file[i][0]
+                emails.append(email)
+                token = cohort_file[i][1]
+                # update_member_merge_tags(email, token, cohort_datetime)
+                print("update_member_merge_tags: ",
+                      email, token, cohort_datetime)
+            # create_and_schedule_campaign(
+            #     campaign_settings, emails, cohort_tag(cohort), cohort_datetime)
+            print("create_and_schedule_campaign: ", campaign_settings, emails,
+                  cohort_tag(cohort), cohort_datetime)
+
+
+# Spot secured
+schedule_campaign_for_cohorts(
+    calculate_cohort_reminder_1_week, campaign_settings['spot_secured'])
+# REMINDER: 1 week
+schedule_campaign_for_cohorts(
+    calculate_cohort_reminder_1_week, campaign_settings['reminder_1_week'])
+# REMINDER: 1 hour
+schedule_campaign_for_cohorts(
+    calculate_cohort_reminder_1_hour, campaign_settings['reminder_1_hour'])
+# REMINDER: 1 day
+schedule_campaign_for_cohorts(
+    calculate_cohort_reminder_1_day, campaign_settings['reminder_1_day'])
+# Launch email
+schedule_campaign_for_cohorts(
+    calculate_cohort_datetime, campaign_settings['cohort_live'])
