@@ -21,11 +21,7 @@ use rocket::{
 };
 
 use anyhow::Result;
-use rusoto_s3::S3Client;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{io::Write, sync::Arc};
 
 use tracing::{error, info};
 
@@ -87,10 +83,13 @@ fn print_env() {
 /// Download tokens from S3, decompress and store them locally.
 async fn download_tokens() -> Result<()> {
     let s3_ctx = S3Ctx::new().await?;
-    let zip_token = s3_ctx.get_tokens().await?;
-    let mut zip = zip::ZipArchive::new(zip_token)?;
+    let mut zip_file = std::fs::File::options().read(true).write(true).open("tokens.zip")?;
+    zip_file.write_all(&s3_ctx.get_tokens().await?)?;
 
-    zip.extract(TOKENS_PATH)
+    let mut zip = zip::ZipArchive::new(zip_file)?;
+    zip.extract(TOKENS_PATH)?;
+
+    Ok(())
 }
 
 /// Rocket main function using the [`tokio`] runtime

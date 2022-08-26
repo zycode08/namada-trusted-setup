@@ -986,7 +986,7 @@ impl CoordinatorState {
     /// Reads tokens from disk and generates a vector of them.
     ///
     /// # Panics
-    /// If folder, file names or content don't respect the specified format. 
+    /// If folder, file names or content don't respect the specified format.
     pub fn get_tokens() -> Vec<Vec<String>> {
         #[cfg(debug_assertions)]
         let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap();
@@ -997,7 +997,7 @@ impl CoordinatorState {
         for entry in std::fs::read_dir(tokens_path).unwrap() {
             let path = entry.unwrap().path();
             if path.is_file() {
-                let filename = path.file_prefix().unwrap().to_string_lossy();
+                let filename = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
                 let cohort = filename.rsplit('_').next().unwrap().parse::<usize>().unwrap();
                 let file = std::fs::read(path).unwrap();
                 tokens.insert(cohort, serde_json::from_slice(&file).unwrap());

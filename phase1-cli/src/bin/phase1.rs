@@ -19,7 +19,8 @@ use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests, CeremonyOpt,
+    requests,
+    CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -98,11 +99,7 @@ fn get_seed_of_randomness() -> Result<bool> {
     )?
     .to_lowercase();
 
-    if custom_seed == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    if custom_seed == "y" { Ok(true) } else { Ok(false) }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
