@@ -5,7 +5,7 @@ import mailchimp_marketing as MailchimpMarketing
 import json
 import os
 from dotenv import load_dotenv
-import datetime
+from datetime import datetime
 
 load_dotenv()
 # Mailchimp API config
@@ -14,14 +14,13 @@ MAILCHIMP_SERVER_PREFIX = os.getenv('MAILCHIMP_SERVER_PREFIX')
 # Ceremony Parameters
 # Add the list id found in mailchimp
 MAILCHIMP_TS_LIST_ID = os.getenv('MAILCHIMP_TS_LIST_ID')
+CEREMONY_START_TIMESTAMP = os.getenv('CEREMONY_START_TIMESTAMP')
 # Add the start date in the following example format: "2022-09-30 12:00:00"
-CEREMONY_START_DATE = os.getenv('CEREMONY_START_DATE')
 CEREMONY_ANNOUNCEMENT_DATE = os.getenv('CEREMONY_ANNOUNCEMENT_DATE')
 NUMBER_OF_COHORTS = int(os.getenv('NUMBER_OF_COHORTS'))
 NAMADA_TOKENS_PATH = os.getenv('NAMADA_TOKENS_PATH')
-ceremony_start_date = datetime.datetime.strptime(
-    CEREMONY_START_DATE, "%Y-%m-%d %H:%M:%S")
-ceremony_announcement_date = datetime.datetime.strptime(
+ceremony_start_date = datetime.fromtimestamp(CEREMONY_START_TIMESTAMP)
+ceremony_announcement_date = datetime.strptime(
     CEREMONY_ANNOUNCEMENT_DATE, "%Y-%m-%d %H:%M:%S")
 
 

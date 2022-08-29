@@ -11,6 +11,7 @@ load_dotenv()
 MUCH_RANDOM_SECRET = os.getenv('MUCH_RANDOM_SECRET')
 EMAILS_LIST_PATH = os.getenv('EMAILS_LIST_PATH')
 NAMADA_TOKENS_PATH = os.getenv('NAMADA_TOKENS_PATH')
+TOKENS_FILE_PREFIX = os.getenv('TOKENS_FILE_PREFIX')
 
 PARTICIPANTS_PER_COHORT = int(os.getenv('PARTICIPANTS_PER_COHORT'))
 
@@ -42,13 +43,13 @@ number_of_cohorts = math.ceil(len(emails) / PARTICIPANTS_PER_COHORT)
 
 for cohort in range(number_of_cohorts):
     # Generate json file containing all tokens for a cohort
-    with open("{}/namada_tokens_cohort_{}.json".format(NAMADA_TOKENS_PATH, cohort), "w") as f:
+    with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, TOKENS_FILE_PREFIX, cohort), "w") as f:
         start = cohort * PARTICIPANTS_PER_COHORT
         end = (cohort + 1) * PARTICIPANTS_PER_COHORT
         f.write(json.dumps(tokens[start:end]))
 
     # Generate json file containing the list of tuples [email, token] for a cohort
-    with open("{}/namada_cohort_{}.json".format(NAMADA_TOKENS_PATH, cohort), "w") as f:
+    with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, TOKENS_FILE_PREFIX, cohort), "w") as f:
         start = cohort * PARTICIPANTS_PER_COHORT
         end = (cohort + 1) * PARTICIPANTS_PER_COHORT
         f.write(json.dumps(zipped_emails_tokens[start:end]))
