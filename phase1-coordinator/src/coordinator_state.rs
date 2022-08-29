@@ -5,8 +5,7 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError,
-    TimeSource,
+    CoordinatorError, TimeSource,
 };
 use lazy_static::lazy_static;
 
@@ -993,18 +992,29 @@ impl CoordinatorState {
         #[cfg(not(debug_assertions))]
         let tokens_path = TOKENS_PATH;
 
-        let mut tokens = Vec::new();
-        for entry in std::fs::read_dir(tokens_path).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_file() {
-                let filename = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
-                let cohort = filename.rsplit('_').next().unwrap().parse::<usize>().unwrap();
-                let file = std::fs::read(path).unwrap();
-                tokens.insert(cohort, serde_json::from_slice(&file).unwrap());
-            }
+        let number_of_cohorts = std::env::var("NUMBER_OF_COHORTS").unwrap().parse::<usize>().unwrap();
+        let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
+
+        let mut tokens = Vec::with_capacity(number_of_cohorts);
+        for cohort in 0..number_of_cohorts {
+            let file = std::fs::read(format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort)).unwrap();
+            tokens.insert(cohort, serde_json::from_slice(&file).unwrap());
         }
 
         tokens
+    }
+
+    pub fn get_ceremony_start_time() -> OffsetDateTime {
+        // #[cfg(debug_assertions)]
+        // let ceremony_start_time = OffsetDateTime::now_utc();
+        // #[cfg(not(debug_assertions))]
+        let ceremony_start_time = {
+            let timestamp_env = std::env::var("CEREMONY_START_TIMESTAMP").unwrap();
+            let timestamp = timestamp_env.parse::<i64>().unwrap();
+            OffsetDateTime::from_unix_timestamp(timestamp).unwrap()
+        };
+
+        ceremony_start_time
     }
 
     ///
@@ -1028,7 +1038,7 @@ impl CoordinatorState {
             dropped: Vec::new(),
             banned: HashSet::new(),
             manual_lock: false,
-            ceremony_start_time: OffsetDateTime::now_utc(),
+            ceremony_start_time: CoordinatorState::get_ceremony_start_time(),
             tokens: tokens.unwrap_or_else(|| CoordinatorState::get_tokens()),
         }
     }
@@ -3438,9 +3448,7 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState,
-        MockTimeSource,
-        SystemTimeSource,
+        CoordinatorState, MockTimeSource, SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

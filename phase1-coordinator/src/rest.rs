@@ -5,24 +5,21 @@ use crate::{
     objects::{ContributionInfo, LockedLocators, Task},
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
-    CoordinatorError,
-    Participant,
+    CoordinatorError, Participant,
 };
 
 use blake2::Digest;
 use rocket::{
     catch,
     data::FromData,
-    error,
-    get,
+    error, get,
     http::{ContentType, Status},
     post,
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
     tokio::{fs, sync::RwLock, task},
-    Shutdown,
-    State,
+    Shutdown, State,
 };
 
 use sha2::Sha256;
@@ -41,9 +38,9 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
 #[cfg(debug_assertions)]
-pub const COHORT_TIME: i64 = 60;
+pub const COHORT_TIME: usize = 60;
 #[cfg(not(debug_assertions))]
-pub const COHORT_TIME: i64 = 86400;
+pub const COHORT_TIME: usize = 86400;
 
 pub const UNKNOWN: &str = "Unknown";
 pub const TOKEN_REGEX: &str = r"^[[:xdigit:]]{20}$";
@@ -75,7 +72,7 @@ pub enum ResponseError {
     #[error("Request's signature is invalid")]
     InvalidSignature,
     #[error("Authentification token for cohort {0} is invalid")]
-    InvalidToken(u64),
+    InvalidToken(usize),
     #[error("Authentification token has an invalid token format (hexadecimal 10 bytes)")]
     InvalidTokenFormat,
     #[error("Io Error: {0}")]
@@ -600,9 +597,9 @@ async fn token_check(coordinator: Coordinator, token: &String) -> Result<()> {
     let read_lock = coordinator.read().await;
     let ceremony_start_time = read_lock.state().ceremony_start_time();
     let now = OffsetDateTime::now_utc();
-    let timestamp_diff = now.unix_timestamp() - ceremony_start_time.unix_timestamp();
-    let cohort = (timestamp_diff / COHORT_TIME) as u64;
-    let tokens = read_lock.state().tokens(cohort as usize).unwrap();
+    let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
+    let cohort = timestamp_diff / COHORT_TIME;
+    let tokens = read_lock.state().tokens(cohort).unwrap();
 
     if !tokens.contains(token) {
         return Err(ResponseError::InvalidToken(cohort));
