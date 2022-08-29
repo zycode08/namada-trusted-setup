@@ -18,7 +18,7 @@ MAILCHIMP_TS_LIST_ID = os.getenv('MAILCHIMP_TS_LIST_ID')
 CEREMONY_START_DATE = os.getenv('CEREMONY_START_DATE')
 CEREMONY_ANNOUNCEMENT_DATE = os.getenv('CEREMONY_ANNOUNCEMENT_DATE')
 NUMBER_OF_COHORTS = int(os.getenv('NUMBER_OF_COHORTS'))
-TOKENS_PATH = os.getenv('TOKENS_PATH')
+NAMADA_TOKENS_PATH = os.getenv('NAMADA_TOKENS_PATH')
 ceremony_start_date = datetime.datetime.strptime(
     CEREMONY_START_DATE, "%Y-%m-%d %H:%M:%S")
 ceremony_announcement_date = datetime.datetime.strptime(
@@ -33,7 +33,7 @@ def load_emails_and_tokens():
     emails = []
     tokens = []
     for cohort in range(NUMBER_OF_COHORTS):
-        with open("{}/namada_cohort_{}.json".format(TOKENS_PATH, cohort)) as f:
+        with open("{}/namada_cohort_{}.json".format(NAMADA_TOKENS_PATH, cohort)) as f:
             cohort_file = json.load(f)
             emails_cohort = []
             tokens_cohort = []
