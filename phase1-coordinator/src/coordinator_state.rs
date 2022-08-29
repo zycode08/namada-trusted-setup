@@ -997,7 +997,8 @@ impl CoordinatorState {
 
         let mut tokens = Vec::with_capacity(number_of_cohorts);
         for cohort in 0..number_of_cohorts {
-            let file = std::fs::read(format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort)).unwrap();
+            let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
+            let file = std::fs::read(path).unwrap();
             tokens.insert(cohort, serde_json::from_slice(&file).unwrap());
         }
 
@@ -1005,9 +1006,9 @@ impl CoordinatorState {
     }
 
     pub fn get_ceremony_start_time() -> OffsetDateTime {
-        // #[cfg(debug_assertions)]
-        // let ceremony_start_time = OffsetDateTime::now_utc();
-        // #[cfg(not(debug_assertions))]
+        #[cfg(debug_assertions)]
+        let ceremony_start_time = OffsetDateTime::now_utc();
+        #[cfg(not(debug_assertions))]
         let ceremony_start_time = {
             let timestamp_env = std::env::var("CEREMONY_START_TIMESTAMP").unwrap();
             let timestamp = timestamp_env.parse::<i64>().unwrap();

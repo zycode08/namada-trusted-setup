@@ -14,9 +14,7 @@ use phase1_coordinator::environment::Testing;
 use phase1_coordinator::environment::Production;
 
 use rocket::{
-    self,
-    catchers,
-    routes,
+    self, catchers, routes,
     tokio::{self, sync::RwLock},
 };
 
@@ -77,6 +75,22 @@ fn print_env() {
     info!(
         "HEALTH_PATH: {}",
         std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "NAMADA_TOKENS_PATH: {}",
+        std::env::var("NAMADA_TOKENS_PATH").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "CEREMONY_START_TIMESTAMP: {}",
+        std::env::var("CEREMONY_START_TIMESTAMP").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "NUMBER_OF_COHORTS: {}",
+        std::env::var("NUMBER_OF_COHORTS").unwrap_or("MISSING".to_string())
+    );
+    info!(
+        "TOKENS_FILE_PREFIX: {}",
+        std::env::var("TOKENS_FILE_PREFIX").unwrap_or("MISSING".to_string())
     );
 }
 
@@ -165,10 +179,9 @@ pub async fn main() {
         rest::get_healthcheck
     ];
 
-    let build_rocket = rocket::build()
-        .mount("/", routes)
-        .manage(coordinator)
-        .register("/", catchers![
+    let build_rocket = rocket::build().mount("/", routes).manage(coordinator).register(
+        "/",
+        catchers![
             rest::invalid_signature,
             rest::unauthorized,
             rest::missing_required_header,
@@ -176,7 +189,8 @@ pub async fn main() {
             rest::unprocessable_entity,
             rest::mismatching_checksum,
             rest::invalid_header
-        ]);
+        ],
+    );
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically
