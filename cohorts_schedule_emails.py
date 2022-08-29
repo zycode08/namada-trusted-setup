@@ -16,10 +16,14 @@ MAILCHIMP_SERVER_PREFIX = os.getenv('MAILCHIMP_SERVER_PREFIX')
 MAILCHIMP_TS_LIST_ID = os.getenv('MAILCHIMP_TS_LIST_ID')
 # Add the start date in the following example format: "2022-09-30 12:00:00"
 CEREMONY_START_DATE = os.getenv('CEREMONY_START_DATE')
+CEREMONY_ANNOUNCEMENT_DATE = os.getenv('CEREMONY_ANNOUNCEMENT_DATE')
 NUMBER_OF_COHORTS = int(os.getenv('NUMBER_OF_COHORTS'))
 TOKENS_PATH = os.getenv('TOKENS_PATH')
 ceremony_start_date = datetime.datetime.strptime(
     CEREMONY_START_DATE, "%Y-%m-%d %H:%M:%S")
+ceremony_announcement_date = datetime.datetime.strptime(
+    CEREMONY_ANNOUNCEMENT_DATE, "%Y-%m-%d %H:%M:%S")
+
 
 campaign_settings_file = open('mc_campaign_settings.json')
 campaign_settings = json.load(campaign_settings_file)
@@ -109,6 +113,7 @@ def create_and_load_segment_ids(emails):
 
     return segment_ids
 
+
 segment_ids = create_and_load_segment_ids(emails)
 
 
@@ -155,26 +160,34 @@ def schedule_campaign(campaign_id, cohort_datetime):
         print("Error: {}".format(error.text))
 
 
-def schedule_campaign_for_all_cohorts(calculate_cohort_datetime_function, campaign_settings, segment_ids):
+def schedule_campaign_for_all_cohorts(calculate_cohort_datetime_function, datetime, campaign_settings, segment_ids):
     for cohort in range(NUMBER_OF_COHORTS):
         cohort_datetime = calculate_cohort_datetime_function(
-            ceremony_start_date, cohort)
+            datetime, cohort)
         campaign_id = create_campaign(campaign_settings, segment_ids[cohort])
         schedule_campaign(campaign_id, cohort_datetime)
 
+# Send "Spot is secured" email to all cohorts
+
+
+def announce_ceremony(datetime, campaign_settings, segment_ids):
+    for cohort in range(NUMBER_OF_COHORTS):
+        campaign_id = create_campaign(campaign_settings, segment_ids[cohort])
+        schedule_campaign(campaign_id, datetime)
+
 
 # Spot secured
-schedule_campaign_for_all_cohorts(
-    calculate_cohort_reminder_1_week, campaign_settings['spot_secured'], segment_ids)
+announce_ceremony(ceremony_announcement_date,
+                  campaign_settings['spot_secured'], segment_ids)
 # # REMINDER: 1 week
 schedule_campaign_for_all_cohorts(
-    calculate_cohort_reminder_1_week, campaign_settings['reminder_1_week'], segment_ids)
+    calculate_cohort_reminder_1_week, ceremony_start_date, campaign_settings['reminder_1_week'], segment_ids)
 # REMINDER: 1 hour
-# schedule_campaign_for_all_cohorts(
-#     calculate_cohort_reminder_1_hour, campaign_settings['reminder_1_hour'], segment_ids)
+schedule_campaign_for_all_cohorts(
+    calculate_cohort_reminder_1_hour, ceremony_start_date, campaign_settings['reminder_1_hour'], segment_ids)
 # REMINDER: 1 day
 schedule_campaign_for_all_cohorts(
-    calculate_cohort_reminder_1_day, campaign_settings['reminder_1_day'], segment_ids)
+    calculate_cohort_reminder_1_day, ceremony_start_date, campaign_settings['reminder_1_day'], segment_ids)
 # Launch email
-# schedule_campaign_for_all_cohorts(
-#     calculate_cohort_datetime, campaign_settings['cohort_live'], segment_ids)
+schedule_campaign_for_all_cohorts(
+    calculate_cohort_datetime, ceremony_start_date, campaign_settings['cohort_live'], segment_ids)
