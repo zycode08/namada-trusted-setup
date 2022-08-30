@@ -18,6 +18,7 @@ tokens*
 venv
 status.json
 mc_campaign_settings.json
+ceremony_config
 
 # Contribution artifacts
 *.params
