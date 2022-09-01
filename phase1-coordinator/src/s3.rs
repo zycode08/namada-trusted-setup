@@ -176,10 +176,10 @@ impl S3Ctx {
 
     /// Retrieve the compressed token folder.
     pub async fn get_tokens(&self) -> Result<Vec<u8>> {
-        #[cfg(debug_assertions)]
-        let key = format!("master/tokens.zip");
-        #[cfg(not(debug_assertions))]
-        let key = format!("prod/tokens.zip");
+        let key = match std::env::var("AWS_S3_TEST") {
+            Ok(t) if t == "true" => format!("master/tokens.zip"),
+            _ => format!("prod/tokens.zip"),
+        };
 
         let get_tokens = GetObjectRequest {
             bucket: self.bucket.clone(),

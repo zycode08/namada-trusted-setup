@@ -5,21 +5,24 @@ use crate::{
     objects::{ContributionInfo, LockedLocators, Task},
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
-    CoordinatorError, Participant,
+    CoordinatorError,
+    Participant,
 };
 
 use blake2::Digest;
 use rocket::{
     catch,
     data::FromData,
-    error, get,
+    error,
+    get,
     http::{ContentType, Status},
     post,
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
     tokio::{fs, sync::RwLock, task},
-    Shutdown, State,
+    Shutdown,
+    State,
 };
 
 use sha2::Sha256;

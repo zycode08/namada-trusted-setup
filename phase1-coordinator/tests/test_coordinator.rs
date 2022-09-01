@@ -76,7 +76,7 @@ fn build_context() -> TestCtx {
     std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
     std::env::set_var("NUMBER_OF_COHORTS", "1");
     std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
-    
+
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
 

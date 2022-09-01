@@ -5,7 +5,8 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError, TimeSource,
+    CoordinatorError,
+    TimeSource,
 };
 use lazy_static::lazy_static;
 
@@ -18,8 +19,6 @@ use std::{
 };
 use time::{Duration, OffsetDateTime};
 use tracing::*;
-
-pub const TOKENS_PATH: &str = "./tokens";
 
 lazy_static! {
     static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
@@ -986,14 +985,10 @@ impl CoordinatorState {
     ///
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
-    pub fn get_tokens() -> Vec<Vec<String>> {
-        #[cfg(debug_assertions)]
-        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap();
-        #[cfg(not(debug_assertions))]
-        let tokens_path = TOKENS_PATH;
-
+    fn get_tokens() -> Vec<Vec<String>> {
         let number_of_cohorts = std::env::var("NUMBER_OF_COHORTS").unwrap().parse::<usize>().unwrap();
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
+        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 
         let mut tokens = Vec::with_capacity(number_of_cohorts);
         for cohort in 0..number_of_cohorts {
@@ -1005,7 +1000,7 @@ impl CoordinatorState {
         tokens
     }
 
-    pub fn get_ceremony_start_time() -> OffsetDateTime {
+    fn get_ceremony_start_time() -> OffsetDateTime {
         #[cfg(debug_assertions)]
         let ceremony_start_time = OffsetDateTime::now_utc();
         #[cfg(not(debug_assertions))]
@@ -3449,7 +3444,9 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState, MockTimeSource, SystemTimeSource,
+        CoordinatorState,
+        MockTimeSource,
+        SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

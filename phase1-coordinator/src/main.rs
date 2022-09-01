@@ -1,6 +1,5 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
-    coordinator_state::TOKENS_PATH,
     io,
     rest::{self, UPDATE_TIME},
     s3::S3Ctx,
@@ -14,7 +13,9 @@ use phase1_coordinator::environment::Testing;
 use phase1_coordinator::environment::Production;
 
 use rocket::{
-    self, catchers, routes,
+    self,
+    catchers,
+    routes,
     tokio::{self, sync::RwLock},
 };
 
@@ -54,54 +55,25 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
 }
 
 /// Checks and prints the env variables of interest for the ceremony
-fn print_env() {
-    info!("ENV VARIABLES STATE:");
-    info!(
-        "AWS_S3_BUCKET: {}",
-        std::env::var("AWS_S3_BUCKET").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "AWS_S3_ENDPOINT: {}",
-        std::env::var("AWS_S3_ENDPOINT").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "NAMADA_MPC_IP_BAN: {}",
-        std::env::var("NAMADA_MPC_IP_BAN").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "NAMADA_MPC_TIMEOUT_SECONDS: {}",
-        std::env::var("NAMADA_MPC_TIMEOUT_SECONDS").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "HEALTH_PATH: {}",
-        std::env::var("HEALTH_PATH").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "NAMADA_TOKENS_PATH: {}",
-        std::env::var("NAMADA_TOKENS_PATH").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "CEREMONY_START_TIMESTAMP: {}",
-        std::env::var("CEREMONY_START_TIMESTAMP").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "NUMBER_OF_COHORTS: {}",
-        std::env::var("NUMBER_OF_COHORTS").unwrap_or("MISSING".to_string())
-    );
-    info!(
-        "TOKENS_FILE_PREFIX: {}",
-        std::env::var("TOKENS_FILE_PREFIX").unwrap_or("MISSING".to_string())
-    );
+macro_rules! print_env {
+    ($($env:expr),*) => {
+        info!("ENV VARIABLES STATE:");
+        $(info!(
+            "{}: {}",
+            $env,
+            std::env::var($env).unwrap_or("MISSING".to_string())
+        );)*
+    };
 }
 
 /// Download tokens from S3, decompress and store them locally.
-async fn download_tokens() -> Result<()> {
+async fn download_tokens(tokens_path: &str) -> Result<()> {
     let s3_ctx = S3Ctx::new().await?;
     let mut zip_file = std::fs::File::options().read(true).write(true).open("tokens.zip")?;
     zip_file.write_all(&s3_ctx.get_tokens().await?)?;
 
     let mut zip = zip::ZipArchive::new(zip_file)?;
-    zip.extract(TOKENS_PATH)?;
+    zip.extract(tokens_path)?;
 
     Ok(())
 }
@@ -111,9 +83,21 @@ async fn download_tokens() -> Result<()> {
 pub async fn main() {
     let tracing_enable_color = std::env::var("RUST_LOG_COLOR").is_ok();
     tracing_subscriber::fmt().with_ansi(tracing_enable_color).init();
-    print_env();
+    print_env!(
+        "AWS_S3_TEST",
+        "AWS_S3_BUCKET",
+        "AWS_S3_ENDPOINT",
+        "NAMADA_MPC_IP_BAN",
+        "NAMADA_MPC_TIMEOUT_SECONDS",
+        "HEALTH_PATH",
+        "NAMADA_TOKENS_PATH",
+        "CEREMONY_START_TIMESTAMP",
+        "NUMBER_OF_COHORTS",
+        "TOKENS_FILE_PREFIX"
+    );
 
     // Set the environment
+    let tokens_path: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
     let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
         .await
         .unwrap()
@@ -129,8 +113,10 @@ pub async fn main() {
     let environment: Production = { Production::new(&keypair) };
 
     // Download token file from S3, only if local folder is missing
-    if std::fs::metadata(TOKENS_PATH).is_err() {
-        download_tokens().await.expect("Error while retrieving tokens");
+    if std::fs::metadata(tokens_path.as_str()).is_err() {
+        download_tokens(tokens_path.as_str())
+            .await
+            .expect("Error while retrieving tokens");
     }
 
     // Instantiate and start the coordinator
@@ -179,9 +165,10 @@ pub async fn main() {
         rest::get_healthcheck
     ];
 
-    let build_rocket = rocket::build().mount("/", routes).manage(coordinator).register(
-        "/",
-        catchers![
+    let build_rocket = rocket::build()
+        .mount("/", routes)
+        .manage(coordinator)
+        .register("/", catchers![
             rest::invalid_signature,
             rest::unauthorized,
             rest::missing_required_header,
@@ -189,8 +176,7 @@ pub async fn main() {
             rest::unprocessable_entity,
             rest::mismatching_checksum,
             rest::invalid_header
-        ],
-    );
+        ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Spawn task to update the coordinator periodically
