@@ -177,13 +177,18 @@ async fn decapsulate_response(response: Response) -> Result<Response> {
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to join the queue of contributors.
-pub async fn post_join_queue(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
+pub async fn post_join_queue(
+    client: &Client,
+    coordinator_address: &Url,
+    keypair: &KeyPair,
+    token: &String,
+) -> Result<()> {
     submit_request::<String>(
         client,
         coordinator_address,
         "contributor/join_queue",
         keypair,
-        Request::Post(None),
+        Request::Post(Some(token)),
     )
     .await?;
 

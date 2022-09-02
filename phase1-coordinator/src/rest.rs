@@ -28,8 +28,10 @@ use rocket::{
 use sha2::Sha256;
 
 use lazy_static::lazy_static;
+use regex::Regex;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
+use time::OffsetDateTime;
 
 use tracing::warn;
 
@@ -38,7 +40,13 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 #[cfg(not(debug_assertions))]
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
+#[cfg(debug_assertions)]
+pub const COHORT_TIME: usize = 60;
+#[cfg(not(debug_assertions))]
+pub const COHORT_TIME: usize = 86400;
+
 pub const UNKNOWN: &str = "Unknown";
+pub const TOKEN_REGEX: &str = r"^[[:xdigit:]]{20}$";
 
 // Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
@@ -66,6 +74,10 @@ pub enum ResponseError {
     InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
     InvalidSignature,
+    #[error("Authentification token for cohort {0} is invalid")]
+    InvalidToken(usize),
+    #[error("Authentification token has an invalid token format (hexadecimal 10 bytes)")]
+    InvalidTokenFormat,
     #[error("Io Error: {0}")]
     IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
@@ -102,6 +114,8 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let response_code = match self {
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
+            ResponseError::InvalidToken(_) => Status::Unauthorized,
+            ResponseError::InvalidTokenFormat => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
@@ -573,13 +587,43 @@ impl PostChunkRequest {
     }
 }
 
+/// Checks the validity of the token for the ceremony.
+async fn token_check(coordinator: Coordinator, token: &String) -> Result<()> {
+    // Check if the token's format is correct
+    let regex = Regex::new(TOKEN_REGEX).unwrap();
+
+    if !regex.is_match(token) {
+        return Err(ResponseError::InvalidTokenFormat);
+    }
+
+    // Calculate the cohort number (starting at index 0) in function of COHORT_TIME
+    let read_lock = coordinator.read().await;
+    let ceremony_start_time = read_lock.state().ceremony_start_time();
+    let now = OffsetDateTime::now_utc();
+    let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
+    let cohort = timestamp_diff / COHORT_TIME;
+    let tokens = read_lock.state().tokens(cohort).unwrap();
+
+    if !tokens.contains(token) {
+        return Err(ResponseError::InvalidToken(cohort));
+    }
+
+    Ok(())
+}
+
 //
 // -- REST API ENDPOINTS --
 //
 
 /// Add the incoming contributor to the queue of contributors.
-#[post("/contributor/join_queue")]
-pub async fn join_queue(coordinator: &State<Coordinator>, new_participant: NewParticipant) -> Result<()> {
+#[post("/contributor/join_queue", format = "json", data = "<token>")]
+pub async fn join_queue(
+    coordinator: &State<Coordinator>,
+    new_participant: NewParticipant,
+    token: LazyJson<String>,
+) -> Result<()> {
+    token_check(coordinator.deref().to_owned(), &token).await?;
+
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     match task::spawn_blocking(move || {
@@ -599,7 +643,6 @@ pub async fn lock_chunk(
     participant: CurrentContributor,
 ) -> Result<Json<LockedLocators>> {
     let mut write_lock = (*coordinator).clone().write_owned().await;
-
     match task::spawn_blocking(move || write_lock.try_lock(&participant)).await? {
         Ok((_, locked_locators)) => Ok(Json(locked_locators)),
         Err(e) => Err(ResponseError::CoordinatorError(e)),

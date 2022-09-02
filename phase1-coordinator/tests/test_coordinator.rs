@@ -66,6 +66,17 @@ fn build_context() -> TestCtx {
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
+    // Create token file
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let file_path = tmp_dir.path().join("namada_tokens_cohort_0.json");
+    let mut token_file = std::fs::File::create(file_path).unwrap();
+    token_file
+        .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
+        .unwrap();
+    std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
+    std::env::set_var("NUMBER_OF_COHORTS", "1");
+    std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
+
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
 
@@ -310,16 +321,42 @@ fn test_join_queue() {
 
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
-    // Ok request
+    // Wrong request, invalid token
     let mut req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!("7fe7c70eda056784fcf5")),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Wrong request, invalid token format
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("test")));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::BadRequest);
+    assert!(response.body().is_some());
+
+    // Ok request
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!("7fe7c70eda056784fcf4")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
 
     // Wrong request, IP already in queue
     req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.contributors[1].keypair, None);
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[1].keypair,
+        Some(&format!("7fe7c70eda056784fcf4")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
@@ -327,7 +364,11 @@ fn test_join_queue() {
     // Wrong request, already existing contributor
     let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
     req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!("7fe7c70eda056784fcf4")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
@@ -627,7 +668,11 @@ fn test_contribution() {
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
 
     req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<()>(req, &ctx.unknown_participant.keypair, None);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!("7fe7c70eda056784fcf4")),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());

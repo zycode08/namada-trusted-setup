@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io,
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, UPDATE_TIME},
+    rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
 };
 
@@ -44,8 +44,6 @@ use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 use tokio_util::io::ReaderStream;
 
 use tracing::{debug, trace};
-
-use notify_rust::{Notification, Timeout};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
@@ -249,22 +247,10 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
-    // Notification::new()
-    //     .summary("Namada Trusted Setup")
-    //     .body("You've passed the ceremony's waiting queue. The challenge will be downloaded in a couple of seconds.")
-    //     .auto_icon()
-    //     .timeout(Timeout::Never)
-    //     .show()?;
     println!(
         "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
         contrib_info.timestamps.challenge_locked,
     );
-    // Notification::new()
-    //     .summary("Namada Trusted Setup")
-    //     .body("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution!")
-    //     .auto_icon()
-    //     .timeout(Timeout::Never)
-    //     .show()?;
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
     contrib_info.ceremony_round = round_height;
@@ -440,8 +426,14 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
+    let token = io::get_user_input(
+        "Enter your authentification token (10 bytes hex encoded):".yellow(),
+        Some(&Regex::new(TOKEN_REGEX).unwrap()),
+    )
+    .unwrap();
+
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    requests::post_join_queue(&client, &coordinator, &keypair)
+    requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
     contrib_info.timestamps.joined_queue = Utc::now();

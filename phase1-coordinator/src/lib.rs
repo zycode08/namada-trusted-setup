@@ -55,7 +55,7 @@ pub mod storage;
 
 pub mod rest;
 
-mod s3;
+pub mod s3;
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;

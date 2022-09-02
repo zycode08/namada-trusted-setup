@@ -52,7 +52,7 @@ pub enum S3Error {
 
 type Result<T> = std::result::Result<T, S3Error>;
 
-pub(crate) struct S3Ctx {
+pub struct S3Ctx {
     client: S3Client,
     bucket: &'static String,
     region: &'static Region,
@@ -61,7 +61,7 @@ pub(crate) struct S3Ctx {
 }
 
 impl S3Ctx {
-    pub(crate) async fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let provider = ChainProvider::new();
         let credentials = provider.credentials().await?;
         let client = S3Client::new(REGION.clone());
@@ -143,7 +143,7 @@ impl S3Ctx {
         (contrib_url, contrib_sig_url)
     }
 
-    /// Download an object from S3 as bytes
+    /// Download an object from S3 as bytes.
     async fn get_object(&self, get_request: GetObjectRequest) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
         let stream = self
@@ -172,5 +172,21 @@ impl S3Ctx {
         };
 
         rocket::tokio::try_join!(self.get_object(get_contrib), self.get_object(get_sig))
+    }
+
+    /// Retrieve the compressed token folder.
+    pub async fn get_tokens(&self) -> Result<Vec<u8>> {
+        let key = match std::env::var("AWS_S3_TEST") {
+            Ok(t) if t == "true" => format!("master/tokens.zip"),
+            _ => format!("prod/tokens.zip"),
+        };
+
+        let get_tokens = GetObjectRequest {
+            bucket: self.bucket.clone(),
+            key,
+            ..Default::default()
+        };
+
+        self.get_object(get_tokens).await
     }
 }
