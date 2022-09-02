@@ -74,7 +74,6 @@ fn build_context() -> TestCtx {
         .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
         .unwrap();
     std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
-    std::env::set_var("NUMBER_OF_COHORTS", "1");
     std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
 
     // Instantiate the coordinator

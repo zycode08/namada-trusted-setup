@@ -28,6 +28,11 @@ lazy_static! {
     };
 }
 
+#[cfg(debug_assertions)]
+pub const COHORT_TIME: usize = 60;
+#[cfg(not(debug_assertions))]
+pub const COHORT_TIME: usize = 86400;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) enum CoordinatorStatus {
     Initializing,
@@ -986,11 +991,13 @@ impl CoordinatorState {
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
     fn get_tokens() -> Vec<Vec<String>> {
-        let number_of_cohorts = std::env::var("NUMBER_OF_COHORTS").unwrap().parse::<usize>().unwrap();
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
         let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 
+        let tokens_dir = std::fs::read_dir(&tokens_path).unwrap();
+        let number_of_cohorts = tokens_dir.count();
         let mut tokens = Vec::with_capacity(number_of_cohorts);
+
         for cohort in 0..number_of_cohorts {
             let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
@@ -1407,6 +1414,25 @@ impl CoordinatorState {
     #[inline]
     pub(super) fn current_round_metrics(&self) -> Option<RoundMetrics> {
         self.current_metrics.clone()
+    }
+
+    ///
+    /// Computes the current ceremony cohort, starting from 0, in function of [COHORT_TIME].
+    ///
+    pub fn get_cohort(&self) -> usize {
+        let ceremony_start_time = self.ceremony_start_time;
+        let now = OffsetDateTime::now_utc();
+        let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
+        
+        timestamp_diff / COHORT_TIME
+    }
+
+    ///
+    /// Returns the number of scheduled cohorts for the ceremony.
+    ///
+    #[inline]
+    pub(super) fn get_number_of_cohorts(&self) -> usize {
+        self.tokens.len()
     }
 
     ///

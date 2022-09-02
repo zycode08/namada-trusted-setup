@@ -3,8 +3,8 @@
 
 use std::path::PathBuf;
 
+pub mod ascii_logo;
 pub mod keys;
-
 pub mod requests;
 
 use phase1_coordinator::{

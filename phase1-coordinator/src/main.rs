@@ -84,7 +84,7 @@ pub async fn main() {
     let tracing_enable_color = std::env::var("RUST_LOG_COLOR").is_ok();
     tracing_subscriber::fmt().with_ansi(tracing_enable_color).init();
     print_env!(
-        "AWS_S3_TEST",
+        "AWS_S3_PROD",
         "AWS_S3_BUCKET",
         "AWS_S3_ENDPOINT",
         "NAMADA_MPC_IP_BAN",
@@ -92,7 +92,6 @@ pub async fn main() {
         "HEALTH_PATH",
         "NAMADA_TOKENS_PATH",
         "CEREMONY_START_TIMESTAMP",
-        "NUMBER_OF_COHORTS",
         "TOKENS_FILE_PREFIX"
     );
 
