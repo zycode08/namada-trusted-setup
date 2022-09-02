@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     io,
-    rest::{self, UPDATE_TIME},
+    rest::{self, ResponseError, UPDATE_TIME},
     s3::S3Ctx,
     Coordinator,
 };
@@ -17,6 +17,7 @@ use rocket::{
     catchers,
     routes,
     tokio::{self, sync::RwLock},
+    Shutdown,
 };
 
 use anyhow::Result;
@@ -25,16 +26,26 @@ use std::{io::Write, sync::Arc};
 use tracing::{error, info};
 
 /// Periodically updates the [`Coordinator`]
-async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, shutdown: Shutdown) -> Result<()> {
     loop {
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Updating coordinator...");
-        rest::perform_coordinator_update(coordinator.clone()).await?;
-        info!(
-            "Update of coordinator completed, {:#?} to the next update round...",
-            UPDATE_TIME
-        );
+        match rest::perform_coordinator_update(coordinator.clone()).await {
+            Ok(_) => info!(
+                "Update of coordinator completed, {:#?} to the next update round...",
+                UPDATE_TIME
+            ),
+            Err(e) => {
+                if let ResponseError::CoordinatorError(phase1_coordinator::CoordinatorError::CeremonyIsOver) = e {
+                    shutdown.clone().notify();
+                    // Don't return from this task to give the rocket task time to gracefully shut down the entire process
+                    info!("Ceremony is over, server is shutting down...");
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
     }
 }
 
@@ -181,9 +192,10 @@ pub async fn main() {
             rest::invalid_header
         ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
+    let shutdown = ignite_rocket.shutdown();
 
     // Spawn task to update the coordinator periodically
-    let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
+    let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator, shutdown));
 
     // Spawn task to verify the contributions periodically
     let verify_handle = rocket::tokio::spawn(verify_contributions(verify_coordinator));

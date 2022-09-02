@@ -37,7 +37,6 @@ use crate::{
         UpdateAction,
     },
 };
-use anyhow::anyhow;
 use setup_utils::calculate_hash;
 
 use std::{
@@ -54,6 +53,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub enum CoordinatorError {
     AggregateContributionFileSizeMismatch,
+    CeremonyIsOver,
     ChallengeHashSizeInvalid,
     ChunkAlreadyComplete,
     ChunkAlreadyVerified,
@@ -556,8 +556,8 @@ impl Coordinator {
         if cohort >= self.state.get_number_of_cohorts() {
             info!("Completed all the scheduled cohorts");
             self.shutdown()?;
-            // Return an error to force the rocket task to return and terminate the execution
-            return Err(CoordinatorError::Error(anyhow!("No more cohorts, ceremony is over")));
+            // Return an error to force the calling task to request a graceful shutdown of the server
+            return Err(CoordinatorError::CeremonyIsOver);
         }
 
         Ok(())
