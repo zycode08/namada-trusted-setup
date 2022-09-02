@@ -69,7 +69,11 @@ macro_rules! print_env {
 /// Download tokens from S3, decompress and store them locally.
 async fn download_tokens(tokens_path: &str) -> Result<()> {
     let s3_ctx = S3Ctx::new().await?;
-    let mut zip_file = std::fs::File::options().read(true).write(true).create(true).open("tokens.zip")?;
+    let mut zip_file = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open("tokens.zip")?;
     zip_file.write_all(&s3_ctx.get_tokens().await?)?;
 
     let mut zip = zip::ZipArchive::new(zip_file)?;

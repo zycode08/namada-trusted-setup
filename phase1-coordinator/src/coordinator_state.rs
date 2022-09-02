@@ -1423,7 +1423,7 @@ impl CoordinatorState {
         let ceremony_start_time = self.ceremony_start_time;
         let now = OffsetDateTime::now_utc();
         let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
-        
+
         timestamp_diff / COHORT_TIME
     }
 

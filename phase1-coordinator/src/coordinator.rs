@@ -556,7 +556,7 @@ impl Coordinator {
         if cohort >= self.state.get_number_of_cohorts() {
             info!("Completed all the scheduled cohorts");
             self.shutdown()?;
-            // Return an error to force the rocket task to return and terminate the execution  
+            // Return an error to force the rocket task to return and terminate the execution
             return Err(CoordinatorError::Error(anyhow!("No more cohorts, ceremony is over")));
         }
 
