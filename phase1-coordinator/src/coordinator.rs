@@ -53,6 +53,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub enum CoordinatorError {
     AggregateContributionFileSizeMismatch,
+    CeremonyIsOver,
     ChallengeHashSizeInvalid,
     ChunkAlreadyComplete,
     ChunkAlreadyVerified,
@@ -550,21 +551,30 @@ impl Coordinator {
             info!("Advanced ceremony to round {}", next_round_height);
         }
 
+        // If cohorts are over shut the coordinator down
+        let cohort = self.state.get_cohort();
+        if cohort >= self.state.get_number_of_cohorts() {
+            info!("Completed all the scheduled cohorts");
+            self.shutdown()?;
+            // Return an error to force the calling task to request a graceful shutdown of the server
+            return Err(CoordinatorError::CeremonyIsOver);
+        }
+
         Ok(())
     }
 
     ///
     /// Initializes a listener to handle the shutdown signal.
     ///
-    pub fn shutdown(&mut self) -> anyhow::Result<()> {
+    pub fn shutdown(&mut self) -> Result<(), CoordinatorError> {
         warn!("\n\nATTENTION - Coordinator is shutting down...\n");
 
         // Save the coordinator state to storage.
-        self.save_state().unwrap();
+        self.save_state()?;
         debug!("Coordinator has safely shutdown storage");
 
         // Print the final coordinator self.
-        let final_state = serde_json::to_string_pretty(&self.state).unwrap();
+        let final_state = serde_json::to_string_pretty(&self.state).map_err(|e| CoordinatorError::JsonError(e))?;
         info!("\n\nCoordinator State at Shutdown\n\n{}\n", final_state);
 
         info!("\n\nCoordinator has safely shutdown.\n\nGoodbye.\n");

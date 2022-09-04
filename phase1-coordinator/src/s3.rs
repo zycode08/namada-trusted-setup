@@ -66,7 +66,7 @@ impl S3Ctx {
         let credentials = provider.credentials().await?;
         let client = S3Client::new(REGION.clone());
         let options = PreSignedRequestOption {
-            expires_in: std::time::Duration::from_secs(300),
+            expires_in: std::time::Duration::from_secs(600),
         };
 
         Ok(Self {
@@ -176,9 +176,9 @@ impl S3Ctx {
 
     /// Retrieve the compressed token folder.
     pub async fn get_tokens(&self) -> Result<Vec<u8>> {
-        let key = match std::env::var("AWS_S3_TEST") {
-            Ok(t) if t == "true" => format!("master/tokens.zip"),
-            _ => format!("prod/tokens.zip"),
+        let key = match std::env::var("AWS_S3_PROD") {
+            Ok(t) if t == "true" => format!("prod/tokens.zip"),
+            _ => format!("master/tokens.zip"),
         };
 
         let get_tokens = GetObjectRequest {

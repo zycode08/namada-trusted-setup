@@ -18,6 +18,7 @@ use crossterm::{
 use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
+    ascii_logo::ASCII_LOGO,
     keys::{self, EncryptedKeypair, TomlConfig},
     requests,
     CeremonyOpt,
@@ -606,8 +607,7 @@ async fn main() {
             }
 
             // Perform the entire contribution cycle
-            let banner = async_fs::read_to_string("phase1-cli/ascii_logo.txt").await.unwrap();
-            println!("{}", banner.yellow());
+            println!("{}", ASCII_LOGO.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
             println!("{} Generating keypair", "[1/11]".bold().dimmed());
             io::get_user_input("Press enter to continue".yellow(), None).unwrap();
