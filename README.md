@@ -28,7 +28,7 @@ If you already have Rust installed, make sure it is the most up-to-date version:
 rustup update
 ```
 
-Once Rust is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-setup-ceremony`:
+Once Rust is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
 ```
 git clone https://github.com/anoma/namada-trusted-setup.git
 cd namada-trusted-setup
