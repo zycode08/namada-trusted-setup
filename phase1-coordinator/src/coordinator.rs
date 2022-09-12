@@ -53,6 +53,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub enum CoordinatorError {
     AggregateContributionFileSizeMismatch,
+    CeremonyHasNotStarted,
     CeremonyIsOver,
     ChallengeHashSizeInvalid,
     ChunkAlreadyComplete,
@@ -552,7 +553,10 @@ impl Coordinator {
         }
 
         // If cohorts are over shut the coordinator down
-        let cohort = self.state.get_cohort();
+        let cohort = match self.state.get_cohort() {
+            Some(c) => c,
+            None => return Err(CoordinatorError::CeremonyHasNotStarted)};
+
         if cohort >= self.state.get_number_of_cohorts() {
             info!("Completed all the scheduled cohorts");
             self.shutdown()?;

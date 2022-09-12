@@ -5,12 +5,12 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError,
-    TimeSource,
+    CoordinatorError, TimeSource,
 };
 use lazy_static::lazy_static;
 
 use rayon::prelude::*;
+use rocket::response::Responder;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, LinkedList},
@@ -991,7 +991,8 @@ impl CoordinatorState {
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
     fn get_tokens() -> Vec<Vec<String>> {
-        let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
+        let tokens_file_prefix =
+            std::env::var("TOKENS_FILE_PREFIX").unwrap_or_else(|_| "namada_tokens_cohort".to_string());
         let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 
         let tokens_dir = std::fs::read_dir(&tokens_path).unwrap();
@@ -1007,15 +1008,17 @@ impl CoordinatorState {
         tokens
     }
 
-    fn get_ceremony_start_time() -> OffsetDateTime {
+    pub fn get_ceremony_start_time() -> OffsetDateTime {
         #[cfg(debug_assertions)]
-        let ceremony_start_time = OffsetDateTime::now_utc();
+        let timestamp_env =
+            std::env::var("CEREMONY_START_TIMESTAMP").unwrap_or_else(|_| OffsetDateTime::now_utc().to_string());
+
         #[cfg(not(debug_assertions))]
-        let ceremony_start_time = {
-            let timestamp_env = std::env::var("CEREMONY_START_TIMESTAMP").unwrap();
-            let timestamp = timestamp_env.parse::<i64>().unwrap();
-            OffsetDateTime::from_unix_timestamp(timestamp).unwrap()
-        };
+        let timestamp_env = std::env::var("CEREMONY_START_TIMESTAMP")
+            .expect("Environment variable CEREMONY_START_TIMESTAMP is missing");
+
+        let timestamp = timestamp_env.parse::<i64>().unwrap();
+        let ceremony_start_time = OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
 
         ceremony_start_time
     }
@@ -1419,12 +1422,15 @@ impl CoordinatorState {
     ///
     /// Computes the current ceremony cohort, starting from 0, in function of [COHORT_TIME].
     ///
-    pub fn get_cohort(&self) -> usize {
+    pub fn get_cohort(&self) -> Option<usize> {
         let ceremony_start_time = self.ceremony_start_time;
         let now = OffsetDateTime::now_utc();
+        if now.unix_timestamp() < ceremony_start_time.unix_timestamp() {
+            return None;
+        }
         let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
 
-        timestamp_diff / COHORT_TIME
+        Some(timestamp_diff / COHORT_TIME)
     }
 
     ///
@@ -3470,9 +3476,7 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState,
-        MockTimeSource,
-        SystemTimeSource,
+        CoordinatorState, MockTimeSource, SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

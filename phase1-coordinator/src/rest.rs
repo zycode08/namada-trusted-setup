@@ -5,24 +5,21 @@ use crate::{
     objects::{ContributionInfo, LockedLocators, Task},
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
-    CoordinatorError,
-    Participant,
+    CoordinatorError, Participant,
 };
 
 use blake2::Digest;
 use rocket::{
     catch,
     data::FromData,
-    error,
-    get,
+    error, get,
     http::{ContentType, Status},
     post,
     request::{FromRequest, Outcome, Request},
     response::{Responder, Response},
     serde::{json::Json, Deserialize, DeserializeOwned, Serialize},
     tokio::{fs, sync::RwLock, task},
-    Shutdown,
-    State,
+    Shutdown, State,
 };
 
 use sha2::Sha256;
@@ -31,6 +28,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
+use time::OffsetDateTime;
 
 use tracing::warn;
 
@@ -62,6 +60,8 @@ type Coordinator = Arc<RwLock<crate::Coordinator>>;
 pub enum ResponseError {
     #[error("Ceremony is over, no more contributions are allowed")]
     CeremonyIsOver,
+    #[error("Ceremony has not started yet. Ceremony start time is: {0}")]
+    CeremonyHasNotStarted(OffsetDateTime),
     #[error("Coordinator failed: {0}")]
     CoordinatorError(CoordinatorError),
     #[error("Contribution info is not valid: {0}")]
@@ -108,6 +108,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let mut builder = Response::build();
 
         let response_code = match self {
+            ResponseError::CeremonyHasNotStarted(_) => Status::Unauthorized,
             ResponseError::CeremonyIsOver => Status::Unauthorized,
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSignature => Status::BadRequest,
@@ -595,7 +596,11 @@ async fn token_check(coordinator: Coordinator, token: &String) -> Result<()> {
 
     // Calculate the cohort number
     let read_lock = coordinator.read().await;
-    let cohort = read_lock.state().get_cohort();
+    let ceremony_start_time = read_lock.state().ceremony_start_time();
+    let cohort = match read_lock.state().get_cohort() {
+        Some(c) => c,
+        None => return Err(ResponseError::CeremonyHasNotStarted(ceremony_start_time)),
+    };
     let tokens = match read_lock.state().tokens(cohort) {
         Some(t) => t,
         None => return Err(ResponseError::CeremonyIsOver),
