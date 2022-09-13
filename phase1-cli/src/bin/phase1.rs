@@ -72,9 +72,9 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
-    println!("{}","If you decide to participate in the incentivised trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data won't be published publicly!)".bright_cyan());
+    println!("{}","If you decide to participate in the incentivized trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data is for internal use and won't be published publicly!)".bright_cyan());
     let incentivization = io::get_user_input(
-        "Do you want to participate in the incentivised trusted setup? [y/n]".yellow(),
+        "Do you want to participate in the incentivized trusted setup? [y/n]".yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -457,9 +457,9 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!("{}","You can only join the ceremony with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
+    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
     let token = io::get_user_input(
-        "Enter your unique or FFA token (20 characters in hexadecimal format):".yellow(),
+        "Enter your unique token or the FFA token (20 characters in hexadecimal format):".yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
     )
     .unwrap();
@@ -672,7 +672,8 @@ async fn main() {
             let is_incentivized = contrib_info.is_incentivized;
 
             if is_incentivized {
-                println!("{}", "You are participating in the incentivised trusted setup.\nThe mnemonic that will be generated in the next step is the ONLY way to recover your keypair that will receive your rewards in Namada at genesis.".bright_red());
+                println!("{}\n{}", "IMPORTANT".bright_red().underline().bold(),
+                "You are participating in the incentivized trusted setup.\nThe mnemonic generated in the next step is the ONLY way to recover your keypair that will receive rewards in Namada at genesis.".bright_red());
             } else {
                 println!(
                     "{}",
@@ -680,7 +681,7 @@ async fn main() {
                         .bright_cyan()
                 );
             }
-            io::get_user_input("Press enter to continue".yellow(), None).unwrap();
+            io::get_user_input("Press enter to generate a keypair".yellow(), None).unwrap();
             let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(false, is_incentivized))
                 .await
                 .unwrap()

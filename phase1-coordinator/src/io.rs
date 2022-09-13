@@ -167,10 +167,14 @@ pub fn generate_keypair(is_server: bool, is_incentivized: bool) -> Result<KeyPai
         if is_incentivized {
             // Print mnemonic to the user in a different terminal
             execute!(std::io::stdout(), EnterAlternateScreen)?;
-            println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
-            println!("Next, you will be asked to prompt 3 words chosen randomly from the list above.\n");
+            println!("{}", "Safely store your 24 words mnemonic:\n".bright_cyan());
+            println!("{}", mnemonic);
+            println!(
+                "{}",
+                "The next step will be to verify if you've correctly written the words above.".bright_cyan()
+            );
             get_user_input(
-                format!("{}", "Press enter when you've done it...".yellow()).as_str(),
+                format!("{}", "Press enter when you've done it".yellow()).as_str(),
                 None,
             )?;
             execute!(std::io::stdout(), LeaveAlternateScreen)?;
