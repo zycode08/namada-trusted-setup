@@ -20,8 +20,7 @@ use futures_util::StreamExt;
 use phase1_cli::{
     ascii_logo::ASCII_LOGO,
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
+    requests, CeremonyOpt,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -35,7 +34,7 @@ use std::{
     time::Instant,
 };
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
@@ -70,6 +69,7 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
+    println!("{}","If you decide to participate in the incentivised trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data won't be published publicly!)".bright_cyan());
     let incentivization = io::get_user_input(
         "Do you want to participate in the incentivised trusted setup? [y/n]".yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
@@ -79,7 +79,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     if incentivization == "y" {
         // Ask for personal info
         contrib_info.full_name = Some(io::get_user_input(
-            "Please enter your full name:".yellow(),
+            "Please enter your full name (first and last name):".yellow(),
             Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
         )?);
         contrib_info.email = Some(io::get_user_input(
@@ -94,23 +94,26 @@ fn initialize_contribution() -> Result<ContributionInfo> {
 
 /// Asks the user wheter he wants to use a custom seed of randomness or not
 fn get_seed_of_randomness() -> Result<bool> {
-    let custom_seed = io::get_user_input(
-        "Do you want to input your own seed of randomness (32 bytes hex encoded)? [y/n]".yellow(),
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase();
+    #[cfg(feature = "custom-seed")]
+    let custom_seed = "y";
+    #[cfg(not(feature = "custom-seed"))]
+    let custom_seed = "n";
 
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
+    if custom_seed == "y" {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Prompt the user with the second round of questions to define which execution branch to follow
 #[inline(always)]
 fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
-    let offline = io::get_user_input(
-        "Do you want to contribute on another machine? [y/n]".yellow(),
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase();
+    // println!("{}", "In doubt, answer 'n' to pursue on this machine.\nAnswer 'y' if you want to generate the parameters on another machine like a Raspberry PI or an airgapped computer that never connected to the internet.".bright_cyan());
+    #[cfg(feature = "another-machine")]
+    let offline = "y";
+    #[cfg(not(feature = "another-machine"))]
+    let offline = "n";
 
     if offline == "y" {
         contrib_info.is_another_machine = true;
@@ -203,7 +206,7 @@ fn compute_contribution_offline() -> Result<()> {
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your own seed of randomness (32 bytes hex encoded, 64 hex chars with no 0x prefix)".yellow(),
+            "Enter your custom random seed (64 characters in hexadecimal format without a '0x' prefix)".yellow(),
             Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
@@ -213,7 +216,10 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         }
         RandomSource::Seed(seed)
     } else {
-        let entropy = io::get_user_input("Enter a random string to be used as entropy:".yellow(), None)?;
+        let entropy = io::get_user_input(
+            "Frenetically type a random string to be used as entropy:".yellow(),
+            None,
+        )?;
         RandomSource::Entropy(entropy)
     };
 
@@ -248,9 +254,12 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
+    let end_lock_time = contrib_info.timestamps.challenge_locked + Duration::minutes(20);
     println!(
-        "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
-        contrib_info.timestamps.challenge_locked,
+        "{}",
+        format!("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts now on {} and ends in 20 minutes on {}  \nHave fun!",
+        contrib_info.timestamps.challenge_locked.to_rfc2822(),
+        end_lock_time.to_rfc2822()).bright_cyan()
     );
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
@@ -306,6 +315,11 @@ async fn contribute(
         tokio::task::spawn_blocking(move || compute_contribution_offline()).await??;
     } else {
         let custom_seed = contrib_info.is_own_seed_of_randomness;
+        if custom_seed {
+            println!("{}", "Provide your own random seed to initialize the ChaCha random number generator. You seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or simply an airgapped machine.".bright_cyan());
+        } else {
+            println!("{}", "Enter a variable-length random string to be used as entropy in combination with your OS randomness to generate the random seed that initializes the ChaChan random number generator.".bright_cyan());
+        }
         tokio::task::spawn_blocking(move || {
             compute_contribution(custom_seed, challenge.as_ref(), contrib_filename_copy.as_str())
         })
@@ -427,13 +441,14 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
+    println!("{} Joining queue", "[3/11]".bold().dimmed());
+    println!("{}","You can only join the ceremony with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
     let token = io::get_user_input(
-        "Enter your authentification token (10 bytes hex encoded):".yellow(),
+        "Enter your unique or FFA token (20 characters in hexadecimal format):".yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
     )
     .unwrap();
 
-    println!("{} Joining queue", "[3/11]".bold().dimmed());
     requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
@@ -609,18 +624,31 @@ async fn main() {
             // Perform the entire contribution cycle
             println!("{}", ASCII_LOGO.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
-            println!("{} Generating keypair", "[1/11]".bold().dimmed());
-            io::get_user_input("Press enter to continue".yellow(), None).unwrap();
-            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
 
-            println!("{} Initializing contribution", "[2/11]".bold().dimmed());
+            println!("{} Initializing contribution", "[1/11]".bold().dimmed());
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
                 .await
                 .unwrap()
                 .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
+            println!("{} Generating keypair", "[2/11]".bold().dimmed());
+
+            let is_incentivized = contrib_info.is_incentivized;
+
+            if is_incentivized {
+                println!("{}", "You are participating in the incentivised trusted setup.\nThe mnemonic that will be generated in the next step is the ONLY way to recover your keypair that will receive your rewards in Namada at genesis.".bright_red());
+            } else {
+                println!(
+                    "{}",
+                    "The CLI will generate in the background a keypair that is used to interact with the coordinator."
+                        .bright_cyan()
+                );
+            }
+            io::get_user_input("Press enter to continue".yellow(), None).unwrap();
+            let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(false, is_incentivized))
+                .await
+                .unwrap()
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
+
             contrib_info.timestamps.start_contribution = Utc::now();
             contrib_info.public_key = keypair.pubkey().to_string();
 

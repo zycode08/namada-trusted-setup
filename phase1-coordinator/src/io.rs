@@ -154,7 +154,7 @@ pub fn keypair_from_mnemonic() -> Result<KeyPair> {
 
 /// Generates a new [`KeyPair`] from a randomly generated mnemonic. If argument `is_server` is set than the mnemonic is saved
 /// to a file, otherwise it gets printed to the user.
-pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
+pub fn generate_keypair(is_server: bool, is_incentivized: bool) -> Result<KeyPair> {
     // Generate random mnemonic
     let mut rng = rand_06::thread_rng();
     let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
@@ -164,23 +164,29 @@ pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
     if is_server {
         std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?;
     } else {
-        // Print mnemonic to the user in a different terminal
-        execute!(std::io::stdout(), EnterAlternateScreen)?;
-        println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
-        get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
-        execute!(std::io::stdout(), LeaveAlternateScreen)?;
-
-        #[cfg(not(debug_assertions))]
-        {
+        if is_incentivized {
+            // Print mnemonic to the user in a different terminal
             execute!(std::io::stdout(), EnterAlternateScreen)?;
-            let verification_outcome = check_mnemonic(&mnemonic);
+            println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
+            println!("Next, you will be asked to prompt 3 words chosen randomly from the list above.\n");
+            get_user_input(
+                format!("{}", "Press enter when you've done it...".yellow()).as_str(),
+                None,
+            )?;
             execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
-            match verification_outcome {
-                Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
-                Err(e) => {
-                    println!("{}", e.to_string().red().bold());
-                    return Err(e);
+            #[cfg(not(debug_assertions))]
+            {
+                execute!(std::io::stdout(), EnterAlternateScreen)?;
+                let verification_outcome = check_mnemonic(&mnemonic);
+                execute!(std::io::stdout(), LeaveAlternateScreen)?;
+
+                match verification_outcome {
+                    Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
+                    Err(e) => {
+                        println!("{}", e.to_string().red().bold());
+                        return Err(e);
+                    }
                 }
             }
         }

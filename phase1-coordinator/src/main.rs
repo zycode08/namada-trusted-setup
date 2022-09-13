@@ -112,7 +112,7 @@ pub async fn main() {
 
     // Set the environment
     let tokens_path: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
-    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true))
+    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true, true))
         .await
         .unwrap()
         .expect("Error while generating the keypair");

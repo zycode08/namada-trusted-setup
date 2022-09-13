@@ -56,6 +56,8 @@ rustc_version = "0.4.0"
 cli = ["phase1/cli", "parallel", "setup-utils/cli", "phase1-coordinator/operator"]
 default = []
 parallel = ["phase1/parallel", "setup-utils/parallel", "phase1-coordinator/parallel"]
+custom-seed = []
+another-machine = []
 
 [[bin]]
 name = "phase1"
