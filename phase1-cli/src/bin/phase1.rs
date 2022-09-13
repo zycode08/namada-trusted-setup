@@ -48,6 +48,9 @@ use tracing::{debug, trace};
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
 
+const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChaChan random number generator.";
+const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYou seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or simply an airgapped machine.";
+
 macro_rules! pretty_hash {
     ($hash:expr) => {{
         let mut output = format!("\n\n");
@@ -158,44 +161,56 @@ fn get_progress_bar(len: u64) -> ProgressBar {
 #[inline(always)]
 fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
-    let mut msg = format!(
-        "{}:\n\nIn the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files.\n",
-        "Instructions".bold().underline(),
+    let mut msg = format!("{}\n\n", "Instructions".bold().underline().bright_cyan(),);
+    msg.push_str(format!("{}",format!(
+        "In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files.\n",
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
-    );
-    msg.push_str("\nIf you want to use the provided \"contribute --offline\" command follow these steps:\n");
+    ).as_str().bright_cyan()).as_str());
     msg.push_str(
-    format!(
-        "{:4}{}- Copy both the challenge file \"{}\" and contribution file \"{}\" in the directory where you will execute the offline command\n",
-        "", "1".bold(), 
+        format!(
+            "{}",
+            "\nTo use the provided \"contribute --offline\" command follow these steps:\n".bright_cyan()
+        )
+        .as_str(),
+    );
+    msg.push_str(
+        format!("{}",format!(
+        "{:4}1) Copy both the challenge file \"{}\" and contribution file \"{}\" in the directory where you will execute the offline command\n",
+        "",
         OFFLINE_CHALLENGE_FILE_NAME,
         OFFLINE_CONTRIBUTION_FILE_NAME
-    ).as_str());
+    ).as_str().bright_cyan()).as_str());
     msg.push_str(
         format!(
-            "{:4}{}- Execute the command \"{}\"\n",
-            "",
-            "2".bold(),
-            "cargo run --release --bin phase1 --features=cli contribute --offline".bold()
+            "{}",
+            format!(
+                "{:4}2) Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"\n",
+                ""
+            )
+            .as_str()
+            .bright_cyan()
         )
         .as_str(),
     );
     msg.push_str(
         format!(
-            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previous file)",
-            "",
-            "3".bold(),
-            OFFLINE_CONTRIBUTION_FILE_NAME
+            "{}",
+            format!(
+                "{:4}3) Copy the contribution file \"{}\" back to this directory (by overwriting the previous file)",
+                "", OFFLINE_CONTRIBUTION_FILE_NAME
+            )
+            .as_str()
+            .bright_cyan()
         )
         .as_str(),
     );
-    println!("{}", msg);
+    println!("{}", msg.bright_cyan());
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
     io::get_user_input(
-        "When the contribution file is ready, press enter to upload it and move on".yellow(),
+        "When your contribution file is ready, press enter to upload it".yellow(),
         None,
     )?;
 
@@ -206,7 +221,7 @@ fn compute_contribution_offline() -> Result<()> {
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your custom random seed (64 characters in hexadecimal format without a '0x' prefix)".yellow(),
+            "Enter your custom random seed (64 characters in hexadecimal format without a '0x' prefix / 32 bytes encoded in hexadecimal):".yellow(),
             Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
@@ -316,9 +331,9 @@ async fn contribute(
     } else {
         let custom_seed = contrib_info.is_own_seed_of_randomness;
         if custom_seed {
-            println!("{}", "Provide your own random seed to initialize the ChaCha random number generator. You seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or simply an airgapped machine.".bright_cyan());
+            println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
         } else {
-            println!("{}", "Enter a variable-length random string to be used as entropy in combination with your OS randomness to generate the random seed that initializes the ChaChan random number generator.".bright_cyan());
+            println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
         }
         tokio::task::spawn_blocking(move || {
             compute_contribution(custom_seed, challenge.as_ref(), contrib_filename_copy.as_str())
@@ -600,6 +615,11 @@ async fn main() {
     match opt {
         CeremonyOpt::Contribute { url, offline } => {
             if offline {
+                #[cfg(feature = "custom-seed")]
+                println!(
+                "{}",
+                "DISCLAIMER: the \"custom-seed\" feature flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+            );
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
                 println!("{} Reading challenge", "[1/2]".bold().dimmed());
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
@@ -607,6 +627,11 @@ async fn main() {
                     .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
 
                 println!("{} Computing contribution", "[2/2]".bold().dimmed());
+
+                #[cfg(feature = "custom-seed")]
+                println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
+                #[cfg(not(feature = "custom-seed"))]
+                println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
                 tokio::task::spawn_blocking(move || {
                     compute_contribution(
                         get_seed_of_randomness().unwrap(),
@@ -624,6 +649,18 @@ async fn main() {
             // Perform the entire contribution cycle
             println!("{}", ASCII_LOGO.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
+
+            #[cfg(feature = "custom-seed")]
+            println!(
+                "{}",
+                "DISCLAIMER: the \"custom-seed\" feature flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+            );
+
+            #[cfg(feature = "another-machine")]
+            println!(
+                "{}",
+                "DISCLAIMER: the \"another-machine\" feature flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
+            );
 
             println!("{} Initializing contribution", "[1/11]".bold().dimmed());
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
