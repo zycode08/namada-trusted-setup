@@ -588,8 +588,9 @@ async fn main() {
             if offline {
                 if custom_seed {
                     println!(
-                "{}",
-                "DISCLAIMER: the \"custom-seed\" feature flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+                "{}\n{}",
+                "DISCLAIMER".bright_red().underline().bold(),
+                "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
             );
                 }
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
@@ -619,18 +620,20 @@ async fn main() {
             println!("{}", ASCII_LOGO.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
 
-            if custom_seed {
-                println!(
-                "{}",
-                "DISCLAIMER: the \"custom-seed\" feature flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
-            );
-            }
-
             if another_machine {
                 println!(
-                "{}",
-                "DISCLAIMER: the \"another-machine\" feature flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
+                "{}\n{}",
+                "DISCLAIMER".bright_red().underline().bold(),
+                "The \"--another-machine\" flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
             );
+            } else {
+                if custom_seed {
+                    println!(
+                "{}\n{}",
+                "DISCLAIMER".bright_red().underline().bold(),
+                "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+            );
+                }
             }
 
             println!("{} Initializing contribution", "[1/11]".bold().dimmed());
