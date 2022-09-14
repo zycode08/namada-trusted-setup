@@ -23,7 +23,7 @@ After download, you might need to give execution permissions with `chmod +x phas
 
 Finally start the client with:
 ```
-./phase1-{distrib}-{version}
+./phase1-{distrib}-{version} https://contribute.namada.net
 ```
 ### Troubleshooting
 In MacOS, you might see appearing the warning "cannot be opened because the developer cannot be verified". To solve this, open the "Security & Privacy" control panel from System Preferences. In `general` tab, next to the info that the binary was prevented from running, click `Allow Anyway`. Run the binary again. This time a different prompt is shown. Click `Open` - the binary should run as you expect.
@@ -51,7 +51,18 @@ Build the binaries and start your contribution with:
 cargo run --release --bin phase1 --features cli contribute https://contribute.namada.net
 ```
 
+## Advanced features
+Advanced features are available to encourage creativity during your contribution.
 
+### Computation on another machine
+You can generate the parameters on a machine that is offline or never connected to internet. Some examples are an air-gapped machine, a brand-new computer or a Raspberry PI.
+
+To use this feature, add the `--another-machine` flag to your command.
+
+### Custom random seed
+You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. This is useful if you are using an external source of randomness or don't want to use the OS randomness. Some examples are atmospheric noise, radioactive elements or lava lite.
+
+To use this feature, add the `--custom-seed` flag to your command.
 
 ## Understanding the ceremony
 
