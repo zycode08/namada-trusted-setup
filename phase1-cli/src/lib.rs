@@ -58,6 +58,16 @@ pub enum CeremonyOpt {
             help = "Perform only the randomness computation step skipping all communication"
         )]
         offline: bool,
+        #[structopt(
+            long,
+            help = "Give a custom random seed (32 bytes / 64 characters in hexadecimal) for the ChaCha RNG"
+        )]
+        custom_seed: bool,
+        #[structopt(
+            long,
+            help = "Run the computation of the parameters on another machine"
+        )]
+        another_machine: bool
     },
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),

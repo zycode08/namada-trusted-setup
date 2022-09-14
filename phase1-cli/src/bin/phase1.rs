@@ -95,40 +95,6 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     Ok(contrib_info)
 }
 
-/// Asks the user wheter he wants to use a custom seed of randomness or not
-fn get_seed_of_randomness() -> Result<bool> {
-    #[cfg(feature = "custom-seed")]
-    let custom_seed = "y";
-    #[cfg(not(feature = "custom-seed"))]
-    let custom_seed = "n";
-
-    if custom_seed == "y" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
-
-/// Prompt the user with the second round of questions to define which execution branch to follow
-#[inline(always)]
-fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
-    // println!("{}", "In doubt, answer 'n' to pursue on this machine.\nAnswer 'y' if you want to generate the parameters on another machine like a Raspberry PI or an airgapped computer that never connected to the internet.".bright_cyan());
-    #[cfg(feature = "another-machine")]
-    let offline = "y";
-    #[cfg(not(feature = "another-machine"))]
-    let offline = "n";
-
-    if offline == "y" {
-        contrib_info.is_another_machine = true;
-    } else {
-        if get_seed_of_randomness()? {
-            contrib_info.is_own_seed_of_randomness = true;
-        }
-    }
-
-    Ok(contrib_info)
-}
-
 #[inline(always)]
 fn get_file_as_byte_vec(filename: &str, round_height: u64, contribution_id: u64) -> Result<Vec<u8>> {
     let mut f = File::open(filename)?;
@@ -221,7 +187,8 @@ fn compute_contribution_offline() -> Result<()> {
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your custom random seed (64 characters in hexadecimal format without a '0x' prefix / 32 bytes encoded in hexadecimal):".yellow(),
+            "Enter your custom random seed (64 characters / 32 bytes in hexadecimal format without a '0x' prefix):"
+                .yellow(),
             Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
@@ -294,7 +261,6 @@ async fn contribute(
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the offline contrib path
-    contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
     let challenge_filename = if contrib_info.is_another_machine {
         OFFLINE_CHALLENGE_FILE_NAME.to_string()
     } else {
@@ -613,13 +579,19 @@ async fn main() {
     let opt = CeremonyOpt::from_args();
 
     match opt {
-        CeremonyOpt::Contribute { url, offline } => {
+        CeremonyOpt::Contribute {
+            url,
+            offline,
+            custom_seed,
+            another_machine,
+        } => {
             if offline {
-                #[cfg(feature = "custom-seed")]
-                println!(
+                if custom_seed {
+                    println!(
                 "{}",
                 "DISCLAIMER: the \"custom-seed\" feature flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
             );
+                }
                 // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
                 println!("{} Reading challenge", "[1/2]".bold().dimmed());
                 let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
@@ -628,16 +600,13 @@ async fn main() {
 
                 println!("{} Computing contribution", "[2/2]".bold().dimmed());
 
-                #[cfg(feature = "custom-seed")]
-                println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
-                #[cfg(not(feature = "custom-seed"))]
-                println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
+                if custom_seed {
+                    println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
+                } else {
+                    println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
+                }
                 tokio::task::spawn_blocking(move || {
-                    compute_contribution(
-                        get_seed_of_randomness().unwrap(),
-                        &challenge,
-                        OFFLINE_CONTRIBUTION_FILE_NAME,
-                    )
+                    compute_contribution(custom_seed, &challenge, OFFLINE_CONTRIBUTION_FILE_NAME)
                 })
                 .await
                 .unwrap()
@@ -650,17 +619,19 @@ async fn main() {
             println!("{}", ASCII_LOGO.yellow());
             println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
 
-            #[cfg(feature = "custom-seed")]
-            println!(
+            if custom_seed {
+                println!(
                 "{}",
                 "DISCLAIMER: the \"custom-seed\" feature flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
             );
+            }
 
-            #[cfg(feature = "another-machine")]
-            println!(
+            if another_machine {
+                println!(
                 "{}",
                 "DISCLAIMER: the \"another-machine\" feature flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
             );
+            }
 
             println!("{} Initializing contribution", "[1/11]".bold().dimmed());
             let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
@@ -668,6 +639,13 @@ async fn main() {
                 .unwrap()
                 .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
             println!("{} Generating keypair", "[2/11]".bold().dimmed());
+
+            if custom_seed {
+                contrib_info.is_own_seed_of_randomness = true;
+            }
+            if another_machine {
+                contrib_info.is_another_machine = true;
+            }
 
             let is_incentivized = contrib_info.is_incentivized;
 
