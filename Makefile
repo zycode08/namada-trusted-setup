@@ -9,10 +9,10 @@ check:
 	$(CARGO) check --all-targets
 
 contribution: # Run contributor against a local coordinator (0.0.0.0:8080)
-	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute
+	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute default
 
 offline-contribution: # Computes offline contribution
-	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute --offline
+	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) contribute offline
 
 close-ceremony: # Stop local coordinator (0.0.0.0:8080)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) close-ceremony

@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
-    io,
+    io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
     rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
@@ -20,7 +20,9 @@ use futures_util::StreamExt;
 use phase1_cli::{
     ascii_logo::ASCII_LOGO,
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests, CeremonyOpt,
+    requests,
+    CeremonyOpt,
+    CoordinatorUrl,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -136,7 +138,7 @@ fn compute_contribution_offline() -> Result<()> {
     msg.push_str(
         format!(
             "{}",
-            "\nTo use the provided \"contribute --offline\" command follow these steps:\n".bright_cyan()
+            "\nTo use the provided \"contribute offline\" command follow these steps:\n".bright_cyan()
         )
         .as_str(),
     );
@@ -151,7 +153,7 @@ fn compute_contribution_offline() -> Result<()> {
         format!(
             "{}",
             format!(
-                "{:4}2) Execute the command \"cargo run --release --bin phase1 --features=cli contribute --offline\"\n",
+                "{:4}2) Execute the command \"cargo run --release --bin phase1 --features=cli contribute offline\"\n",
                 ""
             )
             .as_str()
@@ -573,111 +575,118 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
     }
 }
 
+enum Branch {
+    AnotherMachine,
+    Default(bool),
+}
+
+#[inline(always)]
+async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
+    // Perform the entire contribution cycle
+    println!("{}", ASCII_LOGO.yellow());
+    println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
+
+    match branch {
+        Branch::AnotherMachine => println!(
+            "{}\n{}",
+            "DISCLAIMER".bright_red().underline().bold(),
+            "The \"--another-machine\" flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
+        ),
+        Branch::Default(custom_seed) if custom_seed => println!(
+            "{}\n{}",
+            "DISCLAIMER".bright_red().underline().bold(),
+            "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+        ),
+        _ => ()
+    }
+
+    println!("{} Initializing contribution", "[1/11]".bold().dimmed());
+    let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
+        .await
+        .unwrap()
+        .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
+    println!("{} Generating keypair", "[2/11]".bold().dimmed());
+
+    match branch {
+        Branch::AnotherMachine => contrib_info.is_another_machine = true,
+        Branch::Default(custom_seed) if custom_seed => contrib_info.is_own_seed_of_randomness = true,
+        _ => (),
+    }
+
+    if contrib_info.is_incentivized {
+        println!("{}\n{}", "IMPORTANT".bright_red().underline().bold(),
+        "You are participating in the incentivized trusted setup.\nThe mnemonic generated in the next step is the ONLY way to recover your keypair that will receive rewards in Namada at genesis.".bright_red());
+    } else {
+        println!(
+            "{}",
+            "The CLI will generate in the background a keypair that is used to interact with the coordinator."
+                .bright_cyan()
+        );
+    }
+    io::get_user_input("Press enter to generate a keypair".yellow(), None).unwrap();
+    let user = if contrib_info.is_incentivized {
+        KeyPairUser::IncentivizedContributor
+    } else {
+        KeyPairUser::Contributor
+    };
+    let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(user))
+        .await
+        .unwrap()
+        .expect(&format!("{}", "Error while generating the keypair".red().bold()));
+
+    contrib_info.timestamps.start_contribution = Utc::now();
+    contrib_info.public_key = keypair.pubkey().to_string();
+
+    contribution_loop(
+        Arc::new(Client::new()),
+        Arc::new(url.coordinator),
+        Arc::new(keypair),
+        contrib_info,
+    )
+    .await;
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
     let opt = CeremonyOpt::from_args();
 
     match opt {
-        CeremonyOpt::Contribute {
-            url,
-            offline,
-            custom_seed,
-            another_machine,
-        } => {
-            if offline {
-                if custom_seed {
-                    println!(
-                "{}\n{}",
-                "DISCLAIMER".bright_red().underline().bold(),
-                "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
-            );
+        CeremonyOpt::Contribute(branch) => {
+            match branch {
+                phase1_cli::Branches::AnotherMachine { url } => contribution_prelude(url, Branch::AnotherMachine).await,
+                phase1_cli::Branches::Default { url, custom_seed } => {
+                    contribution_prelude(url, Branch::Default(custom_seed)).await
                 }
-                // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
-                println!("{} Reading challenge", "[1/2]".bold().dimmed());
-                let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
-                    .await
-                    .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
-
-                println!("{} Computing contribution", "[2/2]".bold().dimmed());
-
-                if custom_seed {
-                    println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
-                } else {
-                    println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
-                }
-                tokio::task::spawn_blocking(move || {
-                    compute_contribution(custom_seed, &challenge, OFFLINE_CONTRIBUTION_FILE_NAME)
-                })
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error in computing randomness".red().bold()));
-
-                return;
-            }
-
-            // Perform the entire contribution cycle
-            println!("{}", ASCII_LOGO.yellow());
-            println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
-
-            if another_machine {
-                println!(
-                "{}\n{}",
-                "DISCLAIMER".bright_red().underline().bold(),
-                "The \"--another-machine\" flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
-            );
-            } else {
-                if custom_seed {
-                    println!(
-                "{}\n{}",
-                "DISCLAIMER".bright_red().underline().bold(),
-                "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
-            );
-                }
-            }
-
-            println!("{} Initializing contribution", "[1/11]".bold().dimmed());
-            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
-            println!("{} Generating keypair", "[2/11]".bold().dimmed());
-
-            if custom_seed {
-                contrib_info.is_own_seed_of_randomness = true;
-            }
-            if another_machine {
-                contrib_info.is_another_machine = true;
-            }
-
-            let is_incentivized = contrib_info.is_incentivized;
-
-            if is_incentivized {
-                println!("{}\n{}", "IMPORTANT".bright_red().underline().bold(),
-                "You are participating in the incentivized trusted setup.\nThe mnemonic generated in the next step is the ONLY way to recover your keypair that will receive rewards in Namada at genesis.".bright_red());
-            } else {
-                println!(
-                    "{}",
-                    "The CLI will generate in the background a keypair that is used to interact with the coordinator."
-                        .bright_cyan()
+                phase1_cli::Branches::Offline { custom_seed } => {
+                    if custom_seed {
+                        println!(
+                    "{}\n{}",
+                    "DISCLAIMER".bright_red().underline().bold(),
+                    "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
                 );
+                    }
+                    // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
+                    println!("{} Reading challenge", "[1/2]".bold().dimmed());
+                    let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
+                        .await
+                        .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
+
+                    println!("{} Computing contribution", "[2/2]".bold().dimmed());
+
+                    if custom_seed {
+                        println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
+                    } else {
+                        println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
+                    }
+                    tokio::task::spawn_blocking(move || {
+                        compute_contribution(custom_seed, &challenge, OFFLINE_CONTRIBUTION_FILE_NAME)
+                    })
+                    .await
+                    .unwrap()
+                    .expect(&format!("{}", "Error in computing randomness".red().bold()));
+                }
             }
-            io::get_user_input("Press enter to generate a keypair".yellow(), None).unwrap();
-            let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(false, is_incentivized))
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
-
-            contrib_info.timestamps.start_contribution = Utc::now();
-            contrib_info.public_key = keypair.pubkey().to_string();
-
-            contribution_loop(
-                Arc::new(Client::new()),
-                Arc::new(url.coordinator),
-                Arc::new(keypair),
-                contrib_info,
-            )
-            .await;
         }
         CeremonyOpt::CloseCeremony(url) => {
             let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())

@@ -1,6 +1,6 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
-    io,
+    io::{self, KeyPairUser},
     rest::{self, ResponseError, UPDATE_TIME},
     s3::S3Ctx,
     Coordinator,
@@ -112,7 +112,7 @@ pub async fn main() {
 
     // Set the environment
     let tokens_path: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
-    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(true, true))
+    let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(KeyPairUser::Coordinator))
         .await
         .unwrap()
         .expect("Error while generating the keypair");

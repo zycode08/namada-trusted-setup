@@ -31,6 +31,13 @@ pub enum IOError {
     RegexError(#[from] regex::Error),
 }
 
+/// Types of user requesting a [`KeyPair`]
+pub enum KeyPairUser {
+    Contributor,
+    Coordinator,
+    IncentivizedContributor,
+}
+
 type Result<T> = std::result::Result<T, IOError>;
 struct MnemonicWrap(Mnemonic);
 
@@ -152,19 +159,22 @@ pub fn keypair_from_mnemonic() -> Result<KeyPair> {
     Ok(KeyPair::try_from_seed(&seed)?)
 }
 
-/// Generates a new [`KeyPair`] from a randomly generated mnemonic. If argument `is_server` is set than the mnemonic is saved
-/// to a file, otherwise it gets printed to the user.
-pub fn generate_keypair(is_server: bool, is_incentivized: bool) -> Result<KeyPair> {
+/// Generates a new [`KeyPair`] from a randomly generated mnemonic.
+/// Cases:
+/// - Contributor -> generate keypair in the background without notifying the user
+/// - Coordinator -> save the mnemonic to a file
+/// - IncentivizedContributor -> print and check the mnemonic with the user
+pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
     // Generate random mnemonic
     let mut rng = rand_06::thread_rng();
     let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
         .map_err(|e| IOError::MnemonicError(e))?
         .into();
 
-    if is_server {
-        std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?;
-    } else {
-        if is_incentivized {
+    match user {
+        KeyPairUser::Contributor => (),
+        KeyPairUser::Coordinator => std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?,
+        KeyPairUser::IncentivizedContributor => {
             // Print mnemonic to the user in a different terminal
             execute!(std::io::stdout(), EnterAlternateScreen)?;
             println!("{}", "Safely store your 24 words mnemonic:\n".bright_cyan());
@@ -173,10 +183,7 @@ pub fn generate_keypair(is_server: bool, is_incentivized: bool) -> Result<KeyPai
                 "{}",
                 "The next step will be to verify if you've correctly written the words above.".bright_cyan()
             );
-            get_user_input(
-                format!("{}", "Press enter when you've done it".yellow()).as_str(),
-                None,
-            )?;
+            get_user_input(format!("{}", "Press enter when you've done it".yellow()).as_str(), None)?;
             execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
             #[cfg(not(debug_assertions))]
@@ -195,6 +202,7 @@ pub fn generate_keypair(is_server: bool, is_incentivized: bool) -> Result<KeyPai
             }
         }
     }
+
     let mnemonic: Mnemonic = mnemonic.into();
     let seed = mnemonic.to_seed_normalized("");
 
