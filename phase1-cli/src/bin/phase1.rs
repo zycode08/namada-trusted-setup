@@ -18,11 +18,9 @@ use crossterm::{
 use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
-    ascii_logo::ASCII_LOGO,
+    ascii_logo::{ASCII_CATS, ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
-    CoordinatorUrl,
+    requests, CeremonyOpt, CoordinatorUrl,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -50,7 +48,7 @@ use tracing::{debug, trace};
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
 
-const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChaChan random number generator.";
+const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChanChan random number generator.";
 const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYou seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or an airgapped machine.";
 
 macro_rules! pretty_hash {
@@ -76,7 +74,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
     println!("{}","If you decide to participate in the incentivized trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data is for internal use and won't be published publicly!)".bright_cyan());
     let incentivization = io::get_user_input(
-        "Do you want to participate in the incentivized trusted setup? [y/n]".yellow(),
+        "Do you want to participate in the incentivized trusted setup? [y/n]".bright_yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -84,11 +82,11 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     if incentivization == "y" {
         // Ask for personal info
         contrib_info.full_name = Some(io::get_user_input(
-            "Please enter your full name (first and last name):".yellow(),
+            "Please enter your full name (first and last name):".bright_yellow(),
             Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
         )?);
         contrib_info.email = Some(io::get_user_input(
-            "Please enter your email address:".yellow(),
+            "Please enter your email address:".bright_yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
         )?);
         contrib_info.is_incentivized = true;
@@ -178,7 +176,7 @@ fn compute_contribution_offline() -> Result<()> {
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
     io::get_user_input(
-        "When your contribution file is ready, press enter to upload it".yellow(),
+        "When your contribution file is ready, press enter to upload it".bright_yellow(),
         None,
     )?;
 
@@ -190,7 +188,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
             "Enter your custom random seed (64 characters / 32 bytes in hexadecimal format without a '0x' prefix):"
-                .yellow(),
+                .bright_yellow(),
             Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
@@ -201,7 +199,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         RandomSource::Seed(seed)
     } else {
         let entropy = io::get_user_input(
-            "Frenetically type a random string to be used as entropy:".yellow(),
+            "Frenetically type a random string to be used as entropy:".bright_yellow(),
             None,
         )?;
         RandomSource::Entropy(entropy)
@@ -427,7 +425,7 @@ async fn contribution_loop(
     println!("{} Joining queue", "[3/11]".bold().dimmed());
     println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
     let token = io::get_user_input(
-        "Enter your unique token or the FFA token (20 characters in hexadecimal format):".yellow(),
+        "Enter your unique token or the FFA token (20 characters in hexadecimal format):".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
     )
     .unwrap();
@@ -511,11 +509,15 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Couldn't read the contributor info file".red().bold()));
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
-                println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy", 
-                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
-                round_height,
-contrib_info.contribution_hash,
-);
+                println!("{}\n{}\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy{}\n\n",
+                                                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
+                                                "Share your attestation that proves your contribution to the world:".bright_cyan(),
+                                                round_height,
+                                contrib_info.contribution_hash,
+                format!("You also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in the \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
+                                );
+                println!("{}", ASCII_CONTRIBUTION_DONE.bright_yellow());
+
                 break;
             }
             ContributorStatus::Banned => {
@@ -583,7 +585,7 @@ enum Branch {
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
     // Perform the entire contribution cycle
-    println!("{}", ASCII_LOGO.yellow());
+    println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
 
     match branch {
@@ -623,7 +625,7 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
                 .bright_cyan()
         );
     }
-    io::get_user_input("Press enter to generate a keypair".yellow(), None).unwrap();
+    io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
     let user = if contrib_info.is_incentivized {
         KeyPairUser::IncentivizedContributor
     } else {
@@ -703,8 +705,8 @@ async fn main() {
                 let seed = io::seed_from_string(content.as_str()).unwrap();
 
                 // FIXME: add instructions about the next steps, that you will need the mnemonic
-                let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".yellow()).unwrap();
-                let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".yellow()).unwrap();
+                let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".bright_yellow()).unwrap();
+                let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".bright_yellow()).unwrap();
                 if confirmation != password {
                     eprintln!(
                         "{}",
@@ -718,8 +720,8 @@ async fn main() {
                 let address = keys::generate_address(&hex::encode(keypair_struct.pk.to_vec()));
                 let bech_address = keys::bech_encode_address(&address);
 
-                let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
-                    io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
+                let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".bright_yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                    io::get_user_input("Enter the alias:".bright_yellow(), None).unwrap().to_lowercase()
                 } else {
                     address.clone().to_lowercase()
                 };
