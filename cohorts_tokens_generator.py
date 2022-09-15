@@ -45,6 +45,10 @@ zipped_emails_tokens = list(map(list, zip(emails, tokens)))
 # Allocate emails into cohorts depending on the number of participants per cohort
 number_of_cohorts = math.ceil(len(emails) / PARTICIPANTS_PER_COHORT)
 
+print("# of participants: ", len(emails))
+print("Participants per cohort: ", PARTICIPANTS_PER_COHORT)
+print("# of cohorts: ", number_of_cohorts)
+
 for cohort in range(number_of_cohorts):
     start = cohort * PARTICIPANTS_PER_COHORT
     end = (cohort + 1) * PARTICIPANTS_PER_COHORT
