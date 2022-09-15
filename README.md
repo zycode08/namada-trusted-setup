@@ -57,22 +57,31 @@ Advanced features are available to encourage creativity during your contribution
 ### Computation on another machine
 You can generate the parameters on a machine that is offline or never connected to internet. Some examples are an air-gapped machine, a brand-new computer or a Raspberry PI.
 
-To use this feature, add the `--another-machine` flag to your command.
+To use this feature, use the following command:
+```
+cargo run --release --bin phase1 --features cli contribute another-machine https://contribute.namada.net
+```
 
 ### Custom random seed
 You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. This is useful if you are using an external source of randomness or don't want to use the OS randomness. Some examples are atmospheric noise, radioactive elements or lava lite.
 
-To use this feature, add the `--custom-seed` flag to your command.
+To use this feature, add the `--custom-seed` flag to your command:
+```
+cargo run --release --bin phase1 --features cli contribute default --custom-seed https://contribute.namada.net
+```
 
 ## Understanding the ceremony
+
+This section describes how it feels to contribute to the ceremony.
+
+### Client Contribution Flow 
 
 1. The client will ask you if you want to take part in the incentivized program. If you answer 'yes', it will generate a secret mnemonic that derives your key pair.  Back up your mnemonic and keep it in a safe place! This is the only way to prove your contribution and claim your rewards later.
 
 2. Then, you will need to provide the unique token for your cohort you received by email. If the token is valid, you will join the queue of the ceremony. You will need to wait a bit until it is your turn. Each round lasts between 4 min and 20 min. During the whole ceremony, please neither close your terminal, nor your internet connection. If you stay offline for more than 2 min, the coordinator will kick you out from the queue.
 
 3. When it is your turn, the client will download the challenge from the coordinator and save it to the root folder. You have at most 20 minutes to compute your contribution and send it back to the coordinator. Be creative and good luck!
-
-## Client Contribution Flow 
+#### Flowchart
 ![Alt text](./ceremony-contribution-diagram.png?raw=true "Ceremony Contribution Flow")
 
 # Overview of previous trusted setup ceremonies
