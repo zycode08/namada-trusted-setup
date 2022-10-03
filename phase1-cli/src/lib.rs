@@ -47,18 +47,34 @@ pub struct Contributors {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
-pub enum CeremonyOpt {
-    #[structopt(about = "Contribute to the ceremony")]
-    Contribute {
+pub enum Branches {
+    AnotherMachine {
+        #[structopt(flatten)]
+        url: CoordinatorUrl,
+    },
+    Default {
         #[structopt(flatten)]
         url: CoordinatorUrl,
         #[structopt(
             long,
-            help = "Perform only the randomness computation step skipping all communication"
+            help = "Give a custom random seed (32 bytes / 64 characters in hexadecimal) for the ChaCha RNG"
         )]
-        offline: bool,
+        custom_seed: bool,
     },
+    Offline {
+        #[structopt(
+            long,
+            help = "Give a custom random seed (32 bytes / 64 characters in hexadecimal) for the ChaCha RNG"
+        )]
+        custom_seed: bool,
+    },
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
+pub enum CeremonyOpt {
+    #[structopt(about = "Contribute to the ceremony")]
+    Contribute(Branches),
     #[structopt(about = "Stop the coordinator and close the ceremony")]
     CloseCeremony(CoordinatorUrl),
     #[structopt(about = "Generate a Namada keypair from a mnemonic")]

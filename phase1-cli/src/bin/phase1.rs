@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
-    io,
+    io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
     rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
@@ -18,10 +18,9 @@ use crossterm::{
 use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
-    ascii_logo::ASCII_LOGO,
+    ascii_logo::{ASCII_CATS, ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
+    requests, CeremonyOpt, CoordinatorUrl,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -35,7 +34,7 @@ use std::{
     time::Instant,
 };
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
@@ -48,6 +47,9 @@ use tracing::{debug, trace};
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
+
+const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChanChan random number generator.";
+const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYou seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or an airgapped machine.";
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -70,8 +72,9 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
+    println!("{}","If you decide to participate in the incentivized trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data is for internal use and won't be published publicly!)".bright_cyan());
     let incentivization = io::get_user_input(
-        "Do you want to participate in the incentivised trusted setup? [y/n]".yellow(),
+        "Do you want to participate in the incentivized trusted setup? [y/n]".bright_yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -79,46 +82,15 @@ fn initialize_contribution() -> Result<ContributionInfo> {
     if incentivization == "y" {
         // Ask for personal info
         contrib_info.full_name = Some(io::get_user_input(
-            "Please enter your full name:".yellow(),
+            "Please enter your full name (first and last name):".bright_yellow(),
             Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
         )?);
         contrib_info.email = Some(io::get_user_input(
-            "Please enter your email address:".yellow(),
+            "Please enter your email address:".bright_yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
         )?);
         contrib_info.is_incentivized = true;
     };
-
-    Ok(contrib_info)
-}
-
-/// Asks the user wheter he wants to use a custom seed of randomness or not
-fn get_seed_of_randomness() -> Result<bool> {
-    let custom_seed = io::get_user_input(
-        "Do you want to input your own seed of randomness (32 bytes hex encoded)? [y/n]".yellow(),
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase();
-
-    if custom_seed == "y" { Ok(true) } else { Ok(false) }
-}
-
-/// Prompt the user with the second round of questions to define which execution branch to follow
-#[inline(always)]
-fn get_contribution_branch(mut contrib_info: ContributionInfo) -> Result<ContributionInfo> {
-    let offline = io::get_user_input(
-        "Do you want to contribute on another machine? [y/n]".yellow(),
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase();
-
-    if offline == "y" {
-        contrib_info.is_another_machine = true;
-    } else {
-        if get_seed_of_randomness()? {
-            contrib_info.is_own_seed_of_randomness = true;
-        }
-    }
 
     Ok(contrib_info)
 }
@@ -155,44 +127,56 @@ fn get_progress_bar(len: u64) -> ProgressBar {
 #[inline(always)]
 fn compute_contribution_offline() -> Result<()> {
     // Print instructions to the user
-    let mut msg = format!(
-        "{}:\n\nIn the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files.\n",
-        "Instructions".bold().underline(),
+    let mut msg = format!("{}\n\n", "Instructions".bold().underline().bright_cyan(),);
+    msg.push_str(format!("{}",format!(
+        "In the current working directory, you can find the challenge file \"{}\" and contribution file \"{}\".\nTo contribute, you will need both files.\n",
         OFFLINE_CONTRIBUTION_FILE_NAME,
         OFFLINE_CHALLENGE_FILE_NAME
-    );
-    msg.push_str("\nIf you want to use the provided \"contribute --offline\" command follow these steps:\n");
+    ).as_str().bright_cyan()).as_str());
     msg.push_str(
-    format!(
-        "{:4}{}- Copy both the challenge file \"{}\" and contribution file \"{}\" in the directory where you will execute the offline command\n",
-        "", "1".bold(), 
+        format!(
+            "{}",
+            "\nTo use the provided \"contribute offline\" command follow these steps:\n".bright_cyan()
+        )
+        .as_str(),
+    );
+    msg.push_str(
+        format!("{}",format!(
+        "{:4}1) Copy both the challenge file \"{}\" and contribution file \"{}\" in the directory where you will execute the offline command\n",
+        "",
         OFFLINE_CHALLENGE_FILE_NAME,
         OFFLINE_CONTRIBUTION_FILE_NAME
-    ).as_str());
+    ).as_str().bright_cyan()).as_str());
     msg.push_str(
         format!(
-            "{:4}{}- Execute the command \"{}\"\n",
-            "",
-            "2".bold(),
-            "cargo run --release --bin phase1 --features=cli contribute --offline".bold()
+            "{}",
+            format!(
+                "{:4}2) Execute the command \"cargo run --release --bin phase1 --features=cli contribute offline\"\n",
+                ""
+            )
+            .as_str()
+            .bright_cyan()
         )
         .as_str(),
     );
     msg.push_str(
         format!(
-            "{:4}{}- Copy the contribution file \"{}\" back to this directory (by overwriting the previous file)",
-            "",
-            "3".bold(),
-            OFFLINE_CONTRIBUTION_FILE_NAME
+            "{}",
+            format!(
+                "{:4}3) Copy the contribution file \"{}\" back to this directory (by overwriting the previous file)",
+                "", OFFLINE_CONTRIBUTION_FILE_NAME
+            )
+            .as_str()
+            .bright_cyan()
         )
         .as_str(),
     );
-    println!("{}", msg);
+    println!("{}", msg.bright_cyan());
 
     // Wait for the contribution file to be updated with randomness
     // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
     io::get_user_input(
-        "When the contribution file is ready, press enter to upload it and move on".yellow(),
+        "When your contribution file is ready, press enter to upload it".bright_yellow(),
         None,
     )?;
 
@@ -203,7 +187,8 @@ fn compute_contribution_offline() -> Result<()> {
 fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> Result<()> {
     let rand_source = if custom_seed {
         let seed_str = io::get_user_input(
-            "Enter your own seed of randomness (32 bytes hex encoded)".yellow(),
+            "Enter your custom random seed (64 characters / 32 bytes in hexadecimal format without a '0x' prefix):"
+                .bright_yellow(),
             Some(&Regex::new(r"^[[:xdigit:]]{64}$")?),
         )?;
         let mut seed = [0u8; SEED_LENGTH];
@@ -213,7 +198,10 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         }
         RandomSource::Seed(seed)
     } else {
-        let entropy = io::get_user_input("Enter a random string to be used as entropy:".yellow(), None)?;
+        let entropy = io::get_user_input(
+            "Frenetically type a random string to be used as entropy:".bright_yellow(),
+            None,
+        )?;
         RandomSource::Entropy(entropy)
     };
 
@@ -248,9 +236,12 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
+    let end_lock_time = contrib_info.timestamps.challenge_locked + Duration::minutes(20);
     println!(
-        "From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts at {}...\nHave fun!",
-        contrib_info.timestamps.challenge_locked,
+        "{}",
+        format!("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts now on {} and ends in 20 minutes on {}  \nHave fun!",
+        contrib_info.timestamps.challenge_locked.to_rfc2822(),
+        end_lock_time.to_rfc2822()).bright_cyan()
     );
     let response_locator = locked_locators.next_contribution();
     let round_height = response_locator.round_height();
@@ -270,7 +261,6 @@ async fn contribute(
     contrib_info.timestamps.challenge_downloaded = Utc::now();
 
     // Saves the challenge locally, in case the contributor is paranoid and wants to double check himself. It is also used in the offline contrib path
-    contrib_info = tokio::task::spawn_blocking(move || get_contribution_branch(contrib_info)).await??;
     let challenge_filename = if contrib_info.is_another_machine {
         OFFLINE_CHALLENGE_FILE_NAME.to_string()
     } else {
@@ -306,6 +296,11 @@ async fn contribute(
         tokio::task::spawn_blocking(move || compute_contribution_offline()).await??;
     } else {
         let custom_seed = contrib_info.is_own_seed_of_randomness;
+        if custom_seed {
+            println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
+        } else {
+            println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
+        }
         tokio::task::spawn_blocking(move || {
             compute_contribution(custom_seed, challenge.as_ref(), contrib_filename_copy.as_str())
         })
@@ -427,13 +422,14 @@ async fn contribution_loop(
     keypair: Arc<KeyPair>,
     mut contrib_info: ContributionInfo,
 ) {
+    println!("{} Joining queue", "[3/11]".bold().dimmed());
+    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
     let token = io::get_user_input(
-        "Enter your authentification token (10 bytes hex encoded):".yellow(),
+        "Enter your unique token or the FFA token (20 characters in hexadecimal format):".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
     )
     .unwrap();
 
-    println!("{} Joining queue", "[3/11]".bold().dimmed());
     requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
@@ -513,11 +509,15 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Couldn't read the contributor info file".red().bold()));
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
-                println!("{}\nShare your attestation to the world:\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy", 
-                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
-                round_height,
-contrib_info.contribution_hash,
-);
+                println!("{}\n{}\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy{}\n\n",
+                                                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
+                                                "Share your attestation that proves your contribution to the world:".bright_cyan(),
+                                                round_height,
+                                contrib_info.contribution_hash,
+                format!("You also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in the \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
+                                );
+                println!("{}", ASCII_CONTRIBUTION_DONE.bright_yellow());
+
                 break;
             }
             ContributorStatus::Banned => {
@@ -577,60 +577,118 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
     }
 }
 
+enum Branch {
+    AnotherMachine,
+    Default(bool),
+}
+
+#[inline(always)]
+async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
+    // Perform the entire contribution cycle
+    println!("{}", ASCII_LOGO.bright_yellow());
+    println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
+
+    match branch {
+        Branch::AnotherMachine => println!(
+            "{}\n{}",
+            "DISCLAIMER".bright_red().underline().bold(),
+            "The \"--another-machine\" flag is active.\nThis feature is designed for advanced users that want to run the computation of the parameters on another machine.\n".bright_red()
+        ),
+        Branch::Default(custom_seed) if custom_seed => println!(
+            "{}\n{}",
+            "DISCLAIMER".bright_red().underline().bold(),
+            "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+        ),
+        _ => ()
+    }
+
+    println!("{} Initializing contribution", "[1/11]".bold().dimmed());
+    let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
+        .await
+        .unwrap()
+        .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
+    println!("{} Generating keypair", "[2/11]".bold().dimmed());
+
+    match branch {
+        Branch::AnotherMachine => contrib_info.is_another_machine = true,
+        Branch::Default(custom_seed) if custom_seed => contrib_info.is_own_seed_of_randomness = true,
+        _ => (),
+    }
+
+    if contrib_info.is_incentivized {
+        println!("{}\n{}", "IMPORTANT".bright_red().underline().bold(),
+        "You are participating in the incentivized trusted setup.\nThe mnemonic generated in the next step is the ONLY way to recover your keypair that will receive rewards in Namada at genesis.".bright_red());
+    } else {
+        println!(
+            "{}",
+            "The CLI will generate in the background a keypair that is used to interact with the coordinator."
+                .bright_cyan()
+        );
+    }
+    io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
+    let user = if contrib_info.is_incentivized {
+        KeyPairUser::IncentivizedContributor
+    } else {
+        KeyPairUser::Contributor
+    };
+    let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(user))
+        .await
+        .unwrap()
+        .expect(&format!("{}", "Error while generating the keypair".red().bold()));
+
+    contrib_info.timestamps.start_contribution = Utc::now();
+    contrib_info.public_key = keypair.pubkey().to_string();
+
+    contribution_loop(
+        Arc::new(Client::new()),
+        Arc::new(url.coordinator),
+        Arc::new(keypair),
+        contrib_info,
+    )
+    .await;
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
     let opt = CeremonyOpt::from_args();
 
     match opt {
-        CeremonyOpt::Contribute { url, offline } => {
-            if offline {
-                // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
-                println!("{} Reading challenge", "[1/2]".bold().dimmed());
-                let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
+        CeremonyOpt::Contribute(branch) => {
+            match branch {
+                phase1_cli::Branches::AnotherMachine { url } => contribution_prelude(url, Branch::AnotherMachine).await,
+                phase1_cli::Branches::Default { url, custom_seed } => {
+                    contribution_prelude(url, Branch::Default(custom_seed)).await
+                }
+                phase1_cli::Branches::Offline { custom_seed } => {
+                    if custom_seed {
+                        println!(
+                    "{}\n{}",
+                    "DISCLAIMER".bright_red().underline().bold(),
+                    "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
+                );
+                    }
+                    // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
+                    println!("{} Reading challenge", "[1/2]".bold().dimmed());
+                    let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
+                        .await
+                        .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
+
+                    println!("{} Computing contribution", "[2/2]".bold().dimmed());
+
+                    if custom_seed {
+                        println!("{}", CUSTOM_SEED_MSG_YES.bright_cyan());
+                    } else {
+                        println!("{}", CUSTOM_SEED_MSG_NO.bright_cyan());
+                    }
+                    tokio::task::spawn_blocking(move || {
+                        compute_contribution(custom_seed, &challenge, OFFLINE_CONTRIBUTION_FILE_NAME)
+                    })
                     .await
-                    .expect(&format!("{}", "Couldn't read the challenge file".red().bold()));
-
-                println!("{} Computing contribution", "[2/2]".bold().dimmed());
-                tokio::task::spawn_blocking(move || {
-                    compute_contribution(
-                        get_seed_of_randomness().unwrap(),
-                        &challenge,
-                        OFFLINE_CONTRIBUTION_FILE_NAME,
-                    )
-                })
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error in computing randomness".red().bold()));
-
-                return;
+                    .unwrap()
+                    .expect(&format!("{}", "Error in computing randomness".red().bold()));
+                }
             }
-
-            // Perform the entire contribution cycle
-            println!("{}", ASCII_LOGO.yellow());
-            println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
-            println!("{} Generating keypair", "[1/11]".bold().dimmed());
-            io::get_user_input("Press enter to continue".yellow(), None).unwrap();
-            let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(false))
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
-
-            println!("{} Initializing contribution", "[2/11]".bold().dimmed());
-            let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
-                .await
-                .unwrap()
-                .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
-            contrib_info.timestamps.start_contribution = Utc::now();
-            contrib_info.public_key = keypair.pubkey().to_string();
-
-            contribution_loop(
-                Arc::new(Client::new()),
-                Arc::new(url.coordinator),
-                Arc::new(keypair),
-                contrib_info,
-            )
-            .await;
         }
         CeremonyOpt::CloseCeremony(url) => {
             let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())
@@ -647,8 +705,8 @@ async fn main() {
                 let seed = io::seed_from_string(content.as_str()).unwrap();
 
                 // FIXME: add instructions about the next steps, that you will need the mnemonic
-                let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".yellow()).unwrap();
-                let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".yellow()).unwrap();
+                let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".bright_yellow()).unwrap();
+                let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".bright_yellow()).unwrap();
                 if confirmation != password {
                     eprintln!(
                         "{}",
@@ -662,8 +720,8 @@ async fn main() {
                 let address = keys::generate_address(&hex::encode(keypair_struct.pk.to_vec()));
                 let bech_address = keys::bech_encode_address(&address);
 
-                let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
-                    io::get_user_input("Enter the alias:".yellow(), None).unwrap().to_lowercase()
+                let alias = if "y" == io::get_user_input("Would you like to use a custom alias for your key? If not, the public key will be used as an alias [y/n]".bright_yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                    io::get_user_input("Enter the alias:".bright_yellow(), None).unwrap().to_lowercase()
                 } else {
                     address.clone().to_lowercase()
                 };

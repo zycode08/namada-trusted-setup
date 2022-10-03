@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 #[cfg(debug_assertions)]
-pub const COHORT_TIME: usize = 60;
+pub const COHORT_TIME: usize = 86400;
 #[cfg(not(debug_assertions))]
 pub const COHORT_TIME: usize = 86400;
 

@@ -4,7 +4,7 @@
 
 The Namada Trusted Setup Ceremony generates the public parameters for the Multi-Asset Shielded Pool (MASP) circuit and guarantees its security. Under the hood, a trusted setup ceremony is a multi-party computation (MPC) that lets many participants contribute randomness to the public parameters in a trustless manner. The setup is secure, as long as one participant is honest.
 
-## About Namada
+# About Namada
 
 [Namada](https://namada.net/) is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus, that enables multi-asset private transfers for any native or non-native asset using a multi-asset shielded pool derived from the Sapling circuit. 
 
@@ -13,10 +13,22 @@ To learn more about the protocol, we recommend the following resources:
 - [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
 - [Namada's specifications](https://specs.namada.net)
 
-## Participate in Namada Trusted Setup
+# Participate in Namada Trusted Setup
 If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) and [sign up to the newsletter](https://dev.us7.list-manage.com/subscribe?u=69adafe0399f0f2a434d8924b&id=9e747afc55) to be notified about the launch.
 
-### Building and contributing from source
+## Contributing from prebuilt binaries
+We provide prebuilt binaries for Ubuntu and MacOS. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
+
+After download, you might need to give execution permissions with `chmod +x phase1-{distrib}-{version}`.
+
+Finally start the client with:
+```
+./phase1-{distrib}-{version} https://contribute.namada.net
+```
+### Troubleshooting
+In MacOS, you might see appearing the warning "cannot be opened because the developer cannot be verified". To solve this, open the "Security & Privacy" control panel from System Preferences. In `general` tab, next to the info that the binary was prevented from running, click `Allow Anyway`. Run the binary again. This time a different prompt is shown. Click `Open` - the binary should run as you expect.
+
+## Building and contributing from source
 
 First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
 ```
@@ -36,23 +48,43 @@ cd namada-trusted-setup
 
 Build the binaries and start your contribution with:
 ```
-cargo run --release --bin phase1 --features cli contribute https://contribute.namada.net
+cargo run --release --bin phase1 --features cli contribute default https://contribute.namada.net
 ```
 
-### Understanding the ceremony
+## Advanced features
+Advanced features are available to encourage creativity during your contribution.
 
-1. Upon starting the client, you will be asked if you want to participate in the incentivized program. Then, the client will generate a secret mnemonic that derives your key pair. Make sure to back up your mnemonic and keep it in a safe place. This is the only way to prove your contribution and claim your rewards later.
+### Computation on another machine
+You can generate the parameters on a machine that is offline or never connected to internet. Some examples are an air-gapped machine, a brand-new computer or a Raspberry PI.
 
-2. After you save your mnemonic, you will join a queue for the ceremony, and wait until it is your turn. Each round will last between 4-20 min, depending on how each participant chooses to contribute. Your machine needs to be connected to the coordinator at all times, so please close neither your terminal, nor your internet connection. If the coordinator detects that you are offline for a certain amount of time, you will be kicked out from the queue, and have to start from scratch again.
+To use this feature, use the following command:
+```
+cargo run --release --bin phase1 --features cli contribute another-machine https://contribute.namada.net
+```
 
-3. When it is your turn, the challenge will be downloaded from the coordinator and saved to the root folder. 
+### Custom random seed
+You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. This is useful if you are using an external source of randomness or don't want to use the OS randomness. Some examples are atmospheric noise, radioactive elements or lava lite.
 
-4. Then, the client will ask you a couple of questions depending on how you want to contribute: whether you wish to give your own seed of randomness or compute your contribution on another machine. You will have a maximum of 20 minutes to compute your challenge and send your contribution back to the coordinator. Be creative and good luck!
+To use this feature, add the `--custom-seed` flag to your command:
+```
+cargo run --release --bin phase1 --features cli contribute default --custom-seed https://contribute.namada.net
+```
 
-### CLI Contribution Flow 
+## Understanding the ceremony
+
+This section describes how it feels to contribute to the ceremony.
+
+### Client Contribution Flow 
+
+1. The client will ask you if you want to take part in the incentivized program. If you answer 'yes', it will generate a secret mnemonic that derives your key pair.  Back up your mnemonic and keep it in a safe place! This is the only way to prove your contribution and claim your rewards later.
+
+2. Then, you will need to provide the unique token for your cohort you received by email. If the token is valid, you will join the queue of the ceremony. You will need to wait a bit until it is your turn. Each round lasts between 4 min and 20 min. During the whole ceremony, please neither close your terminal, nor your internet connection. If you stay offline for more than 2 min, the coordinator will kick you out from the queue.
+
+3. When it is your turn, the client will download the challenge from the coordinator and save it to the root folder. You have at most 20 minutes to compute your contribution and send it back to the coordinator. Be creative and good luck!
+#### Flowchart
 ![Alt text](./ceremony-contribution-diagram.png?raw=true "Ceremony Contribution Flow")
 
-## Overview of trusted setup ceremonies
+# Overview of previous trusted setup ceremonies
 
 Pairing based zk-SNARKs require the generation of certain parameters in order to achieve high efficiency (small proof sizes, fast proving and verifying time). These parameters are generated by another set of parameters which MUST remain secret. We call these secret parameters the "toxic waste". If a prover knows these secrets, [then they can generate valid proofs for invalid statements](https://medium.com/qed-it/how-toxic-is-the-waste-in-a-zksnark-trusted-setup-9b250d59bdb4), breaking soundness. This is undesired!
 
@@ -66,7 +98,7 @@ Note that the generated Powers of Tau can be re-used for any other Phase 2 setup
 For instructions on how to ensure that the ceremony is executed properly, refer to [`RECOMMENDATIONS.md`](RECOMMENDATIONS.md).
 
 
-## Directory Structure
+# Directory Structure
 
 This repository contains several Rust crates that implement the different building blocks of the MPC. The high-level structure of the repository is as follows:
 - [`phase1-cli`](phase1-cli): Rust crate that provides a HTTP client that communicates with the REST API endpoints of the coordinator and uses the necessary cryptographic functions to contribute to the trusted setup.
@@ -74,13 +106,13 @@ This repository contains several Rust crates that implement the different buildi
 - [`phase1`](phase1) and [`setup-utils`](setup-utils): contain utils used in both the client and the coordinator.
 - The remaining files contain configs for CI and deployment to AWS EC2 and S3 bucket.
 
-## Audits
+# Audits
 
 The original implementation of the coordinator for the [Aleo Trusted Setup](https://github.com/AleoHQ/aleo-setup) was audited by: 
 
 - [Least Authority](https://leastauthority.com/blog/audit-of-aleo-trusted-setup-phase-1/)
 
-## License
+# License
 
 All code in this workspace is licensed under either of
 
@@ -89,14 +121,14 @@ All code in this workspace is licensed under either of
 
 at your option.
 
-### Contribution
+## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally
 submitted for inclusion in the work by you, as defined in the Apache-2.0
 license, shall be dual licensed as above, without any additional terms or
 conditions.
 
-## Community support
+# Community support
 
 - [Discord](https://discord.com/invite/anoma) (Questions and discussions on Namada)
 - [Twitter](https://twitter.com/namadanetwork)

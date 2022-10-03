@@ -31,6 +31,13 @@ pub enum IOError {
     RegexError(#[from] regex::Error),
 }
 
+/// Types of user requesting a [`KeyPair`]
+pub enum KeyPairUser {
+    Contributor,
+    Coordinator,
+    IncentivizedContributor,
+}
+
 type Result<T> = std::result::Result<T, IOError>;
 struct MnemonicWrap(Mnemonic);
 
@@ -152,39 +159,50 @@ pub fn keypair_from_mnemonic() -> Result<KeyPair> {
     Ok(KeyPair::try_from_seed(&seed)?)
 }
 
-/// Generates a new [`KeyPair`] from a randomly generated mnemonic. If argument `is_server` is set than the mnemonic is saved
-/// to a file, otherwise it gets printed to the user.
-pub fn generate_keypair(is_server: bool) -> Result<KeyPair> {
+/// Generates a new [`KeyPair`] from a randomly generated mnemonic.
+/// Cases:
+/// - Contributor -> generate keypair in the background without notifying the user
+/// - Coordinator -> save the mnemonic to a file
+/// - IncentivizedContributor -> print and check the mnemonic with the user
+pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
     // Generate random mnemonic
     let mut rng = rand_06::thread_rng();
     let mnemonic: MnemonicWrap = Mnemonic::generate_in_with(&mut rng, Language::English, MNEMONIC_LEN)
         .map_err(|e| IOError::MnemonicError(e))?
         .into();
 
-    if is_server {
-        std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?;
-    } else {
-        // Print mnemonic to the user in a different terminal
-        execute!(std::io::stdout(), EnterAlternateScreen)?;
-        println!("Safely store your 24 words mnemonic:\n{}", mnemonic);
-        get_user_input(format!("Press enter when you've done it...").as_str(), None)?;
-        execute!(std::io::stdout(), LeaveAlternateScreen)?;
-
-        #[cfg(not(debug_assertions))]
-        {
+    match user {
+        KeyPairUser::Contributor => (),
+        KeyPairUser::Coordinator => std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?,
+        KeyPairUser::IncentivizedContributor => {
+            // Print mnemonic to the user in a different terminal
             execute!(std::io::stdout(), EnterAlternateScreen)?;
-            let verification_outcome = check_mnemonic(&mnemonic);
+            println!("{}", "Safely store your 24 words mnemonic:\n".bright_cyan());
+            println!("{}", mnemonic);
+            println!(
+                "{}",
+                "The next step will be to verify if you've correctly written the words above.".bright_cyan()
+            );
+            get_user_input(format!("{}", "Press enter when you've done it".yellow()).as_str(), None)?;
             execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
-            match verification_outcome {
-                Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
-                Err(e) => {
-                    println!("{}", e.to_string().red().bold());
-                    return Err(e);
+            #[cfg(not(debug_assertions))]
+            {
+                execute!(std::io::stdout(), EnterAlternateScreen)?;
+                let verification_outcome = check_mnemonic(&mnemonic);
+                execute!(std::io::stdout(), LeaveAlternateScreen)?;
+
+                match verification_outcome {
+                    Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
+                    Err(e) => {
+                        println!("{}", e.to_string().red().bold());
+                        return Err(e);
+                    }
                 }
             }
         }
     }
+
     let mnemonic: Mnemonic = mnemonic.into();
     let seed = mnemonic.to_seed_normalized("");
 
