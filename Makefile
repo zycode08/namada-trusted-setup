@@ -1,6 +1,6 @@
 CARGO := cargo
 CARGO_NIGHTLY := $(CARGO) +nightly
-CLI_FLAGS := --bin phase1 --features=cli
+CLI_FLAGS := --bin namada-ts --features=cli
 
 build:
 	$(CARGO) build

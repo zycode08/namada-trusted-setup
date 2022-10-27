@@ -21,7 +21,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         make: 
           - name: Build Trusted Setup CLI
-            command: cargo build --release --bin phase1 --features=cli
+            command: cargo build --release --bin namada-ts --features=cli
             cache_key: trusted-setup
             cache_version: v1
 
@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: release-${{ matrix.os }}-${{ github.sha }}
-          path: target/release/phase1
+          path: target/release/namada-ts
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -102,12 +102,12 @@ jobs:
         uses: actions/download-artifact@v3
       - name: Move binaries
         run: |
-          mv release-macos-latest-${{ github.sha }}/phase1 phase1-macos-${{ steps.get_version.outputs.version }}
-          mv release-ubuntu-latest-${{ github.sha }}/phase1 phase1-ubuntu-${{ steps.get_version.outputs.version }}
+          mv release-macos-latest-${{ github.sha }}/namada-ts namada-ts-macos-${{ steps.get_version.outputs.version }}
+          mv release-ubuntu-latest-${{ github.sha }}/namada-ts namada-ts-ubuntu-${{ steps.get_version.outputs.version }}
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          files: ./phase1-*-${{ steps.get_version.outputs.version }}
+          files: ./namada-ts-*-${{ steps.get_version.outputs.version }}
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Trusted Setup CLI ${{ steps.get_version.outputs.version-without-v }}
