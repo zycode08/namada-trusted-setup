@@ -19,7 +19,7 @@ COPY --from=builder /app/system_version.json /rocket/status.json
 
 ENV ROCKET_CONFIG=/rocket/Rocket.toml
 ENV RUST_LOG=info
-ENV HEALTH_PATH=/rocket
+ENV HEALTH_PATH=/rocket/status.json
 
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/phase1-coordinator"]
