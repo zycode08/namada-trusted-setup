@@ -22,7 +22,7 @@ if [ "$EUID" -eq 0 ]; then
     exit
 fi
 
-if ! $BINARY_EXIST_CHECK; then
+if $BINARY_EXIST_CHECK; then
     CURRENT_BINARY_VERSION_CHECK=$($BINARY_NAME --version)
     if [[ "$BINARY_NAME $LAST_BINARY_VERSION" == "$CURRENT_BINARY_VERSION_CHECK" ]]; then
         echo "Your binaries are up to date!"
