@@ -103,7 +103,7 @@ jobs:
       - name: Move binaries
         run: |
           mv release-macos-latest-${{ github.sha }}/namada-ts namada-ts-macos-${{ steps.get_version.outputs.version }}
-          mv release-ubuntu-latest-${{ github.sha }}/namada-ts namada-ts-ubuntu-${{ steps.get_version.outputs.version }}
+          mv release-ubuntu-latest-${{ github.sha }}/namada-ts namada-ts-linux-${{ steps.get_version.outputs.version }}
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
