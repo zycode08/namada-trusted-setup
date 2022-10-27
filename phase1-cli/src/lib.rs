@@ -71,7 +71,7 @@ pub enum Branches {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "namada-mpc", about = "Namada CLI for trusted setup.")]
+#[structopt(name = "namada-ts", about = "Namada CLI for trusted setup.")]
 pub enum CeremonyOpt {
     #[structopt(about = "Contribute to the ceremony")]
     Contribute(Branches),

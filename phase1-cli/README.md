@@ -1,13 +1,19 @@
 # Phase 1 CLI
 
 ## Coordinator
-FIXME: complete
+
+The coordinator can be started by simply giving:
+
+```shell
+cargo run --features=parallel --bin phase1-coordinator
+```
+
 ## Contributor
 
 To contribute to the ceremony simply give:
 
 ```shell
-cargo run --bin phase1 --features=cli -- $(coordinator-ip:port)
+cargo run --bin namada-ts --features=cli contribute default $(coordinator-ip:port)
 ```
 
 You can also test a contribution against a local coordinator (running at `127.0.0.1:8000`) with:

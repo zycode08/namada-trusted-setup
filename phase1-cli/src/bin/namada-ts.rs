@@ -18,7 +18,7 @@ use crossterm::{
 use ed25519_compact::{KeyPair as EdKeyPair, Seed};
 use futures_util::StreamExt;
 use phase1_cli::{
-    ascii_logo::{ASCII_CATS, ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
+    ascii_logo::{ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
     keys::{self, EncryptedKeypair, TomlConfig},
     requests, CeremonyOpt, CoordinatorUrl,
 };
