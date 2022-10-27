@@ -16,8 +16,8 @@ To learn more about the protocol, we recommend the following resources:
 # Participate in Namada Trusted Setup
 If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) and [sign up to the newsletter](https://dev.us7.list-manage.com/subscribe?u=69adafe0399f0f2a434d8924b&id=9e747afc55) to be notified about the launch.
 
-## Contributing from prebuilt binaries
-We provide prebuilt binaries for Ubuntu and MacOS. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
+## Contributing from prebuilt binaries (manual setup)
+We provide prebuilt binaries for Linux and MacOS. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
 
 After download, you might need to give execution permissions with `chmod +x namada-ts-{distrib}-{version}`.
 
@@ -25,6 +25,18 @@ Finally start the client with:
 ```
 ./namada-ts-{distrib}-{version} contribute default https://contribute.namada.net
 ```
+
+## Contributing from prebuilt binaries (automated setup)
+We also provide an install script to automate binary setup. You can run the following command:
+```
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/anoma/namada-trusted-setup/main/install.sh | sh
+```
+
+and you are ready to contribute:
+```
+namada-ts contribute default https://contribute.namada.net
+```
+
 ### Troubleshooting
 In MacOS, you might see appearing the warning "cannot be opened because the developer cannot be verified". To solve this, open the "Security & Privacy" control panel from System Preferences. In `general` tab, next to the info that the binary was prevented from running, click `Allow Anyway`. Run the binary again. This time a different prompt is shown. Click `Open` - the binary should run as you expect.
 
@@ -46,9 +58,19 @@ git clone https://github.com/anoma/namada-trusted-setup.git
 cd namada-trusted-setup
 ```
 
-Build the binaries and start your contribution with:
+Build the binary:
 ```
-cargo run --release --bin namada-ts --features cli contribute default https://contribute.namada.net
+cargo run --release --bin namada-ts --features cli
+```
+
+Move binary on `$PATH`
+```
+mv target/release/namada-ts /usr/local/bin
+```
+
+Start your contribution
+```
+namada-ts contribute default https://contribute.namada.net
 ```
 
 ## Advanced features
