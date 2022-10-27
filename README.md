@@ -60,7 +60,7 @@ cd namada-trusted-setup
 
 Build the binary:
 ```
-cargo run --release --bin namada-ts --features cli
+cargo build --release --bin namada-ts --features cli
 ```
 
 Move binary on `$PATH`
