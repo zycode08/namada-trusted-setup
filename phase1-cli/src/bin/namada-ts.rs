@@ -48,7 +48,7 @@ use tracing::{debug, trace};
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
 
-const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChanChan random number generator.";
+const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChaCha random number generator.";
 const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYou seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or an airgapped machine.";
 
 macro_rules! pretty_hash {
@@ -668,7 +668,7 @@ async fn main() {
                     "The \"--custom-seed\" flag is active.\nThis feature is designed for advanced users that want to give a custom random seed for the ChaCha RNG.\n".bright_red()
                 );
                     }
-                    // Only compute randomness. It expects a file called contribution.params to be available in the cwd and already filled with the challenge bytes
+                    // Only compute randomness. It expects a file called challenge.params to be available in the cwd and already filled with the challenge bytes
                     println!("{} Reading challenge", "[1/2]".bold().dimmed());
                     let challenge = async_fs::read(OFFLINE_CHALLENGE_FILE_NAME)
                         .await

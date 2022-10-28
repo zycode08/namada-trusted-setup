@@ -16,6 +16,29 @@ To learn more about the protocol, we recommend the following resources:
 # Participate in Namada Trusted Setup
 If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) and [sign up to the newsletter](https://dev.us7.list-manage.com/subscribe?u=69adafe0399f0f2a434d8924b&id=9e747afc55) to be notified about the launch.
 
+The Namada Trusted Setup CLI exposes two ways to contribute:
+
+- **default**, performs the entire contribution on the current machine `default` 
+- **offline**, computes the contribution on a separate (possibly offline) machine (more details [here](#computation-on-another-machine))
+
+In both cases it is possible to provide an optional `--custom-seed` for the RNG: if this is not provided the CLI will ask you to type a random string as an additional source of entropy (sse [details](#custom-random-seed)).
+
+For a visual overview of the contribution process refer to the [flow chart](#flowchart).
+
+## Incentivized program
+
+Namada will provide a reward for the contributors of the ceremony. When contributing, the CLI will ask if you are interested in taking part in this program: if the answer is yes then you will be asked to provide your name and email address.
+
+The client will then generate a mnemonic that you **NEED** to store safely somewhere. This file should then be passed to the following command
+
+```
+namada-ts export-keypair <PATH-TO-MNEMONIC-FILE>
+```
+
+which will generate a `wallet.toml` file containing your Namada account. You can then import the content of this file into your wallet.
+
+This address will be added to the Namada genesis file with the predefined amount of tokens. We'll compute the address from the public key that you used during the contribution, you don't need to communicate it to us.
+
 ## Building and contributing from source
 
 First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
@@ -77,12 +100,21 @@ In MacOS, you might see appearing the warning "cannot be opened because the deve
 Advanced features are available to encourage creativity during your contribution.
 
 ### Computation on another machine
-You can generate the parameters on a machine that is offline or never connected to internet. Some examples are an air-gapped machine, a brand-new computer or a Raspberry PI.
+You can generate the parameters on a machine that is offline or never connected to internet. Some examples are an air-gapped machine, a brand-new computer or a Raspberry PI. You will still need a second machine connected to the internet to carry out the necessary communication with the coordinator.
 
-To use this feature, use the following command:
+On the online machine give the following command:
+
 ```
 cargo run --release --bin namada-ts --features cli contribute another-machine https://contribute.namada.net
 ```
+
+This will start the communication process to join the ceremony and download/upload the necessary files. On the offline machine use the following command:
+
+```
+cargo run --release --bin namada-ts --features cli contribute offline
+```
+
+which will compute the contribution itself. This second command expects the file `challenge.params` got from the online machine to be available in the cwd and it will produce a `contribution.params` to be passed back to the online machine for shipment to the coordinator. The user will be responsible for moving these files around.
 
 ### Custom random seed
 You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. This is useful if you are using an external source of randomness or don't want to use the OS randomness. Some examples are atmospheric noise, radioactive elements or lava lite.
@@ -90,6 +122,12 @@ You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. Th
 To use this feature, add the `--custom-seed` flag to your command:
 ```
 cargo run --release --bin namada-ts --features cli contribute default --custom-seed https://contribute.namada.net
+```
+
+This flag is available also when contributing offline:
+
+```
+cargo run --release --bin namada-ts --features cli contribute offline --custom-seed
 ```
 
 ## Understanding the ceremony
