@@ -73,7 +73,7 @@ namada-ts contribute default https://contribute.namada.net
 ```
 
 ## Contributing from prebuilt binaries (manual setup)
-We provide prebuilt binaries for Linux and MacOS. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
+We provide prebuilt `x86_64` binaries for Linux, MacOS and Windows. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
 
 After download, you might need to give execution permissions with `chmod +x namada-ts-{distrib}-{version}`.
 
