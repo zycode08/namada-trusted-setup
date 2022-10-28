@@ -17,9 +17,11 @@ ARCHITECTURE=$(uname -m)
 
 BINARY_EXIST_CHECK=$(command -v $BINARY_NAME &>/dev/null)
 
-if [ "$EUID" -eq 0 ]; then
-    echo "Do not run as sudo."
-    exit
+USER_ID=`id -u`
+
+if [ $USER_ID -eq 0 ]; then
+    echo "Do not with as sudo."
+    exit 1
 fi
 
 if $BINARY_EXIST_CHECK; then
@@ -38,7 +40,7 @@ if $BINARY_EXIST_CHECK; then
         else
             echo "No binary for ${OS_TYPE}/${ARCHITECTURE}."
             echo "You should clone the repository and build from source."
-            exit
+            exit 1
         fi
         echo "Done dowloading binary in $BINARY_PATH."
         echo "Your should export the binary to \$PATH by running:"
@@ -57,7 +59,7 @@ else
     else
         echo "No binary for ${OS_TYPE}/${ARCHITECTURE}."
         echo "You should clone the repository and build from source. Check the docs here: https://github.com/anoma/namada-trusted-setup#building-and-contributing-from-source."
-        exit
+        exit 1
     fi
     chmod +x "$BINARY_FOLDER/$BINARY_NAME"
     echo "Done dowloading binary in $BINARY_PATH."
