@@ -2,7 +2,7 @@
 # shellcheck shell=dash
 
 # # This is just a little script that can be downloaded from the internet to
-# install Anoma Trusted Setup bianries. It just does platform detection,
+# install Namada Trusted Setup bianries. It just does platform detection,
 # downloads and install the correct binaries.
 
 set -u

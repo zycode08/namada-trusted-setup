@@ -12,7 +12,7 @@ pub(crate) struct Aggregation;
 
 impl Aggregation {
     /// Runs aggregation for a given environment, storage, and round.
-    /// NOTE: The Anoma Trusted Setup runs only phase 2 and doesn't chunk the contributions. The aggregation has been left as a placeholder to avoid breaking the whole library logic. In practice, there is no aggregation.
+    /// NOTE: The Namada Trusted Setup runs only phase 2 and doesn't chunk the contributions. The aggregation has been left as a placeholder to avoid breaking the whole library logic. In practice, there is no aggregation.
     #[inline]
     pub(crate) fn run(environment: &Environment, storage: &mut Disk, round: &Round) -> anyhow::Result<()> {
         let start = Instant::now();
