@@ -15,9 +15,7 @@ use thiserror::Error;
 
 lazy_static! {
     static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
-}
 
-lazy_static! {
     static ref REGION: Region = {
         match std::env::var("AWS_S3_ENDPOINT") {
             Ok(endpoint_env) => Region::Custom {
