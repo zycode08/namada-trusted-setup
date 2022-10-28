@@ -623,14 +623,10 @@ pub async fn join_queue(
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    match task::spawn_blocking(move || {
+    task::spawn_blocking(move || {
         write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10)
     })
-    .await?
-    {
-        Ok(()) => Ok(()),
-        Err(e) => Err(ResponseError::CoordinatorError(e)),
-    }
+    .await?.map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -716,19 +712,14 @@ pub async fn contribute_chunk(
         write_lock.try_contribute(&participant, 0) // Only 1 chunk per round, chunk_id is always 0
     })
     .await?
-    .map_err(|e| ResponseError::CoordinatorError(e))?;
-
-    Ok(())
+    .map_or_else(|e| Err(ResponseError::CoordinatorError(e)), |_| Ok(()))
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)
 pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
     let mut write_lock = coordinator.clone().write_owned().await;
 
-    match task::spawn_blocking(move || write_lock.update()).await? {
-        Ok(()) => Ok(()),
-        Err(e) => Err(ResponseError::CoordinatorError(e)),
-    }
+    task::spawn_blocking(move || write_lock.update()).await?.map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Update the [Coordinator](`crate::Coordinator`) state. This endpoint is accessible only by the coordinator itself.
@@ -741,10 +732,7 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>, _auth: ServerA
 /// Let the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
 #[post("/contributor/heartbeat")]
 pub async fn heartbeat(coordinator: &State<Coordinator>, participant: Participant) -> Result<()> {
-    match coordinator.write().await.heartbeat(&participant) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(ResponseError::CoordinatorError(e)),
-    }
+    coordinator.write().await.heartbeat(&participant).map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint is accessible only by the coordinator itself.
@@ -775,7 +763,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
         // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
         //  no external verifiers
         let verify_response = match task::spawn_blocking(move || write_lock.default_verify(&task)).await {
-            Ok(inner) => inner.map_err(|e| e.to_string()).and(Ok(())),
+            Ok(inner) => inner.map_err(|e| e.to_string()),
             Err(e) => Err(e.to_string()),
         };
 
@@ -899,9 +887,7 @@ pub async fn post_contribution_info(
         write_lock.update_contribution_summary(request.0.into())
     })
     .await?
-    .map_err(|e| ResponseError::CoordinatorError(e))?;
-
-    Ok(())
+    .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.

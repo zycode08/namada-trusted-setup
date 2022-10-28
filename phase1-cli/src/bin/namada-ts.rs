@@ -582,9 +582,14 @@ enum Branch {
     Default(bool),
 }
 
+
+/// Performs the entire contribution cycle
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
-    // Perform the entire contribution cycle
+    // Check that the passed-in coordinator url is correct
+    let client = Client::new();
+    requests::ping_coordinator(&client, &url.coordinator).await.expect(&format!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold()));
+
     println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
 
@@ -602,6 +607,7 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
         _ => ()
     }
 
+    // Contribute
     println!("{} Initializing contribution", "[1/11]".bold().dimmed());
     let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
         .await
@@ -640,7 +646,7 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
     contrib_info.public_key = keypair.pubkey().to_string();
 
     contribution_loop(
-        Arc::new(Client::new()),
+        Arc::new(client),
         Arc::new(url.coordinator),
         Arc::new(keypair),
         contrib_info,
@@ -704,7 +710,6 @@ async fn main() {
                 let content = fs::read_to_string(mnemonic_path.path).unwrap();
                 let seed = io::seed_from_string(content.as_str()).unwrap();
 
-                // FIXME: add instructions about the next steps, that you will need the mnemonic
                 let password = rpassword::prompt_password("Enter the password to encrypt the keypair. Make sure to safely store this password: ".bright_yellow()).unwrap();
                 let confirmation = rpassword::prompt_password("Enter again the password to confirm: ".bright_yellow()).unwrap();
                 if confirmation != password {

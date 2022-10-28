@@ -404,3 +404,24 @@ pub async fn get_contributions_info(coordinator_address: &Url) -> Result<Vec<u8>
         Err(RequestError::Server(response.text().await?))
     }
 }
+
+/// Query health endpoint of the Coordinator to check the connection
+pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
+    let address = coordinator_address
+        .join("/healthcheck")
+        .map_err(|_| RequestError::AddressParseError)?;
+
+    let req = client.get(address);
+
+    loop {
+        let response = req.try_clone().expect("Expected request not stream").send().await?;
+
+        match decapsulate_response(response).await {
+            Ok(_) => return Ok(()),
+            Err(e) => match e {
+                RequestError::Proxy(_) => eprintln!("CDN timeout expired, resubmitting the request..."),
+                _ => return Err(e),
+            },
+        }
+    }
+}

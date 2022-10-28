@@ -96,9 +96,8 @@ impl Display for MnemonicWrap {
         }
 
         result.push_str(stripe.as_str());
-        writeln!(f, "{}", result)?;
 
-        Ok(())
+        writeln!(f, "{}", result)
     }
 }
 

@@ -23,7 +23,7 @@ update:
 clean:
 	$(CARGO) clean
 
-# NOTE: The following commands are for debug purpose only
+# NOTE: The following commands are for debug purposes only
 
 close-ceremony: # Stop local coordinator (0.0.0.0:8080)
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) close-ceremony
@@ -40,4 +40,4 @@ get-contributions: # Get the received contributions on local coordinator (0.0.0.
 run-coordinator:
 	HEALTH_PATH="." RUST_LOG=debug $(CARGO) run --features=parallel --bin phase1-coordinator
 
-.PHONY : build check clean clippy clippy-fix close-ceremony contribution fmt get-contributions offline-contribution run-coordinator test-coordinator test-e2e update verify
+.PHONY : build check clean clippy clippy-fix close-ceremony fmt get-contributions run-coordinator test-coordinator test-e2e update verify
