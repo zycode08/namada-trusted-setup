@@ -16,6 +16,39 @@ To learn more about the protocol, we recommend the following resources:
 # Participate in Namada Trusted Setup
 If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) and [sign up to the newsletter](https://dev.us7.list-manage.com/subscribe?u=69adafe0399f0f2a434d8924b&id=9e747afc55) to be notified about the launch.
 
+## Building and contributing from source
+
+First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+If you already have Rust installed, make sure it is the most up-to-date version:
+```
+rustup update
+```
+
+Once Rust is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
+```
+git clone https://github.com/anoma/namada-trusted-setup.git
+cd namada-trusted-setup && git checkout v1.0.0-beta.3
+```
+
+Build the binary:
+```
+cargo build --release --bin namada-ts --features cli
+```
+
+Move binary on `$PATH`
+```
+mv target/release/namada-ts /usr/local/bin (might require sudo)
+```
+
+Start your contribution
+```
+namada-ts contribute default https://contribute.namada.net
+```
+
 ## Contributing from prebuilt binaries (manual setup)
 We provide prebuilt binaries for Linux and MacOS. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
 
@@ -39,39 +72,6 @@ namada-ts contribute default https://contribute.namada.net
 
 ### Troubleshooting
 In MacOS, you might see appearing the warning "cannot be opened because the developer cannot be verified". To solve this, open the "Security & Privacy" control panel from System Preferences. In `general` tab, next to the info that the binary was prevented from running, click `Allow Anyway`. Run the binary again. This time a different prompt is shown. Click `Open` - the binary should run as you expect.
-
-## Building and contributing from source
-
-First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
-```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-If you already have Rust installed, make sure it is the most up-to-date version:
-```
-rustup update
-```
-
-Once Rust is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
-```
-git clone https://github.com/anoma/namada-trusted-setup.git
-cd namada-trusted-setup
-```
-
-Build the binary:
-```
-cargo build --release --bin namada-ts --features cli
-```
-
-Move binary on `$PATH`
-```
-mv target/release/namada-ts /usr/local/bin
-```
-
-Start your contribution
-```
-namada-ts contribute default https://contribute.namada.net
-```
 
 ## Advanced features
 Advanced features are available to encourage creativity during your contribution.
