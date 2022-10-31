@@ -14,6 +14,7 @@ use blake2::Digest;
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource},
+    coordinator_state::CoordinatorState,
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
     rest::{
@@ -24,6 +25,7 @@ use phase1_coordinator::{
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
+        ACCESS_SECRET_HEADER
     },
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
@@ -128,7 +130,8 @@ fn build_context() -> TestCtx {
             rest::get_contributions_info,
             rest::get_healthcheck,
             rest::get_contribution_url,
-            rest::get_challenge_url
+            rest::get_challenge_url,
+            rest::get_coordinator_state,
         ])
         .manage(coordinator)
         .register("/", catchers![
@@ -199,6 +202,31 @@ where
     req.add_header(Header::new(SIGNATURE_HEADER, signature));
 
     req
+}
+
+#[test]
+fn test_get_status() {
+    let access_token = "test-access_token";
+    std::env::set_var("ACCESS_SECRET", access_token);
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Retrieve coordinator.json file with valid token
+    let mut req = client.get("/coordinator_status");
+    req.add_header(Header::new(ACCESS_SECRET_HEADER, access_token));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_some());
+
+    // Check deserialization
+    let _status: CoordinatorState = response.into_json().unwrap();
+
+    // Provide invalid token
+    req = client.get("/coordinator_status");
+    req.add_header(Header::new(ACCESS_SECRET_HEADER, "wrong token"));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
 }
 
 #[test]

@@ -559,6 +559,17 @@ async fn get_contributions(coordinator: &Url) {
     }
 }
 
+#[inline(always)]
+async fn get_coordinator_state(coordinator: &Url, secret: &str) {
+    match requests::get_coordinator_state(coordinator, secret).await {
+        Ok(state) => {
+            let state_str = std::str::from_utf8(&state).unwrap();
+            println!("Coordinator state:\n{}", state_str)
+        }
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
+    }
+}
+
 #[cfg(debug_assertions)]
 #[inline(always)]
 async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyPair) {
@@ -765,6 +776,11 @@ async fn main() {
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
+        }
+        CeremonyOpt::GetState(state) => {
+            let url = &state.url.coordinator;
+            let secret = state.secret.as_str();
+            get_coordinator_state(url, secret).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(url) => {

@@ -1,5 +1,8 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
+
+// FIXME: split in two files
+
 use crate::{
     authentication::{Production, Signature},
     objects::{ContributionInfo, LockedLocators, Task},
@@ -47,12 +50,15 @@ pub const BODY_DIGEST_HEADER: &str = "Digest";
 pub const PUBKEY_HEADER: &str = "ATS-Pubkey";
 pub const SIGNATURE_HEADER: &str = "ATS-Signature";
 pub const CONTENT_LENGTH_HEADER: &str = "Content-Length";
+pub const ACCESS_SECRET_HEADER: &str = "Access-Secret";
 
 lazy_static! {
     static ref HEALTH_PATH: String = match std::env::var("HEALTH_PATH") {
         Ok(path) => path,
         Err(_) => ".".to_string(),
     };
+
+    static ref ACCESS_SECRET: String = std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
 }
 
 type Coordinator = Arc<RwLock<crate::Coordinator>>;
@@ -66,6 +72,8 @@ pub enum ResponseError {
     CoordinatorError(CoordinatorError),
     #[error("Contribution info is not valid: {0}")]
     InvalidContributionInfo(String),
+    #[error("The required access secret is either missing or invalid")]
+    InvalidSecret,
     #[error("Header {0} is badly formatted")]
     InvalidHeader(&'static str),
     #[error("Request's signature is invalid")]
@@ -110,6 +118,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let response_code = match self {
             ResponseError::CeremonyIsOver => Status::Unauthorized,
             ResponseError::InvalidHeader(_) => Status::BadRequest,
+            ResponseError::InvalidSecret => Status::Unauthorized,
             ResponseError::InvalidSignature => Status::BadRequest,
             ResponseError::InvalidToken(_) => Status::Unauthorized,
             ResponseError::InvalidTokenFormat => Status::BadRequest,
@@ -415,6 +424,25 @@ impl<'r> FromRequest<'r> for CurrentContributor {
         Outcome::Success(Self(participant))
     }
 }
+
+/// Implements the secret token verification on the incoming server request via [`FromRequest`]. Used to restrict access to endpoints only when headers contain the valid secret (an alternative to [`ServerAuth`])
+pub struct Secret;
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for Secret {
+    type Error = ResponseError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        match request.headers().get_one(ACCESS_SECRET_HEADER) {
+            Some(secret) if secret == *ACCESS_SECRET => Outcome::Success(Self),
+            _ => Outcome::Failure((
+                Status::new(401),
+                ResponseError::InvalidSecret,
+            ))
+        }
+    }
+}
+
 
 /// Implements the signature verification on the incoming server request via [`FromRequest`].
 pub struct ServerAuth;
@@ -899,6 +927,17 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
         .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     Ok(summary)
+}
+
+/// Retrieve the coordinator.json status file
+#[get("/coordinator_status")]
+pub async fn get_coordinator_state(coordinator: &State<Coordinator>, _auth: Secret) -> Result<Vec<u8>> {
+    let read_lock = (*coordinator).clone().read_owned().await;
+    let state = task::spawn_blocking(move || read_lock.storage().get_coordinator_state())
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    Ok(state)
 }
 
 /// Retrieve healthcheck info. This endpoint is accessible by anyone and does not require a signed request.

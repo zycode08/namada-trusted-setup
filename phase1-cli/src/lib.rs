@@ -28,6 +28,14 @@ pub struct CoordinatorUrl {
 }
 
 #[derive(Debug, StructOpt)]
+pub struct CoordinatorState {
+    #[structopt(flatten)]
+    pub url: CoordinatorUrl,
+    #[structopt(help = "The secret token required for the request")]
+    pub secret: String
+}
+
+#[derive(Debug, StructOpt)]
 pub struct MnemonicPath {
     #[structopt(help = "The path to the mnemonic file", required = true, parse(try_from_str))]
     pub path: PathBuf,
@@ -86,6 +94,8 @@ pub enum CeremonyOpt {
     GenerateAddresses(Contributors),
     #[structopt(about = "Get a list of all the contributions received")]
     GetContributions(CoordinatorUrl),
+    #[structopt(about = "Get the state of the coordinator")]
+    GetState(CoordinatorState),
     #[cfg(debug_assertions)]
     #[structopt(about = "Verify the pending contributions")]
     VerifyContributions(CoordinatorUrl),

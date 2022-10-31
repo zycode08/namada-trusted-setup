@@ -107,8 +107,13 @@ pub async fn main() {
         "HEALTH_PATH",
         "NAMADA_TOKENS_PATH",
         "CEREMONY_START_TIMESTAMP",
-        "TOKENS_FILE_PREFIX"
+        "TOKENS_FILE_PREFIX",
+        "NAMADA_COHORT_TIME",
+        "ACCESS_SECRET"
     );
+
+    // Check that env for secret token is set
+    std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
 
     // Set the environment
     let tokens_path: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
@@ -161,6 +166,7 @@ pub async fn main() {
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
         rest::get_contributions_info,
+        rest::get_coordinator_state,
         rest::get_healthcheck
     ];
 
@@ -176,6 +182,7 @@ pub async fn main() {
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
         rest::get_contributions_info,
+        rest::get_coordinator_state,
         rest::get_healthcheck
     ];
 

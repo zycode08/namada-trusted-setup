@@ -9,6 +9,7 @@ use std::{io::Write, net::IpAddr, sync::Arc};
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource},
+    coordinator_state::CoordinatorState,
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
     rest::{self, PostChunkRequest},
@@ -135,7 +136,8 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
             rest::get_contributions_info,
             rest::get_healthcheck,
             rest::get_contribution_url,
-            rest::get_challenge_url
+            rest::get_challenge_url,
+            rest::get_coordinator_state,
         ])
         .manage(coordinator)
         .register("/", catchers![
@@ -207,6 +209,31 @@ async fn test_stop_coordinator() {
             _ => (),
         },
     }
+
+    // Drop the server
+    handle.abort()
+}
+
+#[tokio::test]
+async fn test_get_status() {
+    let access_token = "test-access_token";
+    std::env::set_var("ACCESS_SECRET", access_token);
+    // Spawn the server and get the test context
+    let (ctx, handle) = test_prelude().await;
+    // Wait for server startup
+    time::sleep(Duration::from_millis(1000)).await;
+
+    // Retrieve coordinator.json file with valid token
+    let url = Url::parse(&ctx.coordinator_url).unwrap();
+    let response = requests::get_coordinator_state(&url, access_token).await;
+    assert!(response.is_ok());
+
+    // Check deserialization
+    let _status: CoordinatorState = serde_json::from_slice(&response.unwrap()).unwrap();
+
+    // Provide invalid token
+    let response = requests::get_coordinator_state(&url, "wrong token").await;
+    assert!(response.is_err());
 
     // Drop the server
     handle.abort()
