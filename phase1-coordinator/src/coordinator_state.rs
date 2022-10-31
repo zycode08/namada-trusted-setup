@@ -26,12 +26,11 @@ lazy_static! {
         Ok(_) => false,
         Err(_) => false,
     };
+    static ref COHORT_TIME: usize = match std::env::var("NAMADA_COHORT_TIME") {
+        Ok(n) => n.parse::<usize>().unwrap(),
+        Err(_) => 86400
+    };
 }
-
-#[cfg(debug_assertions)]
-pub const COHORT_TIME: usize = 86400;
-#[cfg(not(debug_assertions))]
-pub const COHORT_TIME: usize = 86400;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(super) enum CoordinatorStatus {
