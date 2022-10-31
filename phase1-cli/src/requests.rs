@@ -13,6 +13,7 @@ use phase1_coordinator::{
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
+        ACCESS_SECRET_HEADER
     },
     ContributionFileSignature,
 };
@@ -423,7 +424,15 @@ pub async fn post_contribution_info(
 
 /// Query health endpoint of the Coordinator to check the connection
 pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/healthcheck", None, None, Request::Get).await?;
+    submit_request::<()>(
+        client,
+        coordinator_address,
+        "/healthcheck",
+        None,
+        None,
+        Request::Get,
+    )
+    .await?;
 
     Ok(())
 }

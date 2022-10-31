@@ -1,7 +1,5 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
-// FIXME: split in two files
-
 use crate::{
     authentication::{Production, Signature},
     objects::{ContributionInfo, LockedLocators, Task},
