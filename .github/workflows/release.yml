@@ -28,9 +28,6 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
       RUST_BACKTRACE: full
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: trusted-setup-sccache-master
 
     steps:
       - name: Checkout repo
@@ -76,7 +73,7 @@ jobs:
         run: |
           mv release-macos-latest-${{ github.sha }}/namada-ts namada-ts-macos-${{ steps.get_version.outputs.version }}
           mv release-ubuntu-latest-${{ github.sha }}/namada-ts namada-ts-linux-${{ steps.get_version.outputs.version }}
-          mv release-windows-latest-${{ github.sha }}/namada-ts.exe namada-ts-windows-${{ steps.get_version.outputs.version }}.exe
+          mv release-windows-latest-${{ github.sha }}/namada-ts.exe namada-ts-windows-${{ steps.get_version.outputs.version }}
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
