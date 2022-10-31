@@ -7,7 +7,7 @@
 
 set -u
 
-LAST_BINARY_VERSION="1.0.0-beta.3"
+LAST_BINARY_VERSION="1.0.0-beta.7"
 BINARY_NAME="namada-ts"
 BINARY_FOLDER="$HOME/.namada-ts"
 BINARY_PATH="$BINARY_FOLDER/$BINARY_NAME"
@@ -16,6 +16,7 @@ OS_TYPE=$(uname -s)
 ARCHITECTURE=$(uname -m)
 
 BINARY_EXIST_CHECK=$(command -v $BINARY_NAME &>/dev/null)
+BINARY_EXIST_CHECK_EXIT_CODE=$?
 
 USER_ID=`id -u`
 
@@ -24,7 +25,7 @@ if [ $USER_ID -eq 0 ]; then
     exit 1
 fi
 
-if $BINARY_EXIST_CHECK; then
+if [ $BINARY_EXIST_CHECK_EXIT_CODE -eq 0 ]; then
     CURRENT_BINARY_VERSION_CHECK=$($BINARY_NAME --version)
     if [[ "$BINARY_NAME $LAST_BINARY_VERSION" == "$CURRENT_BINARY_VERSION_CHECK" ]]; then
         echo "Your binaries are up to date!"
