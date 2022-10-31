@@ -997,10 +997,10 @@ impl CoordinatorState {
         let number_of_cohorts = tokens_dir.count();
         let mut tokens = Vec::with_capacity(number_of_cohorts);
 
-        for cohort in 0..number_of_cohorts {
+        for cohort in 1..=number_of_cohorts {
             let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
-            tokens.insert(cohort, serde_json::from_slice(&file).unwrap());
+            tokens.insert(cohort - 1, serde_json::from_slice(&file).unwrap());
         }
 
         tokens

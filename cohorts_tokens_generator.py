@@ -54,11 +54,11 @@ for cohort in range(number_of_cohorts):
     end = (cohort + 1) * PARTICIPANTS_PER_COHORT
     # Generate json file containing all tokens for a cohort
     # This will be used by the coordinator 
-    with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, TOKENS_FILE_PREFIX, cohort), "w") as f:
+    with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, TOKENS_FILE_PREFIX, cohort + 1), "w") as f:
         f.write(json.dumps(tokens[start:end]))
     # Generate json file containing the list of tuples [email, token] for a cohort
     # This will be used to configure Mailchimp
-    with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, "namada_cohort", cohort), "w") as f:
+    with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, "namada_cohort", cohort + 1), "w") as f:
         f.write(json.dumps(zipped_emails_tokens[start:end]))
 
 # This section generates json files containing a Free For All (FFA) token only
@@ -72,5 +72,5 @@ if IS_FFA_ACTIVE:
     ffa_token.append(generate_token(FFA_TOKEN_SECRET))
     ffa_cohorts = number_of_cohorts + int(FFA_COHORTS)
     for cohort in range(number_of_cohorts, ffa_cohorts):
-        with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, TOKENS_FILE_PREFIX, cohort), "w") as f:
+        with open("{}/{}_{}.json".format(NAMADA_TOKENS_PATH, TOKENS_FILE_PREFIX, cohort + 1), "w") as f:
             f.write(json.dumps(ffa_token))

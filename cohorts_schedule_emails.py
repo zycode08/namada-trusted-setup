@@ -29,7 +29,7 @@ def load_emails_and_tokens():
     emails = []
     tokens = []
     for cohort in range(NUMBER_OF_COHORTS):
-        with open("{}/namada_cohort_{}.json".format(NAMADA_TOKENS_PATH, cohort)) as f:
+        with open("{}/namada_cohort_{}.json".format(NAMADA_TOKENS_PATH, cohort + 1)) as f:
             cohort_file = json.load(f)
             emails_cohort = []
             tokens_cohort = []
@@ -67,7 +67,7 @@ def update_member_merge_tags(email: string, token: string, cohort_datetime: date
         })
         cohort_date_str = cohort_datetime.strftime("%A, %-d %B %Y at %I:%M %p UTC")
         response = client.lists.set_list_member(MAILCHIMP_TS_LIST_ID, email, {
-            "email_address": email, "status_if_new": "subscribed", "merge_fields": {"TS_TOKEN": token, "TS_CO_DATE": cohort_date_str, "TS_COHORT": cohort}
+            "email_address": email, "status_if_new": "subscribed", "merge_fields": {"TS_TOKEN": token, "TS_CO_DATE": cohort_date_str, "TS_COHORT": cohort + 1}
         })
         print(response)
 
@@ -94,7 +94,7 @@ def create_segment(cohort_tag, emails):
 def create_and_load_segment_ids(emails):
     segment_ids = []
     for cohort in range(NUMBER_OF_COHORTS):
-        segment_id = create_segment(cohort_tag(cohort), emails[cohort])
+        segment_id = create_segment(cohort_tag(cohort + 1), emails[cohort])
         segment_ids.append(segment_id)
 
     return segment_ids

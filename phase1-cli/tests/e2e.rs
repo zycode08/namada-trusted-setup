@@ -64,7 +64,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
 
     // Create token file
     let tmp_dir = tempfile::tempdir().unwrap();
-    let file_path = tmp_dir.path().join("namada_tokens_cohort_0.json");
+    let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
     token_file
         .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
