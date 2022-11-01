@@ -21,7 +21,7 @@ use rocket::{
 };
 
 use anyhow::Result;
-use std::{io::Write, sync::Arc};
+use std::{convert::TryInto, io::Write, sync::Arc};
 
 use tracing::{error, info};
 
@@ -138,7 +138,7 @@ pub async fn main() {
             .expect("Error while retrieving tokens");
     }
 
-    // Instantiate and start the coordinator
+    // Initialize the coordinator
     let coordinator =
         Coordinator::new(environment.into(), Arc::new(ProductionSig)).expect("Failed to instantiate coordinator");
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
@@ -200,6 +200,22 @@ pub async fn main() {
         ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
     let shutdown = ignite_rocket.shutdown();
+
+    // Sleep until ceremony start time has been reached
+    #[cfg(not(debug_assertions))]
+    {
+        let ceremony_start_time = {
+            let timestamp_env = std::env::var("CEREMONY_START_TIMESTAMP").unwrap();
+            let timestamp = timestamp_env.parse::<i64>().unwrap();
+            time::OffsetDateTime::from_unix_timestamp(timestamp).unwrap()
+        };
+
+        let now = time::OffsetDateTime::now_utc();
+
+        if now < ceremony_start_time  {
+            tokio::time::sleep((ceremony_start_time - now).try_into().expect("Failed conversion of Duration")).await;
+        }
+    }
 
     // Spawn task to update the coordinator periodically
     let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator, shutdown));
