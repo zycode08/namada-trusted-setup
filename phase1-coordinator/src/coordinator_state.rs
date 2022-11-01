@@ -30,6 +30,7 @@ lazy_static! {
         Ok(n) => n.parse::<usize>().unwrap(),
         Err(_) => 86400
     };
+    pub static ref TOKENS_PATH: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -989,21 +990,27 @@ impl CoordinatorState {
     ///
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
-    fn get_tokens() -> Vec<Vec<String>> {
+    pub(super) fn get_tokens() -> Vec<Vec<String>> {
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
-        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 
-        let tokens_dir = std::fs::read_dir(&tokens_path).unwrap();
+        let tokens_dir = std::fs::read_dir(&*TOKENS_PATH).unwrap();
         let number_of_cohorts = tokens_dir.count();
         let mut tokens = Vec::with_capacity(number_of_cohorts);
 
         for cohort in 1..=number_of_cohorts {
-            let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
+            let path = format!("{}/{}_{}.json", *TOKENS_PATH, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
             tokens.insert(cohort - 1, serde_json::from_slice(&file).unwrap());
         }
 
         tokens
+    }
+
+    ///
+    /// Updates the set of tokens for the ceremony
+    /// 
+    pub(super) fn update_tokens(&mut self, tokens: Vec<Vec<String>>) {
+        self.tokens = tokens
     }
 
     fn get_ceremony_start_time() -> OffsetDateTime {

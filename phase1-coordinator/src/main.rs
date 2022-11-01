@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     io::{self, KeyPairUser},
-    rest::{self, ResponseError, UPDATE_TIME},
+    rest::{self, ResponseError, UPDATE_TIME, TOKENS_PATH},
     s3::S3Ctx,
     Coordinator,
 };
@@ -49,7 +49,8 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, shutdown: Shu
     }
 }
 
-/// Periodically verifies the pending contributions
+/// Periodically verifies the pending contributions. Pending contributions are added to the queue by the try_contribute function,
+/// no need to call an update on the coordinator.
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     loop {
         tokio::time::sleep(UPDATE_TIME).await;
@@ -78,7 +79,7 @@ macro_rules! print_env {
 }
 
 /// Download tokens from S3, decompress and store them locally.
-async fn download_tokens(tokens_path: &str) -> Result<()> {
+async fn download_tokens() -> Result<()> {
     let s3_ctx = S3Ctx::new().await?;
     let mut zip_file = std::fs::File::options()
         .read(true)
@@ -88,7 +89,7 @@ async fn download_tokens(tokens_path: &str) -> Result<()> {
     zip_file.write_all(&s3_ctx.get_tokens().await?)?;
 
     let mut zip = zip::ZipArchive::new(zip_file)?;
-    zip.extract(tokens_path)?;
+    zip.extract(*TOKENS_PATH)?;
 
     Ok(())
 }
@@ -116,7 +117,6 @@ pub async fn main() {
     std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
 
     // Set the environment
-    let tokens_path: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
     let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(KeyPairUser::Coordinator))
         .await
         .unwrap()
@@ -132,8 +132,8 @@ pub async fn main() {
     let environment: Production = { Production::new(&keypair) };
 
     // Download token file from S3, only if local folder is missing
-    if std::fs::metadata(tokens_path.as_str()).is_err() {
-        download_tokens(tokens_path.as_str())
+    if std::fs::metadata(*TOKENS_PATH.as_str()).is_err() {
+        download_tokens()
             .await
             .expect("Error while retrieving tokens");
     }

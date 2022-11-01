@@ -583,6 +583,13 @@ impl Coordinator {
     }
 
     ///
+    /// Updates the set of tokens for the ceremony
+    /// 
+    pub fn update_tokens(&mut self, tokens: Vec<Vec<String>>) {
+        self.state.update_tokens(tokens)
+    }
+
+    ///
     /// Returns `true` if the given participant is a contributor in the queue.
     ///
     #[inline]

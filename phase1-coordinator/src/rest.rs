@@ -9,9 +9,10 @@ use crate::{
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
     CoordinatorError,
-    Participant,
+    Participant, CoordinatorState,
 };
 
+pub use crate::coordinator_state::TOKENS_PATH;
 use blake2::Digest;
 use rocket::{
     catch,
@@ -32,7 +33,7 @@ use sha2::Sha256;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{borrow::Cow, convert::TryFrom, io::{Cursor, Write}, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
 use tracing::warn;
@@ -76,6 +77,8 @@ pub enum ResponseError {
     InvalidSecret,
     #[error("Header {0} is badly formatted")]
     InvalidHeader(&'static str),
+    #[error("Updated tokens for current cohort don't match the old ones")]
+    InvalidNewTokens,
     #[error("Request's signature is invalid")]
     InvalidSignature,
     #[error("Authentification token for cohort {0} is invalid")]
@@ -425,7 +428,8 @@ impl<'r> FromRequest<'r> for CurrentContributor {
     }
 }
 
-/// Implements the secret token verification on the incoming server request via [`FromRequest`]. Used to restrict access to endpoints only when headers contain the valid secret (an alternative to [`ServerAuth`])
+/// Implements the secret token verification on the incoming server request via [`FromRequest`]. Used to restrict access to endpoints only when headers contain the valid secret.
+/// Can be used as an alternative to [`ServerAuth`] when the body of the request carries no data (and thus doesn't need a signature on that)
 pub struct Secret;
 
 #[rocket::async_trait]
@@ -832,6 +836,56 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 #[get("/verify")]
 pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) -> Result<()> {
     perform_verify_chunks(coordinator.deref().to_owned()).await
+}
+
+// TODO: add command to request and CLI, add test for this new endpoint
+// TODO: request method must sign the bytes of the tokens
+/// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
+#[post(
+    "/update_cohorts",
+    data = "<tokens>"
+)
+]
+pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: Vec<u8>) -> Result<()> {
+    // New tokens MUST be written to file in case of a coordinator restart
+    let tokens = task::spawn_blocking(move || -> Result<Vec<Vec<String>>> {
+        let mut zip_file = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .truncate(true)
+        .open("tokens.zip").map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+        zip_file.write_all(&tokens).map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+        // Unzip and load new tokens
+        let mut zip = zip::ZipArchive::new(zip_file).map_err(|e| ResponseError::IoError(e.to_string()))?;
+        zip.extract(&*TOKENS_PATH).map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+        Ok(CoordinatorState::get_tokens())
+    }).await.unwrap()?;
+
+    // Check that the new tokens for the current cohort match the old ones (to prevent inconsistencies during contributions of the current cohort)
+    let read_lock = coordinator.read().await;
+    let cohort = read_lock.state().get_cohort();
+    let old_tokens = match read_lock.state().tokens(cohort) {
+        Some(t) => t,
+        None => return Err(ResponseError::CeremonyIsOver),
+    };
+
+    match tokens.get(cohort) {
+        Some(new_tokens) if new_tokens.len() == old_tokens.len() => {
+            if !new_tokens.iter().all(|token| old_tokens.contains(token)) {
+                return Err(ResponseError::InvalidNewTokens)
+            }
+        },
+        _ => return Err(ResponseError::InvalidNewTokens),
+    }
+    drop(read_lock);
+
+    // Update cohorts in coordinator's state
+    coordinator.write().await.update_tokens(tokens);
+
+    Ok(())
 }
 
 /// Get the queue status of the contributor.
