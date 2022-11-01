@@ -83,7 +83,7 @@ Finally start the client with:
 ```
 
 ## Contributing from prebuilt binaries (automated setup)
-We also provide an install script to automate binary setup. You can run the following command:
+If you are on Linux or MacOS, we also provide an install script to automate binary setup. You can run the following command:
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/anoma/namada-trusted-setup/main/install.sh | sh
 ```
