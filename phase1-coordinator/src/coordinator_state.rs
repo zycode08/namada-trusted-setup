@@ -996,7 +996,7 @@ impl CoordinatorState {
         let mut tokens = vec![HashSet::default(); number_of_cohorts];
 
         for cohort in 1..=number_of_cohorts {
-            let path = format!("{}/{}_{}.json", *TOKENS_PATH, tokens_file_prefix, cohort);
+            let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
             let token_set: HashSet<String> = serde_json::from_slice(&file).unwrap();
             tokens[cohort - 1] = token_set;
@@ -1468,7 +1468,7 @@ impl CoordinatorState {
     /// Returns the list of valid tokens for a given cohort.
     ///
     #[inline]
-    pub(super) fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
+    pub fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
         self.tokens.get(cohort)
     }
 
