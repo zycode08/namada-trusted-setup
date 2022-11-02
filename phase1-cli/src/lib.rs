@@ -96,6 +96,8 @@ pub enum CeremonyOpt {
     GetContributions(CoordinatorUrl),
     #[structopt(about = "Get the state of the coordinator")]
     GetState(CoordinatorState),
+    #[structopt(about = "Update the cohorts' tokens")]
+    UpdateCohorts(CoordinatorUrl),
     #[cfg(debug_assertions)]
     #[structopt(about = "Verify the pending contributions")]
     VerifyContributions(CoordinatorUrl),

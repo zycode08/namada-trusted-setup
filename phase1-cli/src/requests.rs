@@ -455,3 +455,18 @@ pub async fn get_coordinator_state(coordinator_address: &Url, access_secret: &st
 
     Ok(response.bytes().await?.to_vec())
 }
+
+/// Updates the cohort. [`tokens`] parameter must be the content of the tokens.zip file
+pub async fn post_update_cohorts(client: &Client, coordinator_address: &Url, keypair: &KeyPair, tokens: &Vec<u8>) -> Result<()> {
+    submit_request::<Vec<u8>>(
+        &client,
+        coordinator_address,
+        "/update_cohorts",
+        Some(keypair),
+        None,
+        Request::Post(Some(tokens)),
+    )
+    .await?;
+
+    Ok(())
+}

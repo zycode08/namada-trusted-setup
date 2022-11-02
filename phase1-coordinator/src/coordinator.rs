@@ -42,7 +42,7 @@ use setup_utils::calculate_hash;
 use std::{
     fmt,
     net::IpAddr,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock}, collections::HashSet,
 };
 use time::OffsetDateTime;
 use tracing::*;
@@ -585,7 +585,7 @@ impl Coordinator {
     ///
     /// Updates the set of tokens for the ceremony
     /// 
-    pub fn update_tokens(&mut self, tokens: Vec<Vec<String>>) {
+    pub fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
         self.state.update_tokens(tokens)
     }
 

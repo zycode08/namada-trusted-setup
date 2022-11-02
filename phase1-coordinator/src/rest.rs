@@ -33,7 +33,7 @@ use sha2::Sha256;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{borrow::Cow, convert::TryFrom, io::{Cursor, Write}, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{borrow::Cow, convert::TryFrom, io::{Cursor, Write}, net::IpAddr, ops::Deref, sync::Arc, time::Duration, collections::HashSet};
 use thiserror::Error;
 
 use tracing::warn;
@@ -838,17 +838,17 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
     perform_verify_chunks(coordinator.deref().to_owned()).await
 }
 
-// TODO: add command to request and CLI, add test for this new endpoint
-// TODO: request method must sign the bytes of the tokens
+// TODO: add test for this new endpoint
 /// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
 #[post(
     "/update_cohorts",
+    format = "json",
     data = "<tokens>"
 )
 ]
-pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: Vec<u8>) -> Result<()> {
+pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: LazyJson<Vec<u8>>) -> Result<()> { //FIXME: pass zip archive?
     // New tokens MUST be written to file in case of a coordinator restart
-    let tokens = task::spawn_blocking(move || -> Result<Vec<Vec<String>>> {
+    let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashSet<String>>> {
         let mut zip_file = std::fs::File::options()
         .read(true)
         .write(true)
@@ -872,9 +872,9 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
         None => return Err(ResponseError::CeremonyIsOver),
     };
 
-    match tokens.get(cohort) {
+    match new_tokens.get(cohort) {
         Some(new_tokens) if new_tokens.len() == old_tokens.len() => {
-            if !new_tokens.iter().all(|token| old_tokens.contains(token)) {
+            if new_tokens.difference(old_tokens).count() != 0 {
                 return Err(ResponseError::InvalidNewTokens)
             }
         },
@@ -883,7 +883,7 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
     drop(read_lock);
 
     // Update cohorts in coordinator's state
-    coordinator.write().await.update_tokens(tokens);
+    coordinator.write().await.update_tokens(new_tokens);
 
     Ok(())
 }

@@ -588,6 +588,17 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
     }
 }
 
+#[inline(always)]
+async fn update_cohorts(client: &Client, coordinator: &Url, keypair: &KeyPair) {
+    // Get content of zip file
+    let tokens = std::fs::read("tokens.zip").expect("Error while reading tokens.zip file");
+
+    match requests::post_update_cohorts(client, coordinator, keypair, &tokens).await {
+        Ok(()) => println!("{}", "Cohorts updated".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
+    }
+}
+
 enum Branch {
     AnotherMachine,
     Default(bool),
@@ -778,9 +789,17 @@ async fn main() {
             get_contributions(&url.coordinator).await;
         }
         CeremonyOpt::GetState(state) => {
-            let url = &state.url.coordinator;
             let secret = state.secret.as_str();
-            get_coordinator_state(url, secret).await;
+            get_coordinator_state(&state.url.coordinator, secret).await;
+        }
+        CeremonyOpt::UpdateCohorts(url) => {
+            let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())
+                .await
+                .unwrap()
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
+
+            let client = Client::new();
+            update_cohorts(&client, &url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(url) => {
