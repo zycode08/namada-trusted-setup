@@ -138,6 +138,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
             rest::get_contribution_url,
             rest::get_challenge_url,
             rest::get_coordinator_state,
+            rest::update_cohorts
         ])
         .manage(coordinator)
         .register("/", catchers![

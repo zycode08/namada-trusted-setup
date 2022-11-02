@@ -7,7 +7,7 @@
 use std::{
     io::Write,
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::Arc, collections::HashSet,
 };
 
 use blake2::Digest;
@@ -46,6 +46,7 @@ use rocket::{
 };
 use serde::Serialize;
 use sha2::Sha256;
+use zip::write::FileOptions;
 
 const ROUND_HEIGHT: u64 = 1;
 
@@ -132,6 +133,7 @@ fn build_context() -> TestCtx {
             rest::get_contribution_url,
             rest::get_challenge_url,
             rest::get_coordinator_state,
+            rest::update_cohorts
         ])
         .manage(coordinator)
         .register("/", catchers![
@@ -173,6 +175,7 @@ fn build_context() -> TestCtx {
 }
 
 /// Add headers and optional body to the request
+/// FIXME: method of request?
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
 where
     T: Serialize,
@@ -227,6 +230,55 @@ fn test_get_status() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
+}
+
+fn get_serialized_tokens_zip(tokens: Vec<&str>) -> Vec<u8> {
+    let w = std::io::Cursor::new(Vec::new());
+    let mut zip_writer = zip::ZipWriter::new(w);
+
+    for cohort in 0..tokens.len() {
+        zip_writer.start_file(format!("namada_tokens_cohort_{}.json", cohort + 1), FileOptions::default()).unwrap();
+        zip_writer.write(tokens[cohort].as_bytes()).unwrap();
+    }
+
+    zip_writer.finish().unwrap().into_inner()
+}
+
+#[test]
+fn test_update_cohorts() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Check tokens.zip file presence only when correct input
+
+    // Create new tokens zip file
+    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
+
+    // Wrong, request from non-coordinator participant
+    let mut req = client.post("/update_cohorts");
+    req = set_request::<Vec<u8>>(req, &ctx.contributors[0].keypair, Some(&new_invalid_tokens));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+    assert!(std::fs::metadata("./tokens.zip").is_err());
+
+    // Wrong new tokens
+    req = client.post("/update_cohorts");
+    req = set_request::<Vec<u8>>(req, &ctx.coordinator.keypair, Some(&new_invalid_tokens));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+    assert!(std::fs::metadata("./tokens.zip").is_err());
+
+    // Valid new tokens
+    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+
+    req = client.post("/update_cohorts");
+    req = set_request::<Vec<u8>>(req, &ctx.coordinator.keypair, Some(&new_valid_tokens));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
+    assert!(std::fs::metadata("./tokens.zip").is_ok());
 }
 
 #[test]
@@ -569,16 +621,23 @@ fn test_wrong_post_contribution_info() {
 /// - post_contribution_chunk
 /// - verify_chunk
 /// - get_contributions_info
+/// - Update cohorts' tokens
 /// - join_queue with already contributed Ip
+/// - Skip to second cohort
+/// - Try joinin queue with expired token
+/// - Try joinin queue with correct token
 ///
 #[test]
 fn test_contribution() {
+    const COHORT_TIME: u64 = 15;
     std::env::set_var("NAMADA_MPC_IP_BAN", "true");
+    std::env::set_var("NAMADA_COHORT_TIME", COHORT_TIME.to_string()); // 15 seconds for each cohort
     use setup_utils::calculate_hash;
 
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
     let reqwest_client = reqwest::blocking::Client::new();
+    let start_time = std::time::Instant::now();
 
     // Get challenge url
     let _locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
@@ -691,6 +750,16 @@ fn test_contribution() {
     assert!(!summary[0].is_own_seed_of_randomness());
     assert_eq!(summary[0].ceremony_round(), 1);
 
+    // Update cohorts
+    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+
+    req = client.post("/update_cohorts");
+    req = set_request::<Vec<u8>>(req, &ctx.coordinator.keypair, Some(&new_valid_tokens));
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
+    assert!(std::fs::metadata("./tokens.zip").is_ok());
+
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);
 
@@ -703,4 +772,36 @@ fn test_contribution() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
+
+    // Skip to second cohort and try joining the queue with expired token
+    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
+
+    let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
+    std::thread::sleep(std::time::Duration::from_secs(sleep_time));
+
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!("4eb8d831fdd098390683")),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Try joining the queue with correct token
+    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
+
+    let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
+    std::thread::sleep(std::time::Duration::from_secs(sleep_time));
+
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!("4935c7fbd09e4f925f11")),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
 }

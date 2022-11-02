@@ -846,14 +846,16 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
     data = "<tokens>"
 )
 ]
-pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: LazyJson<Vec<u8>>) -> Result<()> { //FIXME: pass zip archive?
+pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: LazyJson<Vec<u8>>) -> Result<()> {
     // New tokens MUST be written to file in case of a coordinator restart
+    //FIXME: must be written to file onfly if valid zip archive with valid tokens! Validate first
     let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashSet<String>>> {
         let mut zip_file = std::fs::File::options()
         .read(true)
         .write(true)
+        .create(true)
         .truncate(true)
-        .open("tokens.zip").map_err(|e| ResponseError::IoError(e.to_string()))?;
+        .open("tokens.zip").map_err(|e| ResponseError::IoError(e.to_string()))?; //FIXME: static for tokens.zip
 
         zip_file.write_all(&tokens).map_err(|e| ResponseError::IoError(e.to_string()))?;
 
@@ -864,7 +866,7 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
         Ok(CoordinatorState::get_tokens())
     }).await.unwrap()?;
 
-    // Check that the new tokens for the current cohort match the old ones (to prevent inconsistencies during contributions of the current cohort)
+    // Check that the new tokens for the current cohort match the old ones (to prevent inconsistencies during contributions in the current cohort)
     let read_lock = coordinator.read().await;
     let cohort = read_lock.state().get_cohort();
     let old_tokens = match read_lock.state().tokens(cohort) {
@@ -881,6 +883,8 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
         _ => return Err(ResponseError::InvalidNewTokens),
     }
     drop(read_lock);
+
+    // TODO: write zip archive to disk here
 
     // Update cohorts in coordinator's state
     coordinator.write().await.update_tokens(new_tokens);

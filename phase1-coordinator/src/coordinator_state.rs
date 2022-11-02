@@ -990,15 +990,19 @@ impl CoordinatorState {
     ///
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
-    pub(super) fn get_tokens() -> Vec<HashSet<String>> {
+    pub(super) fn get_tokens() -> Vec<HashSet<String>> { //FIXME: TOKENS_PATH doesn't work in tests
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
 
-        let tokens_dir = std::fs::read_dir(&*TOKENS_PATH).unwrap();
+        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
+
+        let tokens_dir = std::fs::read_dir(&tokens_path).unwrap();
+
+        //let tokens_dir = std::fs::read_dir(&*TOKENS_PATH).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
         let number_of_cohorts = tokens_dir.count();
         let mut tokens = Vec::with_capacity(number_of_cohorts);
 
         for cohort in 1..=number_of_cohorts {
-            let path = format!("{}/{}_{}.json", *TOKENS_PATH, tokens_file_prefix, cohort);
+            let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
             let token_set: HashSet<String> = serde_json::from_slice(&file).unwrap();
             tokens.insert(cohort - 1, token_set);
@@ -1446,7 +1450,7 @@ impl CoordinatorState {
     /// Returns the list of valid tokens for a given cohort.
     ///
     #[inline]
-    pub(super) fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
+    pub fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
         self.tokens.get(cohort)
     }
 
