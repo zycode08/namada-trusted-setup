@@ -1468,7 +1468,7 @@ impl CoordinatorState {
     /// Returns the list of valid tokens for a given cohort.
     ///
     #[inline]
-    pub fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
+    pub(super) fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
         self.tokens.get(cohort)
     }
 
