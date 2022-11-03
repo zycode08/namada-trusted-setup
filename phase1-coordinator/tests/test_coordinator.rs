@@ -7,7 +7,7 @@
 use std::{
     io::Write,
     net::{IpAddr, SocketAddr},
-    sync::Arc, collections::HashSet,
+    sync::Arc,
 };
 
 use blake2::Digest;
@@ -176,7 +176,6 @@ fn build_context() -> TestCtx {
 }
 
 /// Add headers and optional body to the request
-/// FIXME: method of request?
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
 where
     T: Serialize,
