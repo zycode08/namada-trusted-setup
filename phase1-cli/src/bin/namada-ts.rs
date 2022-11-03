@@ -205,7 +205,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         RandomSource::Entropy(entropy)
     };
 
-    println!("Computation of your contribution in progress... This might take a couple of seconds...");
+    println!("Computation of your contribution in progress...");
 
     let writer = OpenOptions::new().append(true).open(filename)?;
 
@@ -423,7 +423,7 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
+    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort, or the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
     let token = io::get_user_input(
         "Enter your unique token or the FFA token (20 characters in hexadecimal format):".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),

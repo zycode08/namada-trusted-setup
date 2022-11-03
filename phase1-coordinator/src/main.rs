@@ -214,10 +214,15 @@ pub async fn main() {
 
         let now = time::OffsetDateTime::now_utc();
 
-        if now < ceremony_start_time  {
-            tokio::time::sleep((ceremony_start_time - now).try_into().expect("Failed conversion of Duration")).await;
+        if now < ceremony_start_time {
+            let delta = ceremony_start_time - now;
+            info!("Waiting till ceremony start time to start the server");
+            info!("Ceremony start time: {}, time left: {}", ceremony_start_time, delta);
+            tokio::time::sleep((delta).try_into().expect("Failed conversion of Duration")).await;
         }
     }
+
+    info!("Booting up coordinator server");
 
     // Spawn task to update the coordinator periodically
     let update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator, shutdown));

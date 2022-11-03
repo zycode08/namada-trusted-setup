@@ -40,6 +40,7 @@ use toml::Value;
 
 use phase1_cli::requests;
 use reqwest::{Client, Url};
+use zip::write::FileOptions;
 
 const ROUND_HEIGHT: u64 = 1;
 
@@ -63,7 +64,15 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
     // Create token file
-    let tmp_dir = tempfile::tempdir().unwrap();
+    // Need a fixed-name temp dir because of the lazy_static variables based on env
+    // Sometimes TempDir is not deleted correctly at drop, need to manually cancel the directory if it sill exists from a previous run
+    let os_temp_dir = std::env::temp_dir();
+    std::fs::remove_dir_all(os_temp_dir.join("my-temporary-dir")).ok();
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("my-temporary-dir")
+        .rand_bytes(0)
+        .tempdir().unwrap();
+
     let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
     token_file
@@ -210,6 +219,55 @@ async fn test_stop_coordinator() {
             _ => (),
         },
     }
+
+    // Drop the server
+    handle.abort()
+}
+
+fn get_serialized_tokens_zip(tokens: Vec<&str>) -> Vec<u8> {
+    let w = std::io::Cursor::new(Vec::new());
+    let mut zip_writer = zip::ZipWriter::new(w);
+
+    for cohort in 0..tokens.len() {
+        zip_writer.start_file(format!("namada_tokens_cohort_{}.json", cohort + 1), FileOptions::default()).unwrap();
+        zip_writer.write(tokens[cohort].as_bytes()).unwrap();
+    }
+
+    zip_writer.finish().unwrap().into_inner()
+}
+
+#[tokio::test]
+async fn test_update_cohorts() {
+    let client = Client::new();
+    // Spawn the server and get the test context
+    let (ctx, handle) = test_prelude().await;
+    // Wait for server startup
+    time::sleep(Duration::from_millis(1000)).await;
+
+    // Check tokens.zip file presence only when correct input
+    // Remove tokens.zip file if present
+    std::fs::remove_file("./tokens.zip").ok();
+
+    // Create new tokens zip file
+    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
+
+    // Wrong, request from non-coordinator participant
+    let url = Url::parse(&ctx.coordinator_url).unwrap();
+    let response = requests::post_update_cohorts(&client, &url, &ctx.contributors[0].keypair, &new_invalid_tokens).await;
+    assert!(response.is_err());
+    assert!(std::fs::metadata("./tokens.zip").is_err());
+
+    // Wrong new tokens
+    let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_invalid_tokens).await;
+    assert!(response.is_err());
+    assert!(std::fs::metadata("./tokens.zip").is_err());
+
+    // Valid new tokens
+    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+
+    let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
+    assert!(response.is_ok());
+    assert!(std::fs::metadata("./tokens.zip").is_ok());
 
     // Drop the server
     handle.abort()
@@ -444,11 +502,18 @@ async fn test_wrong_post_contribution_info() {
 /// - post_contribution_chunk
 /// - verify_chunk
 /// - get_contributions_info
-///
+/// - Update cohorts' tokens
+/// - Skip to second cohort
+/// - Try joinin queue with expired token
+/// - Try joinin queue with correct token
+/// 
 #[tokio::test]
 async fn test_contribution() {
     use rand::Rng;
     use setup_utils::calculate_hash;
+
+    const COHORT_TIME: u64 = 15;
+    std::env::set_var("NAMADA_COHORT_TIME", COHORT_TIME.to_string()); // 15 seconds for each cohort
 
     let client = Client::new();
     // Spawn the server and get the test context
@@ -456,6 +521,10 @@ async fn test_contribution() {
     // Wait for server startup
     time::sleep(Duration::from_millis(1000)).await;
     let url = Url::parse(&ctx.coordinator_url).unwrap();
+    let start_time = std::time::Instant::now();
+
+    // Remove tokens.zip file if present
+    std::fs::remove_file("./tokens.zip").ok();
 
     // Get challenge url
     let challenge_url = requests::get_challenge_url(&client, &url, &ctx.contributors[0].keypair, &ROUND_HEIGHT)
@@ -560,6 +629,36 @@ async fn test_contribution() {
     assert!(!summary[0].is_another_machine());
     assert!(!summary[0].is_own_seed_of_randomness());
     assert_eq!(summary[0].ceremony_round(), 1);
+
+    // Update cohorts
+    assert!(std::fs::metadata("./tokens.zip").is_err());
+    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+    let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
+    assert!(response.is_ok());
+    assert!(std::fs::metadata("./tokens.zip").is_ok());
+
+    // Skip to second cohort and try joining the queue with expired token
+    let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
+    tokio::time::sleep(std::time::Duration::from_secs(sleep_time)).await;
+
+    let response = requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.contributors[1].keypair,
+        &String::from("7fe7c70eda056784fcf4"),
+    )
+    .await;
+    assert!(response.is_err());
+
+    // Try joining the queue with correct token
+    requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.unknown_participant.keypair,
+        &String::from("4935c7fbd09e4f925f11"),
+    )
+    .await
+    .unwrap();
 
     // Drop the server
     handle.abort()

@@ -33,7 +33,7 @@ use sha2::Sha256;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{borrow::Cow, convert::TryFrom, io::{Cursor, Write}, net::IpAddr, ops::Deref, sync::Arc, time::Duration, collections::HashSet};
+use std::{borrow::Cow, convert::TryFrom, io::{Cursor, Read, Write}, net::IpAddr, ops::Deref, sync::Arc, time::Duration, collections::{HashSet, HashMap}};
 use thiserror::Error;
 
 use tracing::warn;
@@ -847,23 +847,21 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
 )
 ]
 pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: LazyJson<Vec<u8>>) -> Result<()> {
-    // New tokens MUST be written to file in case of a coordinator restart
-    //FIXME: must be written to file onfly if valid zip archive with valid tokens! Validate first
+    let reader = std::io::Cursor::new(tokens.clone());
+    let mut zip = zip::ZipArchive::new(reader).map_err(|e| ResponseError::IoError(e.to_string()))?;
+    let mut zip_clone = zip.clone();
+
     let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashSet<String>>> {
-        let mut zip_file = std::fs::File::options()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open("tokens.zip").map_err(|e| ResponseError::IoError(e.to_string()))?; //FIXME: static for tokens.zip
+        let mut cohorts: HashMap<String, Vec<u8>> = HashMap::new();
+        let file_names: Vec<String> = zip_clone.file_names().map(|name| name.to_owned()).collect();
 
-        zip_file.write_all(&tokens).map_err(|e| ResponseError::IoError(e.to_string()))?;
+        for file in file_names {
+            let mut buffer = Vec::new();
+            zip_clone.by_name(file.as_str()).map_err(|e| ResponseError::IoError(e.to_string()))?.read_to_end(&mut buffer).map_err(|e| ResponseError::IoError(e.to_string()))?;
+            cohorts.insert(file, buffer);
+        }
 
-        // Unzip and load new tokens
-        let mut zip = zip::ZipArchive::new(zip_file).map_err(|e| ResponseError::IoError(e.to_string()))?;
-        zip.extract(&*TOKENS_PATH).map_err(|e| ResponseError::IoError(e.to_string()))?;
-
-        Ok(CoordinatorState::get_tokens())
+        Ok(CoordinatorState::load_tokens_from_bytes(&cohorts))
     }).await.unwrap()?;
 
     // Check that the new tokens for the current cohort match the old ones (to prevent inconsistencies during contributions in the current cohort)
@@ -884,7 +882,26 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
     }
     drop(read_lock);
 
-    // TODO: write zip archive to disk here
+    // Persist new tokens to disk
+    // New tokens MUST be written to file in case of a coordinator restart
+    task::spawn_blocking(move || -> Result<()> {
+        let mut zip_file = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("tokens.zip").map_err(|e| ResponseError::IoError(e.to_string()))?; //FIXME: static for tokens.zip
+
+        zip_file.write_all(&tokens).map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+        if let Err(e) = std::fs::remove_dir_all(&*TOKENS_PATH) {
+            // Log the error and continue
+            warn!("Error while removing old tokens folder: {}", e);
+        }
+        zip.extract(&*TOKENS_PATH).map_err(|e| ResponseError::IoError(e.to_string()))?;
+
+        Ok(())
+    }).await.unwrap()?;
 
     // Update cohorts in coordinator's state
     coordinator.write().await.update_tokens(new_tokens);

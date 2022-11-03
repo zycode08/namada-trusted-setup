@@ -7,7 +7,7 @@
 use std::{
     io::Write,
     net::{IpAddr, SocketAddr},
-    sync::Arc, collections::HashSet,
+    sync::Arc,
 };
 
 use blake2::Digest;
@@ -175,7 +175,6 @@ fn build_context() -> TestCtx {
 }
 
 /// Add headers and optional body to the request
-/// FIXME: method of request?
 fn set_request<'a, T>(mut req: LocalRequest<'a>, keypair: &'a KeyPair, body: Option<&T>) -> LocalRequest<'a>
 where
     T: Serialize,
@@ -250,6 +249,8 @@ fn test_update_cohorts() {
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
     // Check tokens.zip file presence only when correct input
+    // Remove tokens.zip file if present
+    std::fs::remove_file("./tokens.zip").ok();
 
     // Create new tokens zip file
     let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
@@ -639,6 +640,9 @@ fn test_contribution() {
     let reqwest_client = reqwest::blocking::Client::new();
     let start_time = std::time::Instant::now();
 
+    // Remove tokens.zip file if present
+    std::fs::remove_file("./tokens.zip").ok();
+
     // Get challenge url
     let _locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
     let mut req = client.post("/contributor/challenge");
@@ -751,6 +755,7 @@ fn test_contribution() {
     assert_eq!(summary[0].ceremony_round(), 1);
 
     // Update cohorts
+    assert!(std::fs::metadata("./tokens.zip").is_err());
     let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
 
     req = client.post("/update_cohorts");
@@ -790,11 +795,6 @@ fn test_contribution() {
     assert!(response.body().is_some());
 
     // Try joining the queue with correct token
-    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
-
-    let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
-    std::thread::sleep(std::time::Duration::from_secs(sleep_time));
-
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<String>(
         req,

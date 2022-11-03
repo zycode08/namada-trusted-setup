@@ -48,6 +48,7 @@ rocket = {version = "0.5.0-rc.1", features = ["json"]}
 tempfile = "3.3.0"
 toml = "0.5.9"
 wasm-bindgen-test = {version = "0.3.18"}
+zip = "0.6.2"
 
 [build-dependencies]
 rustc_version = "0.4.0"

@@ -986,26 +986,39 @@ pub struct CoordinatorState {
 }
 
 impl CoordinatorState {
-    /// Reads tokens from disk and generates a vector of them.
+    /// Reads tokens from disk and generates a vector of them. Expects otokens to be in a separate folder containing only those files.
     ///
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
-    pub(super) fn get_tokens() -> Vec<HashSet<String>> { //FIXME: TOKENS_PATH doesn't work in tests
+    pub(super) fn load_tokens() -> Vec<HashSet<String>> {
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
-
-        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
-
-        let tokens_dir = std::fs::read_dir(&tokens_path).unwrap();
-
-        //let tokens_dir = std::fs::read_dir(&*TOKENS_PATH).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
+        let tokens_dir = std::fs::read_dir(TOKENS_PATH.as_str()).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
         let number_of_cohorts = tokens_dir.count();
-        let mut tokens = Vec::with_capacity(number_of_cohorts);
+        let mut tokens = vec![HashSet::default(); number_of_cohorts];
 
         for cohort in 1..=number_of_cohorts {
-            let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
+            let path = format!("{}/{}_{}.json", *TOKENS_PATH, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
             let token_set: HashSet<String> = serde_json::from_slice(&file).unwrap();
-            tokens.insert(cohort - 1, token_set);
+            tokens[cohort - 1] = token_set;
+        }
+
+        tokens
+    }
+
+    /// Reads tokens from bytes and generates a vector of them.
+    /// 
+    /// # Panics
+    /// If the files' name don't respect the expected format of if the bytes don't represent a valid HashSet<String>
+    pub(super) fn load_tokens_from_bytes(cohorts: &HashMap<String, Vec<u8>>) -> Vec<HashSet<String>> {
+        let mut tokens = vec![HashSet::default(); cohorts.len()];
+
+        for (file_name, bytes) in cohorts {
+            let split: Vec<&str> = file_name.rsplit(".json").collect();
+            let index_str = split[1].rsplit("_").collect::<Vec<&str>>()[0];
+            let index = index_str.parse::<usize>().unwrap() - 1;
+            let token: HashSet<String> = serde_json::from_slice(bytes.as_ref()).unwrap();
+            tokens[index] = token;
         }
 
         tokens
@@ -1053,7 +1066,7 @@ impl CoordinatorState {
             banned: HashSet::new(),
             manual_lock: false,
             ceremony_start_time: CoordinatorState::get_ceremony_start_time(),
-            tokens: tokens.unwrap_or_else(|| CoordinatorState::get_tokens()),
+            tokens: tokens.unwrap_or_else(|| CoordinatorState::load_tokens()),
         }
     }
 
