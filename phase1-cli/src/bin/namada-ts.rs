@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, UPDATE_TIME},
+    rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, TOKENS_ZIP_FILE, UPDATE_TIME},
     storage::Object,
 };
 
@@ -591,7 +591,7 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
 #[inline(always)]
 async fn update_cohorts(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     // Get content of zip file
-    let tokens = std::fs::read("tokens.zip").expect("Error while reading tokens.zip file");
+    let tokens = std::fs::read(TOKENS_ZIP_FILE).expect(format!("Error while reading {} file", TOKENS_ZIP_FILE).as_str());
 
     match requests::post_update_cohorts(client, coordinator, keypair, &tokens).await {
         Ok(()) => println!("{}", "Cohorts updated".green().bold()),

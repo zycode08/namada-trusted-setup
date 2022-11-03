@@ -2344,6 +2344,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wasm-bindgen-test",
+ "zip",
 ]
 
 [[package]]

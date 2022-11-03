@@ -12,7 +12,7 @@ use phase1_coordinator::{
     coordinator_state::CoordinatorState,
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
-    rest::{self, PostChunkRequest},
+    rest::{self, PostChunkRequest, TOKENS_ZIP_FILE},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -246,7 +246,7 @@ async fn test_update_cohorts() {
 
     // Check tokens.zip file presence only when correct input
     // Remove tokens.zip file if present
-    std::fs::remove_file("./tokens.zip").ok();
+    std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
     let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
@@ -255,19 +255,19 @@ async fn test_update_cohorts() {
     let url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::post_update_cohorts(&client, &url, &ctx.contributors[0].keypair, &new_invalid_tokens).await;
     assert!(response.is_err());
-    assert!(std::fs::metadata("./tokens.zip").is_err());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
     // Wrong new tokens
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_invalid_tokens).await;
     assert!(response.is_err());
-    assert!(std::fs::metadata("./tokens.zip").is_err());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
     // Valid new tokens
     let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
 
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
     assert!(response.is_ok());
-    assert!(std::fs::metadata("./tokens.zip").is_ok());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_ok());
 
     // Drop the server
     handle.abort()
@@ -524,7 +524,7 @@ async fn test_contribution() {
     let start_time = std::time::Instant::now();
 
     // Remove tokens.zip file if present
-    std::fs::remove_file("./tokens.zip").ok();
+    std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Get challenge url
     let challenge_url = requests::get_challenge_url(&client, &url, &ctx.contributors[0].keypair, &ROUND_HEIGHT)
@@ -631,11 +631,11 @@ async fn test_contribution() {
     assert_eq!(summary[0].ceremony_round(), 1);
 
     // Update cohorts
-    assert!(std::fs::metadata("./tokens.zip").is_err());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
     let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
     assert!(response.is_ok());
-    assert!(std::fs::metadata("./tokens.zip").is_ok());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_ok());
 
     // Skip to second cohort and try joining the queue with expired token
     let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();

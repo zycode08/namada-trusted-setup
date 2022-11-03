@@ -12,6 +12,7 @@ use crate::{
     Participant, CoordinatorState,
 };
 
+pub use crate::s3::TOKENS_ZIP_FILE;
 pub use crate::coordinator_state::TOKENS_PATH;
 use blake2::Digest;
 use rocket::{
@@ -890,7 +891,7 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
         .write(true)
         .create(true)
         .truncate(true)
-        .open("tokens.zip").map_err(|e| ResponseError::IoError(e.to_string()))?; //FIXME: static for tokens.zip
+        .open(TOKENS_ZIP_FILE).map_err(|e| ResponseError::IoError(e.to_string()))?;
 
         zip_file.write_all(&tokens).map_err(|e| ResponseError::IoError(e.to_string()))?;
 

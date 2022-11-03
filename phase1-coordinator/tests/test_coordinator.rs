@@ -25,7 +25,8 @@ use phase1_coordinator::{
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
-        ACCESS_SECRET_HEADER
+        ACCESS_SECRET_HEADER,
+        TOKENS_ZIP_FILE
     },
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
@@ -250,7 +251,7 @@ fn test_update_cohorts() {
 
     // Check tokens.zip file presence only when correct input
     // Remove tokens.zip file if present
-    std::fs::remove_file("./tokens.zip").ok();
+    std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
     let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
@@ -261,7 +262,7 @@ fn test_update_cohorts() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
-    assert!(std::fs::metadata("./tokens.zip").is_err());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
     // Wrong new tokens
     req = client.post("/update_cohorts");
@@ -269,7 +270,7 @@ fn test_update_cohorts() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
-    assert!(std::fs::metadata("./tokens.zip").is_err());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
     // Valid new tokens
     let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
@@ -279,7 +280,7 @@ fn test_update_cohorts() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
-    assert!(std::fs::metadata("./tokens.zip").is_ok());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_ok());
 }
 
 #[test]
@@ -641,7 +642,7 @@ fn test_contribution() {
     let start_time = std::time::Instant::now();
 
     // Remove tokens.zip file if present
-    std::fs::remove_file("./tokens.zip").ok();
+    std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Get challenge url
     let _locked_locators = ctx.contributors[0].locked_locators.as_ref().unwrap();
@@ -755,7 +756,7 @@ fn test_contribution() {
     assert_eq!(summary[0].ceremony_round(), 1);
 
     // Update cohorts
-    assert!(std::fs::metadata("./tokens.zip").is_err());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
     let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
 
     req = client.post("/update_cohorts");
@@ -763,7 +764,7 @@ fn test_contribution() {
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
-    assert!(std::fs::metadata("./tokens.zip").is_ok());
+    assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_ok());
 
     // Join queue with already contributed Ip
     let socket_address = SocketAddr::new(ctx.contributors[0].address, 8080);

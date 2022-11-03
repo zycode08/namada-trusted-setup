@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     io::{self, KeyPairUser},
-    rest::{self, ResponseError, UPDATE_TIME, TOKENS_PATH},
+    rest::{self, ResponseError, UPDATE_TIME, TOKENS_PATH, TOKENS_ZIP_FILE},
     s3::S3Ctx,
     Coordinator,
 };
@@ -85,7 +85,7 @@ async fn download_tokens() -> Result<()> {
         .read(true)
         .write(true)
         .create(true)
-        .open("tokens.zip")?;
+        .open(TOKENS_ZIP_FILE)?;
     zip_file.write_all(&s3_ctx.get_tokens().await?)?;
 
     let mut zip = zip::ZipArchive::new(zip_file)?;
