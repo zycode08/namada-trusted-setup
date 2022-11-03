@@ -26,10 +26,6 @@ lazy_static! {
         Ok(_) => false,
         Err(_) => false,
     };
-    static ref COHORT_TIME: usize = match std::env::var("NAMADA_COHORT_TIME") {
-        Ok(n) => n.parse::<usize>().unwrap(),
-        Err(_) => 86400
-    };
     pub static ref TOKENS_PATH: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 }
 
@@ -981,6 +977,8 @@ pub struct CoordinatorState {
     manual_lock: bool,
     /// The ceremony start time.
     ceremony_start_time: OffsetDateTime,
+    /// Duration, in seconds, of each cohort
+    cohort_duration: usize,
     /// The list of valid tokens for each cohort.
     tokens: Vec<HashSet<String>>,
 }
@@ -1049,6 +1047,11 @@ impl CoordinatorState {
     ///
     #[inline]
     pub(super) fn new(environment: Environment, tokens: Option<Vec<HashSet<String>>>) -> Self {
+        let cohort_duration = match std::env::var("NAMADA_COHORT_TIME") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 86400
+        };
+
         Self {
             environment,
             status: CoordinatorStatus::Initializing,
@@ -1066,6 +1069,7 @@ impl CoordinatorState {
             banned: HashSet::new(),
             manual_lock: false,
             ceremony_start_time: CoordinatorState::get_ceremony_start_time(),
+            cohort_duration,
             tokens: tokens.unwrap_or_else(|| CoordinatorState::load_tokens()),
         }
     }
@@ -1441,14 +1445,14 @@ impl CoordinatorState {
     }
 
     ///
-    /// Computes the current ceremony cohort, starting from 0, in function of [COHORT_TIME].
+    /// Computes the current ceremony cohort, starting from 0, depending on the cohort duration.
     ///
     pub fn get_cohort(&self) -> usize {
         let ceremony_start_time = self.ceremony_start_time;
         let now = OffsetDateTime::now_utc();
         let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
 
-        timestamp_diff / *COHORT_TIME
+        timestamp_diff / self.cohort_duration
     }
 
     ///
