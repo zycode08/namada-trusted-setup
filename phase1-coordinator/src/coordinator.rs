@@ -43,7 +43,7 @@ use std::{
     collections::HashSet,
     fmt,
     net::IpAddr,
-    sync::{Arc, RwLock}, collections::HashSet,
+    sync::{Arc, RwLock},
 };
 use time::OffsetDateTime;
 use tracing::*;
