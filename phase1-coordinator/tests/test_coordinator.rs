@@ -21,12 +21,12 @@ use phase1_coordinator::{
         self,
         ContributorStatus,
         PostChunkRequest,
+        ACCESS_SECRET_HEADER,
         BODY_DIGEST_HEADER,
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
-        ACCESS_SECRET_HEADER,
-        TOKENS_ZIP_FILE
+        TOKENS_ZIP_FILE,
     },
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
@@ -237,7 +237,12 @@ fn get_serialized_tokens_zip(tokens: Vec<&str>) -> Vec<u8> {
     let mut zip_writer = zip::ZipWriter::new(w);
 
     for cohort in 0..tokens.len() {
-        zip_writer.start_file(format!("namada_tokens_cohort_{}.json", cohort + 1), FileOptions::default()).unwrap();
+        zip_writer
+            .start_file(
+                format!("namada_tokens_cohort_{}.json", cohort + 1),
+                FileOptions::default(),
+            )
+            .unwrap();
         zip_writer.write(tokens[cohort].as_bytes()).unwrap();
     }
 
@@ -273,7 +278,10 @@ fn test_update_cohorts() {
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
     // Valid new tokens
-    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+    let new_valid_tokens = get_serialized_tokens_zip(vec![
+        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
+        "[\"4935c7fbd09e4f925f11\"]",
+    ]);
 
     req = client.post("/update_cohorts");
     req = set_request::<Vec<u8>>(req, &ctx.coordinator.keypair, Some(&new_valid_tokens));
@@ -757,7 +765,10 @@ fn test_contribution() {
 
     // Update cohorts
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
-    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+    let new_valid_tokens = get_serialized_tokens_zip(vec![
+        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
+        "[\"4935c7fbd09e4f925f11\"]",
+    ]);
 
     req = client.post("/update_cohorts");
     req = set_request::<Vec<u8>>(req, &ctx.coordinator.keypair, Some(&new_valid_tokens));

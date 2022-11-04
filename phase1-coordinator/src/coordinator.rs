@@ -40,9 +40,10 @@ use crate::{
 use setup_utils::calculate_hash;
 
 use std::{
+    collections::HashSet,
     fmt,
     net::IpAddr,
-    sync::{Arc, RwLock}, collections::HashSet,
+    sync::{Arc, RwLock},
 };
 use time::OffsetDateTime;
 use tracing::*;
@@ -584,7 +585,7 @@ impl Coordinator {
 
     ///
     /// Updates the set of tokens for the ceremony
-    /// 
+    ///
     pub fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
         self.state.update_tokens(tokens)
     }
@@ -2539,8 +2540,12 @@ impl Coordinator {
     /// This function assumes that the given task has been indeed assigned to the
     /// default verifier.
     pub fn default_verify(&mut self, task: &Task) -> anyhow::Result<()> {
-        let verifier = self.environment.coordinator_verifiers().first()
-        .ok_or_else(|| CoordinatorError::VerifierMissing)?.clone();
+        let verifier = self
+            .environment
+            .coordinator_verifiers()
+            .first()
+            .ok_or_else(|| CoordinatorError::VerifierMissing)?
+            .clone();
         let sigkey = self.environment.default_verifier_signing_key();
 
         self.verify(&verifier, &sigkey, task)

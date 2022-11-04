@@ -414,7 +414,8 @@ impl Disk {
                         if contrib.ceremony_round() == round_height {
                             s.pop();
                             // Update contribution summary file in storage
-                            self.update(&Locator::ContributionsInfoSummary, Object::ContributionsInfoSummary(s)).expect("ERROR: failure while updating contribution summary file");
+                            self.update(&Locator::ContributionsInfoSummary, Object::ContributionsInfoSummary(s))
+                                .expect("ERROR: failure while updating contribution summary file");
                         }
                     }
                 }

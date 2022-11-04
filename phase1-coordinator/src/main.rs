@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     io::{self, KeyPairUser},
-    rest::{self, ResponseError, UPDATE_TIME, TOKENS_PATH, TOKENS_ZIP_FILE},
+    rest::{self, ResponseError, TOKENS_PATH, TOKENS_ZIP_FILE, UPDATE_TIME},
     s3::{S3Ctx, REGION},
     Coordinator,
 };
@@ -53,7 +53,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, shutdown: Shu
 
 /// Periodically verifies the pending contributions. Pending contributions are added to the queue by the try_contribute function,
 /// no need to call an update on the coordinator.
-/// NOTE: a possible improvement could be to perfomr the verification when the try_contribute function gets called, allowing us to remove this task and 
+/// NOTE: a possible improvement could be to perfomr the verification when the try_contribute function gets called, allowing us to remove this task and
 /// speed up the verification process. This would also allow us to immediately provide to a client the state of validity of its contribution. This improvement could
 /// be possible because we only have one contribution per round and one verifier (the coordinator's one). To implement this logic though, it would require a major rework of the phase1_coordinator logic.
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
@@ -107,7 +107,19 @@ async fn generate_secret() -> Result<()> {
     std::env::set_var("ACCESS_SECRET", &secret);
 
     let aws_client = SsmClient::new(REGION.clone());
-    let put_request = rusoto_ssm::PutParameterRequest { allowed_pattern: None, data_type: Some("text".to_string()), description: Some("Endpoints secret".to_string()), key_id: None, name: "secret".to_string(), overwrite: Some(true), policies: None, tags: None, tier: None, type_: Some("SecureString".to_string()), value: secret.clone() };
+    let put_request = rusoto_ssm::PutParameterRequest {
+        allowed_pattern: None,
+        data_type: Some("text".to_string()),
+        description: Some("Endpoints secret".to_string()),
+        key_id: None,
+        name: "secret".to_string(),
+        overwrite: Some(true),
+        policies: None,
+        tags: None,
+        tier: None,
+        type_: Some("SecureString".to_string()),
+        value: secret.clone(),
+    };
     aws_client.put_parameter(put_request).await?;
 
     Ok(())
@@ -151,9 +163,7 @@ pub async fn main() {
 
     // Download token file from S3, only if local folder is missing
     if std::fs::metadata(TOKENS_PATH.as_str()).is_err() {
-        download_tokens()
-            .await
-            .expect("Error while retrieving tokens");
+        download_tokens().await.expect("Error while retrieving tokens");
     }
 
     // Initialize the coordinator
@@ -235,7 +245,10 @@ pub async fn main() {
         if now < ceremony_start_time {
             let delta = ceremony_start_time - now;
             info!("Waiting till ceremony start time to start the server");
-            info!("Ceremony start time (UTC): {}, time left: {}", ceremony_start_time, delta);
+            info!(
+                "Ceremony start time (UTC): {}, time left: {}",
+                ceremony_start_time, delta
+            );
             tokio::time::sleep((delta).try_into().expect("Failed conversion of Duration")).await;
         }
     }

@@ -71,7 +71,8 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let tmp_dir = tempfile::Builder::new()
         .prefix("my-temporary-dir")
         .rand_bytes(0)
-        .tempdir().unwrap();
+        .tempdir()
+        .unwrap();
 
     let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
@@ -229,7 +230,12 @@ fn get_serialized_tokens_zip(tokens: Vec<&str>) -> Vec<u8> {
     let mut zip_writer = zip::ZipWriter::new(w);
 
     for cohort in 0..tokens.len() {
-        zip_writer.start_file(format!("namada_tokens_cohort_{}.json", cohort + 1), FileOptions::default()).unwrap();
+        zip_writer
+            .start_file(
+                format!("namada_tokens_cohort_{}.json", cohort + 1),
+                FileOptions::default(),
+            )
+            .unwrap();
         zip_writer.write(tokens[cohort].as_bytes()).unwrap();
     }
 
@@ -253,7 +259,8 @@ async fn test_update_cohorts() {
 
     // Wrong, request from non-coordinator participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();
-    let response = requests::post_update_cohorts(&client, &url, &ctx.contributors[0].keypair, &new_invalid_tokens).await;
+    let response =
+        requests::post_update_cohorts(&client, &url, &ctx.contributors[0].keypair, &new_invalid_tokens).await;
     assert!(response.is_err());
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
@@ -263,7 +270,10 @@ async fn test_update_cohorts() {
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
 
     // Valid new tokens
-    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+    let new_valid_tokens = get_serialized_tokens_zip(vec![
+        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
+        "[\"4935c7fbd09e4f925f11\"]",
+    ]);
 
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
     assert!(response.is_ok());
@@ -506,7 +516,7 @@ async fn test_wrong_post_contribution_info() {
 /// - Skip to second cohort
 /// - Try joinin queue with expired token
 /// - Try joinin queue with correct token
-/// 
+///
 #[tokio::test]
 async fn test_contribution() {
     use rand::Rng;
@@ -632,7 +642,10 @@ async fn test_contribution() {
 
     // Update cohorts
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
-    let new_valid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]", "[\"4935c7fbd09e4f925f11\"]"]);
+    let new_valid_tokens = get_serialized_tokens_zip(vec![
+        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
+        "[\"4935c7fbd09e4f925f11\"]",
+    ]);
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
     assert!(response.is_ok());
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_ok());

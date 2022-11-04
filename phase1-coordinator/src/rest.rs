@@ -1,6 +1,5 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
-
 // FIXME: split in two files
 
 use crate::{
@@ -9,11 +8,11 @@ use crate::{
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
     CoordinatorError,
-    Participant, CoordinatorState,
+    CoordinatorState,
+    Participant,
 };
 
-pub use crate::s3::TOKENS_ZIP_FILE;
-pub use crate::coordinator_state::TOKENS_PATH;
+pub use crate::{coordinator_state::TOKENS_PATH, s3::TOKENS_ZIP_FILE};
 use blake2::Digest;
 use rocket::{
     catch,
@@ -34,7 +33,16 @@ use sha2::Sha256;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{borrow::Cow, convert::TryFrom, io::{Cursor, Read, Write}, net::IpAddr, ops::Deref, sync::Arc, time::Duration, collections::{HashSet, HashMap}};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    io::{Cursor, Read, Write},
+    net::IpAddr,
+    ops::Deref,
+    sync::Arc,
+    time::Duration,
+};
 use thiserror::Error;
 
 use tracing::warn;
@@ -59,7 +67,6 @@ lazy_static! {
         Ok(path) => path,
         Err(_) => "./health.json".to_string(),
     };
-
     static ref ACCESS_SECRET: String = std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
 }
 
@@ -440,14 +447,10 @@ impl<'r> FromRequest<'r> for Secret {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match request.headers().get_one(ACCESS_SECRET_HEADER) {
             Some(secret) if secret == *ACCESS_SECRET => Outcome::Success(Self),
-            _ => Outcome::Failure((
-                Status::new(401),
-                ResponseError::InvalidSecret,
-            ))
+            _ => Outcome::Failure((Status::new(401), ResponseError::InvalidSecret)),
         }
     }
 }
-
 
 /// Implements the signature verification on the incoming server request via [`FromRequest`].
 pub struct ServerAuth;
@@ -656,10 +659,9 @@ pub async fn join_queue(
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    task::spawn_blocking(move || {
-        write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10)
-    })
-    .await?.map_err(|e| ResponseError::CoordinatorError(e))
+    task::spawn_blocking(move || write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -752,7 +754,9 @@ pub async fn contribute_chunk(
 pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
     let mut write_lock = coordinator.clone().write_owned().await;
 
-    task::spawn_blocking(move || write_lock.update()).await?.map_err(|e| ResponseError::CoordinatorError(e))
+    task::spawn_blocking(move || write_lock.update())
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Update the [Coordinator](`crate::Coordinator`) state. This endpoint is accessible only by the coordinator itself.
@@ -765,7 +769,11 @@ pub async fn update_coordinator(coordinator: &State<Coordinator>, _auth: ServerA
 /// Let the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
 #[post("/contributor/heartbeat")]
 pub async fn heartbeat(coordinator: &State<Coordinator>, participant: Participant) -> Result<()> {
-    coordinator.write().await.heartbeat(&participant).map_err(|e| ResponseError::CoordinatorError(e))
+    coordinator
+        .write()
+        .await
+        .heartbeat(&participant)
+        .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint is accessible only by the coordinator itself.
@@ -840,13 +848,12 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
 }
 
 /// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
-#[post(
-    "/update_cohorts",
-    format = "json",
-    data = "<tokens>"
-)
-]
-pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth, tokens: LazyJson<Vec<u8>>) -> Result<()> {
+#[post("/update_cohorts", format = "json", data = "<tokens>")]
+pub async fn update_cohorts(
+    coordinator: &State<Coordinator>,
+    _auth: ServerAuth,
+    tokens: LazyJson<Vec<u8>>,
+) -> Result<()> {
     let reader = std::io::Cursor::new(tokens.clone());
     let mut zip = zip::ZipArchive::new(reader).map_err(|e| ResponseError::IoError(e.to_string()))?;
     let mut zip_clone = zip.clone();
@@ -857,12 +864,18 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
 
         for file in file_names {
             let mut buffer = Vec::new();
-            zip_clone.by_name(file.as_str()).map_err(|e| ResponseError::IoError(e.to_string()))?.read_to_end(&mut buffer).map_err(|e| ResponseError::IoError(e.to_string()))?;
+            zip_clone
+                .by_name(file.as_str())
+                .map_err(|e| ResponseError::IoError(e.to_string()))?
+                .read_to_end(&mut buffer)
+                .map_err(|e| ResponseError::IoError(e.to_string()))?;
             cohorts.insert(file, buffer);
         }
 
         Ok(CoordinatorState::load_tokens_from_bytes(&cohorts))
-    }).await.unwrap()?;
+    })
+    .await
+    .unwrap()?;
 
     // Check that the new tokens for the current cohort match the old ones (to prevent inconsistencies during contributions in the current cohort)
     let read_lock = coordinator.read().await;
@@ -875,9 +888,9 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
     match new_tokens.get(cohort) {
         Some(new_tokens) if new_tokens.len() == old_tokens.len() => {
             if new_tokens.difference(old_tokens).count() != 0 {
-                return Err(ResponseError::InvalidNewTokens)
+                return Err(ResponseError::InvalidNewTokens);
             }
-        },
+        }
         _ => return Err(ResponseError::InvalidNewTokens),
     }
     drop(read_lock);
@@ -886,22 +899,28 @@ pub async fn update_cohorts(coordinator: &State<Coordinator>, _auth: ServerAuth,
     // New tokens MUST be written to file in case of a coordinator restart
     task::spawn_blocking(move || -> Result<()> {
         let mut zip_file = std::fs::File::options()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(TOKENS_ZIP_FILE).map_err(|e| ResponseError::IoError(e.to_string()))?;
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(TOKENS_ZIP_FILE)
+            .map_err(|e| ResponseError::IoError(e.to_string()))?;
 
-        zip_file.write_all(&tokens).map_err(|e| ResponseError::IoError(e.to_string()))?;
+        zip_file
+            .write_all(&tokens)
+            .map_err(|e| ResponseError::IoError(e.to_string()))?;
 
         if let Err(e) = std::fs::remove_dir_all(&*TOKENS_PATH) {
             // Log the error and continue
             warn!("Error while removing old tokens folder: {}", e);
         }
-        zip.extract(&*TOKENS_PATH).map_err(|e| ResponseError::IoError(e.to_string()))?;
+        zip.extract(&*TOKENS_PATH)
+            .map_err(|e| ResponseError::IoError(e.to_string()))?;
 
         Ok(())
-    }).await.unwrap()?;
+    })
+    .await
+    .unwrap()?;
 
     // Update cohorts in coordinator's state
     coordinator.write().await.update_tokens(new_tokens);

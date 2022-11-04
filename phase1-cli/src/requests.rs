@@ -8,11 +8,11 @@ use phase1_coordinator::{
     rest::{
         RequestContent,
         SignatureHeaders,
+        ACCESS_SECRET_HEADER,
         BODY_DIGEST_HEADER,
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
         SIGNATURE_HEADER,
-        ACCESS_SECRET_HEADER
     },
     ContributionFileSignature,
 };
@@ -346,7 +346,15 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &Url, keypair:
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
 #[cfg(debug_assertions)]
 pub async fn get_update(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/update", Some(keypair), None, Request::Get).await?;
+    submit_request::<()>(
+        client,
+        coordinator_address,
+        "/update",
+        Some(keypair),
+        None,
+        Request::Get,
+    )
+    .await?;
 
     Ok(())
 }
@@ -361,7 +369,15 @@ pub async fn get_stop_coordinator(client: &Client, coordinator_address: &Url, ke
 /// Verify the pending contributions.
 #[cfg(debug_assertions)]
 pub async fn get_verify_chunks(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/verify", Some(keypair), None, Request::Get).await?;
+    submit_request::<()>(
+        client,
+        coordinator_address,
+        "/verify",
+        Some(keypair),
+        None,
+        Request::Get,
+    )
+    .await?;
 
     Ok(())
 }
@@ -407,15 +423,7 @@ pub async fn post_contribution_info(
 
 /// Query health endpoint of the Coordinator to check the connection
 pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
-    submit_request::<()>(
-        client,
-        coordinator_address,
-        "/healthcheck",
-        None,
-        None,
-        Request::Get,
-    )
-    .await?;
+    submit_request::<()>(client, coordinator_address, "/healthcheck", None, None, Request::Get).await?;
 
     Ok(())
 }
@@ -457,7 +465,12 @@ pub async fn get_coordinator_state(coordinator_address: &Url, access_secret: &st
 }
 
 /// Updates the cohort. [`tokens`] parameter must be the content of the tokens.zip file
-pub async fn post_update_cohorts(client: &Client, coordinator_address: &Url, keypair: &KeyPair, tokens: &Vec<u8>) -> Result<()> {
+pub async fn post_update_cohorts(
+    client: &Client,
+    coordinator_address: &Url,
+    keypair: &KeyPair,
+    tokens: &Vec<u8>,
+) -> Result<()> {
     submit_request::<Vec<u8>>(
         &client,
         coordinator_address,

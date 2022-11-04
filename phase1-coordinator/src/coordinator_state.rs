@@ -990,7 +990,8 @@ impl CoordinatorState {
     /// If folder, file names or content don't respect the specified format.
     pub(super) fn load_tokens() -> Vec<HashSet<String>> {
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap_or("namada_tokens_cohort".to_string());
-        let tokens_dir = std::fs::read_dir(TOKENS_PATH.as_str()).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
+        let tokens_dir =
+            std::fs::read_dir(TOKENS_PATH.as_str()).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
         let number_of_cohorts = tokens_dir.count();
         let mut tokens = vec![HashSet::default(); number_of_cohorts];
 
@@ -1005,7 +1006,7 @@ impl CoordinatorState {
     }
 
     /// Reads tokens from bytes and generates a vector of them.
-    /// 
+    ///
     /// # Panics
     /// If the files' name don't respect the expected format of if the bytes don't represent a valid HashSet<String>
     pub(super) fn load_tokens_from_bytes(cohorts: &HashMap<String, Vec<u8>>) -> Vec<HashSet<String>> {
@@ -1024,7 +1025,7 @@ impl CoordinatorState {
 
     ///
     /// Updates the set of tokens for the ceremony
-    /// 
+    ///
     pub(super) fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
         self.tokens = tokens
     }
@@ -1049,7 +1050,7 @@ impl CoordinatorState {
     pub(super) fn new(environment: Environment, tokens: Option<Vec<HashSet<String>>>) -> Self {
         let cohort_duration = match std::env::var("NAMADA_COHORT_TIME") {
             Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 86400
+            Err(_) => 86400,
         };
 
         Self {

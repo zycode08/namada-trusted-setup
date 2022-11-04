@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, TOKENS_ZIP_FILE, UPDATE_TIME},
+    rest::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
 };
 
@@ -20,7 +20,9 @@ use futures_util::StreamExt;
 use phase1_cli::{
     ascii_logo::{ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests, CeremonyOpt, CoordinatorUrl,
+    requests,
+    CeremonyOpt,
+    CoordinatorUrl,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -591,7 +593,8 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
 #[inline(always)]
 async fn update_cohorts(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     // Get content of zip file
-    let tokens = std::fs::read(TOKENS_ZIP_FILE).expect(format!("Error while reading {} file", TOKENS_ZIP_FILE).as_str());
+    let tokens =
+        std::fs::read(TOKENS_ZIP_FILE).expect(format!("Error while reading {} file", TOKENS_ZIP_FILE).as_str());
 
     match requests::post_update_cohorts(client, coordinator, keypair, &tokens).await {
         Ok(()) => println!("{}", "Cohorts updated".green().bold()),
@@ -604,13 +607,19 @@ enum Branch {
     Default(bool),
 }
 
-
 /// Performs the entire contribution cycle
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
     // Check that the passed-in coordinator url is correct
     let client = Client::new();
-    requests::ping_coordinator(&client, &url.coordinator).await.expect(&format!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold()));
+    requests::ping_coordinator(&client, &url.coordinator)
+        .await
+        .expect(&format!(
+            "{}",
+            "ERROR: could not contact the Coordinator, please check the url you provided"
+                .red()
+                .bold()
+        ));
 
     println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());

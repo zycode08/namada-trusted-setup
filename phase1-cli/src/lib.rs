@@ -32,7 +32,7 @@ pub struct CoordinatorState {
     #[structopt(flatten)]
     pub url: CoordinatorUrl,
     #[structopt(help = "The secret token required for the request")]
-    pub secret: String
+    pub secret: String,
 }
 
 #[derive(Debug, StructOpt)]
@@ -56,12 +56,14 @@ pub struct Contributors {
 
 #[derive(Debug, StructOpt)]
 pub enum Branches {
-    #[structopt(about = "Performs only the communication with the Coordinator, to be used in conjunction with \"namada-ts contribute offline\" on another machine",)]
+    #[structopt(
+        about = "Performs only the communication with the Coordinator, to be used in conjunction with \"namada-ts contribute offline\" on another machine"
+    )]
     AnotherMachine {
         #[structopt(flatten)]
         url: CoordinatorUrl,
     },
-    #[structopt(about = "The default contribution path, executes both communication and computation on this machine",)]
+    #[structopt(about = "The default contribution path, executes both communication and computation on this machine")]
     Default {
         #[structopt(flatten)]
         url: CoordinatorUrl,
@@ -71,7 +73,9 @@ pub enum Branches {
         )]
         custom_seed: bool,
     },
-    #[structopt(about = "Performs only the computation of the contribution, to be used in conjunction with \"namada-ts contribute another-machine\" on a separate machine",)]
+    #[structopt(
+        about = "Performs only the computation of the contribution, to be used in conjunction with \"namada-ts contribute another-machine\" on a separate machine"
+    )]
     Offline {
         #[structopt(
             long,
