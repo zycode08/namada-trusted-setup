@@ -57,7 +57,7 @@ pub const ACCESS_SECRET_HEADER: &str = "Access-Secret";
 lazy_static! {
     static ref HEALTH_PATH: String = match std::env::var("HEALTH_PATH") {
         Ok(path) => path,
-        Err(_) => ".".to_string(),
+        Err(_) => "./health.json".to_string(),
     };
 
     static ref ACCESS_SECRET: String = std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
@@ -635,7 +635,7 @@ async fn token_check(coordinator: Coordinator, token: &String) -> Result<()> {
     };
 
     if !tokens.contains(token) {
-        return Err(ResponseError::InvalidToken(cohort));
+        return Err(ResponseError::InvalidToken(cohort + 1));
     }
 
     Ok(())
@@ -839,7 +839,6 @@ pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) 
     perform_verify_chunks(coordinator.deref().to_owned()).await
 }
 
-// TODO: add test for this new endpoint
 /// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
 #[post(
     "/update_cohorts",

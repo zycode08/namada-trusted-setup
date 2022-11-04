@@ -989,7 +989,7 @@ impl CoordinatorState {
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
     pub(super) fn load_tokens() -> Vec<HashSet<String>> {
-        let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
+        let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap_or("namada_tokens_cohort".to_string());
         let tokens_dir = std::fs::read_dir(TOKENS_PATH.as_str()).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
         let number_of_cohorts = tokens_dir.count();
         let mut tokens = vec![HashSet::default(); number_of_cohorts];
