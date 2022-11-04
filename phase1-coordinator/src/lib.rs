@@ -54,6 +54,7 @@ pub use objects::{ContributionFileSignature, ContributionState, Participant, Rou
 pub mod storage;
 
 pub mod rest;
+pub mod rest_utils;
 
 pub mod s3;
 

@@ -9,7 +9,7 @@ pub mod requests;
 
 use phase1_coordinator::{
     objects::round::LockedLocators,
-    rest::{ContributorStatus, PostChunkRequest},
+    rest_utils::{ContributorStatus, PostChunkRequest},
 };
 
 use reqwest::Url;

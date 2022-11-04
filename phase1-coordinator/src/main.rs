@@ -1,7 +1,8 @@
 use phase1_coordinator::{
     authentication::Production as ProductionSig,
     io::{self, KeyPairUser},
-    rest::{self, ResponseError, TOKENS_PATH, TOKENS_ZIP_FILE, UPDATE_TIME},
+    rest,
+    rest_utils::{self, ResponseError, TOKENS_PATH, TOKENS_ZIP_FILE, UPDATE_TIME},
     s3::{S3Ctx, REGION},
     Coordinator,
 };
@@ -220,13 +221,13 @@ pub async fn main() {
         .mount("/", routes)
         .manage(coordinator)
         .register("/", catchers![
-            rest::invalid_signature,
-            rest::unauthorized,
-            rest::missing_required_header,
-            rest::io_error,
-            rest::unprocessable_entity,
-            rest::mismatching_checksum,
-            rest::invalid_header
+            rest_utils::invalid_signature,
+            rest_utils::unauthorized,
+            rest_utils::missing_required_header,
+            rest_utils::io_error,
+            rest_utils::unprocessable_entity,
+            rest_utils::mismatching_checksum,
+            rest_utils::invalid_header
         ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
     let shutdown = ignite_rocket.shutdown();

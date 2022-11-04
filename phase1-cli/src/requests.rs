@@ -5,7 +5,7 @@ use futures_util::Stream;
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::ContributionInfo,
-    rest::{
+    rest_utils::{
         RequestContent,
         SignatureHeaders,
         ACCESS_SECRET_HEADER,
