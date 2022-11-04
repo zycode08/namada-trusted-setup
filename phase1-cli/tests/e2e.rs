@@ -12,7 +12,8 @@ use phase1_coordinator::{
     coordinator_state::CoordinatorState,
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
-    rest::{self, PostChunkRequest, TOKENS_ZIP_FILE},
+    rest,
+    rest_utils::{self, PostChunkRequest, TOKENS_ZIP_FILE},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
     ContributionFileSignature,
@@ -152,13 +153,13 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         ])
         .manage(coordinator)
         .register("/", catchers![
-            rest::invalid_signature,
-            rest::unauthorized,
-            rest::missing_required_header,
-            rest::io_error,
-            rest::unprocessable_entity,
-            rest::mismatching_checksum,
-            rest::invalid_header
+            rest_utils::invalid_signature,
+            rest_utils::unauthorized,
+            rest_utils::missing_required_header,
+            rest_utils::io_error,
+            rest_utils::unprocessable_entity,
+            rest_utils::mismatching_checksum,
+            rest_utils::invalid_header
         ]);
 
     let ignite = build.ignite().await.unwrap();
@@ -345,14 +346,14 @@ async fn test_get_contributor_queue_status() {
     let url = Url::parse(&ctx.coordinator_url).unwrap();
     let response = requests::get_contributor_queue_status(&client, &url, &ctx.unknown_participant.keypair).await;
     match response.unwrap() {
-        rest::ContributorStatus::Other => (),
+        rest_utils::ContributorStatus::Other => (),
         _ => panic!("Wrong ContributorStatus"),
     }
 
     // Ok
     let response = requests::get_contributor_queue_status(&client, &url, &ctx.contributors[0].keypair).await;
     match response.unwrap() {
-        rest::ContributorStatus::Round => (),
+        rest_utils::ContributorStatus::Round => (),
         _ => panic!("Wrong ContributorStatus"),
     }
 

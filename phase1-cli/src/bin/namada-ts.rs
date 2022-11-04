@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
+    rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
 };
 
