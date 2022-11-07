@@ -105,7 +105,11 @@ async fn generate_secret() -> Result<()> {
     rand::thread_rng().fill(&mut secret_bytes[..]);
     let secret = hex::encode(secret_bytes);
     std::env::set_var("ACCESS_SECRET", &secret);
-    let env = std::env::var("AWS_S3_PROD").unwrap_or("master".to_string());
+    let env = match std::env::var("AWS_S3_PROD") {
+        Ok(val) if val == "true" => "prod",
+        _ => "master",
+    };
+    
 
     let aws_client = SsmClient::new(REGION.clone());
     let put_request = rusoto_ssm::PutParameterRequest {
