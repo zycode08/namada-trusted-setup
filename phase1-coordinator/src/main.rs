@@ -133,7 +133,7 @@ pub async fn main() {
     print_env!(
         "AWS_S3_PROD",
         "AWS_S3_BUCKET",
-        "AWS_S3_ENDPOINT",
+        "AWS_REGION",
         "NAMADA_MPC_IP_BAN",
         "NAMADA_MPC_TIMEOUT_SECONDS",
         "HEALTH_PATH",
