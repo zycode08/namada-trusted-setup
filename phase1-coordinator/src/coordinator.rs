@@ -40,6 +40,7 @@ use crate::{
 use setup_utils::calculate_hash;
 
 use std::{
+    collections::HashSet,
     fmt,
     net::IpAddr,
     sync::{Arc, RwLock},
@@ -580,6 +581,13 @@ impl Coordinator {
         info!("\n\nCoordinator has safely shutdown.\n\nGoodbye.\n");
 
         Ok(())
+    }
+
+    ///
+    /// Updates the set of tokens for the ceremony
+    ///
+    pub fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
+        self.state.update_tokens(tokens)
     }
 
     ///
@@ -1709,7 +1717,8 @@ impl Coordinator {
     }
 
     /// Writes the bytes of a contribution file signature to storage at the appropriate  
-    /// locator.
+    /// locator. Signature of a contribution is computed client-side, so there's no way to use the provided
+    /// write_contribution_file_signature function.
     pub(crate) fn write_contribution_file_signature(
         &mut self,
         locator: ContributionSignatureLocator,
@@ -2531,7 +2540,12 @@ impl Coordinator {
     /// This function assumes that the given task has been indeed assigned to the
     /// default verifier.
     pub fn default_verify(&mut self, task: &Task) -> anyhow::Result<()> {
-        let verifier = self.environment.coordinator_verifiers()[0].clone();
+        let verifier = self
+            .environment
+            .coordinator_verifiers()
+            .first()
+            .ok_or_else(|| CoordinatorError::VerifierMissing)?
+            .clone();
         let sigkey = self.environment.default_verifier_signing_key();
 
         self.verify(&verifier, &sigkey, task)

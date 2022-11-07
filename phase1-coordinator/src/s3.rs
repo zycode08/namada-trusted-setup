@@ -13,10 +13,11 @@ use rusoto_s3::{
 };
 use thiserror::Error;
 
+pub const TOKENS_ZIP_FILE: &str = "tokens.zip";
+
 lazy_static! {
     static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
-
-    static ref REGION: Region = {
+    pub static ref REGION: Region = {
         match std::env::var("AWS_S3_ENDPOINT") {
             Ok(endpoint_env) => Region::Custom {
                 name: "custom".to_string(),
@@ -175,8 +176,8 @@ impl S3Ctx {
     /// Retrieve the compressed token folder.
     pub async fn get_tokens(&self) -> Result<Vec<u8>> {
         let key = match std::env::var("AWS_S3_PROD") {
-            Ok(t) if t == "true" => format!("prod/tokens.zip"),
-            _ => format!("master/tokens.zip"),
+            Ok(t) if t == "true" => format!("prod/{}", TOKENS_ZIP_FILE),
+            _ => format!("master/{}", TOKENS_ZIP_FILE),
         };
 
         let get_tokens = GetObjectRequest {

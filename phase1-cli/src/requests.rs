@@ -8,6 +8,7 @@ use phase1_coordinator::{
     rest::{
         RequestContent,
         SignatureHeaders,
+        ACCESS_SECRET_HEADER,
         BODY_DIGEST_HEADER,
         CONTENT_LENGTH_HEADER,
         PUBKEY_HEADER,
@@ -109,7 +110,8 @@ async fn submit_request<T: Serialize>(
     client: &Client,
     coordinator_address: &Url,
     endpoint: &str,
-    keypair: &KeyPair,
+    keypair: Option<&KeyPair>,
+    custom_headers: Option<HeaderMap>,
     request: Request<'_, T>,
 ) -> Result<Response>
 where
@@ -140,11 +142,18 @@ where
         },
     };
 
-    // Generate headers
-    let mut headers = SignatureHeaders::new(keypair.pubkey(), content, None);
-    headers.try_sign(keypair.sigkey())?;
-    let header_map: HeaderWrap = headers.try_into()?;
-    req = req.headers(header_map.into());
+    // Generate signatures headers if required
+    if let Some(kp) = keypair {
+        let mut headers = SignatureHeaders::new(kp.pubkey(), content, None);
+        headers.try_sign(kp.sigkey())?;
+        let header_map: HeaderWrap = headers.try_into()?;
+        req = req.headers(header_map.into());
+    }
+
+    // Add custom headers if required
+    if let Some(header_map) = custom_headers {
+        req = req.headers(header_map);
+    }
 
     loop {
         let response = req.try_clone().expect("Expected request not stream").send().await?;
@@ -187,7 +196,8 @@ pub async fn post_join_queue(
         client,
         coordinator_address,
         "contributor/join_queue",
-        keypair,
+        Some(keypair),
+        None,
         Request::Post(Some(token)),
     )
     .await?;
@@ -201,7 +211,8 @@ pub async fn get_lock_chunk(client: &Client, coordinator_address: &Url, keypair:
         client,
         coordinator_address,
         "contributor/lock_chunk",
-        keypair,
+        Some(keypair),
+        None,
         Request::Get,
     )
     .await?;
@@ -220,7 +231,8 @@ pub async fn get_challenge_url(
         client,
         coordinator_address,
         "contributor/challenge",
-        keypair,
+        Some(keypair),
+        None,
         Request::Post(Some(round_height)),
     )
     .await?;
@@ -251,7 +263,8 @@ pub async fn get_contribution_url(
         client,
         coordinator_address,
         "upload/chunk",
-        keypair,
+        Some(keypair),
+        None,
         Request::Post(Some(round_height)),
     )
     .await?;
@@ -306,7 +319,8 @@ pub async fn post_contribute_chunk(
         client,
         coordinator_address,
         "contributor/contribute_chunk",
-        keypair,
+        Some(keypair),
+        None,
         Request::Post(Some(request_body)),
     )
     .await?;
@@ -320,7 +334,8 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &Url, keypair:
         client,
         coordinator_address,
         "contributor/heartbeat",
-        keypair,
+        Some(keypair),
+        None,
         Request::Post(None),
     )
     .await?;
@@ -331,14 +346,22 @@ pub async fn post_heartbeat(client: &Client, coordinator_address: &Url, keypair:
 /// Request an update of the [Coordinator](`phase1-coordinator::Coordinator`) state.
 #[cfg(debug_assertions)]
 pub async fn get_update(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/update", keypair, Request::Get).await?;
+    submit_request::<()>(
+        client,
+        coordinator_address,
+        "/update",
+        Some(keypair),
+        None,
+        Request::Get,
+    )
+    .await?;
 
     Ok(())
 }
 
 /// Stop the [Coordinator](`phase1-coordinator::Coordinator`).
 pub async fn get_stop_coordinator(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/stop", keypair, Request::Get).await?;
+    submit_request::<()>(client, coordinator_address, "/stop", Some(keypair), None, Request::Get).await?;
 
     Ok(())
 }
@@ -346,7 +369,15 @@ pub async fn get_stop_coordinator(client: &Client, coordinator_address: &Url, ke
 /// Verify the pending contributions.
 #[cfg(debug_assertions)]
 pub async fn get_verify_chunks(client: &Client, coordinator_address: &Url, keypair: &KeyPair) -> Result<()> {
-    submit_request::<()>(client, coordinator_address, "/verify", keypair, Request::Get).await?;
+    submit_request::<()>(
+        client,
+        coordinator_address,
+        "/verify",
+        Some(keypair),
+        None,
+        Request::Get,
+    )
+    .await?;
 
     Ok(())
 }
@@ -361,7 +392,8 @@ pub async fn get_contributor_queue_status(
         client,
         coordinator_address,
         "contributor/queue_status",
-        keypair,
+        Some(keypair),
+        None,
         Request::Get,
     )
     .await?;
@@ -380,7 +412,8 @@ pub async fn post_contribution_info(
         client,
         coordinator_address,
         "contributor/contribution_info",
-        keypair,
+        Some(keypair),
+        None,
         Request::Post(Some(request_body)),
     )
     .await?;
@@ -388,40 +421,65 @@ pub async fn post_contribution_info(
     Ok(())
 }
 
+/// Query health endpoint of the Coordinator to check the connection
+pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
+    submit_request::<()>(client, coordinator_address, "/healthcheck", None, None, Request::Get).await?;
+
+    Ok(())
+}
+
 /// Retrieve the list of contributions, json encoded
 pub async fn get_contributions_info(coordinator_address: &Url) -> Result<Vec<u8>> {
     let client = Client::builder().brotli(true).build()?;
-    let address = coordinator_address
-        .join("/contribution_info")
-        .map_err(|_| RequestError::AddressParseError)?;
 
-    let req = client.get(address);
-    let response = req.send().await?;
+    let response = submit_request::<()>(
+        &client,
+        coordinator_address,
+        "/contribution_info",
+        None,
+        None,
+        Request::Get,
+    )
+    .await?;
 
-    if response.status().is_success() {
-        Ok(response.bytes().await?.to_vec())
-    } else {
-        Err(RequestError::Server(response.text().await?))
-    }
+    Ok(response.bytes().await?.to_vec())
 }
 
-/// Query health endpoint of the Coordinator to check the connection
-pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
-    let address = coordinator_address
-        .join("/healthcheck")
-        .map_err(|_| RequestError::AddressParseError)?;
+/// Retrieve the state of the coordinator, json encoded. Needs to provide a secret access token to the endpoint
+pub async fn get_coordinator_state(coordinator_address: &Url, access_secret: &str) -> Result<Vec<u8>> {
+    let client = Client::builder().brotli(true).build()?;
+    let mut header = HeaderMap::new();
+    header.insert(ACCESS_SECRET_HEADER, HeaderValue::from_str(access_secret)?);
 
-    let req = client.get(address);
+    let response = submit_request::<()>(
+        &client,
+        coordinator_address,
+        "/coordinator_status",
+        None,
+        Some(header),
+        Request::Get,
+    )
+    .await?;
 
-    loop {
-        let response = req.try_clone().expect("Expected request not stream").send().await?;
+    Ok(response.bytes().await?.to_vec())
+}
 
-        match decapsulate_response(response).await {
-            Ok(_) => return Ok(()),
-            Err(e) => match e {
-                RequestError::Proxy(_) => eprintln!("CDN timeout expired, resubmitting the request..."),
-                _ => return Err(e),
-            },
-        }
-    }
+/// Updates the cohort. [`tokens`] parameter must be the content of the tokens.zip file
+pub async fn post_update_cohorts(
+    client: &Client,
+    coordinator_address: &Url,
+    keypair: &KeyPair,
+    tokens: &Vec<u8>,
+) -> Result<()> {
+    submit_request::<Vec<u8>>(
+        &client,
+        coordinator_address,
+        "/update_cohorts",
+        Some(keypair),
+        None,
+        Request::Post(Some(tokens)),
+    )
+    .await?;
+
+    Ok(())
 }

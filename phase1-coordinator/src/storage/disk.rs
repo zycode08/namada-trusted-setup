@@ -145,6 +145,22 @@ impl Disk {
         Ok(fs::read(path)?)
     }
 
+    /// Retrieve the json encoded state file
+    pub fn get_coordinator_state(&self) -> Result<Vec<u8>, CoordinatorError> {
+        // Check that the given locator exists in storage.
+        if !self.exists(&Locator::CoordinatorState) {
+            error!(
+                "Locator missing in call to get() in storage - {:?}",
+                Locator::CoordinatorState
+            );
+            return Err(CoordinatorError::StorageLocatorMissing);
+        }
+
+        let path = self.to_path(&Locator::CoordinatorState)?;
+
+        Ok(fs::read(path)?)
+    }
+
     /// Returns a copy of an object at the given locator in storage, if it exists.
     pub fn get(&self, locator: &Locator) -> Result<Object, CoordinatorError> {
         let path = self.to_path(locator)?;
@@ -397,6 +413,9 @@ impl Disk {
                     if let Some(contrib) = s.last() {
                         if contrib.ceremony_round() == round_height {
                             s.pop();
+                            // Update contribution summary file in storage
+                            self.update(&Locator::ContributionsInfoSummary, Object::ContributionsInfoSummary(s))
+                                .expect("ERROR: failure while updating contribution summary file");
                         }
                     }
                 }

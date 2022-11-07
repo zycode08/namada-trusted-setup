@@ -26,10 +26,7 @@ lazy_static! {
         Ok(_) => false,
         Err(_) => false,
     };
-    static ref COHORT_TIME: usize = match std::env::var("NAMADA_COHORT_TIME") {
-        Ok(n) => n.parse::<usize>().unwrap(),
-        Err(_) => 86400
-    };
+    pub static ref TOKENS_PATH: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -980,30 +977,57 @@ pub struct CoordinatorState {
     manual_lock: bool,
     /// The ceremony start time.
     ceremony_start_time: OffsetDateTime,
+    /// Duration, in seconds, of each cohort
+    cohort_duration: usize,
     /// The list of valid tokens for each cohort.
-    tokens: Vec<Vec<String>>,
+    tokens: Vec<HashSet<String>>,
 }
 
 impl CoordinatorState {
-    /// Reads tokens from disk and generates a vector of them.
+    /// Reads tokens from disk and generates a vector of them. Expects otokens to be in a separate folder containing only those files.
     ///
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
-    fn get_tokens() -> Vec<Vec<String>> {
-        let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap();
-        let tokens_path = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
-
-        let tokens_dir = std::fs::read_dir(&tokens_path).unwrap();
+    pub(super) fn load_tokens() -> Vec<HashSet<String>> {
+        let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap_or("namada_tokens_cohort".to_string());
+        let tokens_dir =
+            std::fs::read_dir(TOKENS_PATH.as_str()).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
         let number_of_cohorts = tokens_dir.count();
-        let mut tokens = Vec::with_capacity(number_of_cohorts);
+        let mut tokens = vec![HashSet::default(); number_of_cohorts];
 
-        for cohort in 0..number_of_cohorts {
-            let path = format!("{}/{}_{}.json", tokens_path, tokens_file_prefix, cohort);
+        for cohort in 1..=number_of_cohorts {
+            let path = format!("{}/{}_{}.json", *TOKENS_PATH, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
-            tokens.insert(cohort, serde_json::from_slice(&file).unwrap());
+            let token_set: HashSet<String> = serde_json::from_slice(&file).unwrap();
+            tokens[cohort - 1] = token_set;
         }
 
         tokens
+    }
+
+    /// Reads tokens from bytes and generates a vector of them.
+    ///
+    /// # Panics
+    /// If the files' name don't respect the expected format of if the bytes don't represent a valid HashSet<String>
+    pub(super) fn load_tokens_from_bytes(cohorts: &HashMap<String, Vec<u8>>) -> Vec<HashSet<String>> {
+        let mut tokens = vec![HashSet::default(); cohorts.len()];
+
+        for (file_name, bytes) in cohorts {
+            let split: Vec<&str> = file_name.rsplit(".json").collect();
+            let index_str = split[1].rsplit("_").collect::<Vec<&str>>()[0];
+            let index = index_str.parse::<usize>().unwrap() - 1;
+            let token: HashSet<String> = serde_json::from_slice(bytes.as_ref()).unwrap();
+            tokens[index] = token;
+        }
+
+        tokens
+    }
+
+    ///
+    /// Updates the set of tokens for the ceremony
+    ///
+    pub(super) fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
+        self.tokens = tokens
     }
 
     fn get_ceremony_start_time() -> OffsetDateTime {
@@ -1023,7 +1047,12 @@ impl CoordinatorState {
     /// Creates a new instance of `CoordinatorState`.
     ///
     #[inline]
-    pub(super) fn new(environment: Environment, tokens: Option<Vec<Vec<String>>>) -> Self {
+    pub(super) fn new(environment: Environment, tokens: Option<Vec<HashSet<String>>>) -> Self {
+        let cohort_duration = match std::env::var("NAMADA_COHORT_TIME") {
+            Ok(n) => n.parse::<usize>().unwrap(),
+            Err(_) => 86400,
+        };
+
         Self {
             environment,
             status: CoordinatorStatus::Initializing,
@@ -1041,7 +1070,8 @@ impl CoordinatorState {
             banned: HashSet::new(),
             manual_lock: false,
             ceremony_start_time: CoordinatorState::get_ceremony_start_time(),
-            tokens: tokens.unwrap_or_else(|| CoordinatorState::get_tokens()),
+            cohort_duration,
+            tokens: tokens.unwrap_or_else(|| CoordinatorState::load_tokens()),
         }
     }
 
@@ -1416,14 +1446,14 @@ impl CoordinatorState {
     }
 
     ///
-    /// Computes the current ceremony cohort, starting from 0, in function of [COHORT_TIME].
+    /// Computes the current ceremony cohort, starting from 0, depending on the cohort duration.
     ///
     pub fn get_cohort(&self) -> usize {
         let ceremony_start_time = self.ceremony_start_time;
         let now = OffsetDateTime::now_utc();
         let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as usize;
 
-        timestamp_diff / *COHORT_TIME
+        timestamp_diff / self.cohort_duration
     }
 
     ///
@@ -1438,7 +1468,7 @@ impl CoordinatorState {
     /// Returns the list of valid tokens for a given cohort.
     ///
     #[inline]
-    pub(super) fn tokens(&self, cohort: usize) -> Option<&Vec<String>> {
+    pub fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
         self.tokens.get(cohort)
     }
 

@@ -7,7 +7,7 @@
 
 set -u
 
-LAST_BINARY_VERSION="1.0.0-beta.7"
+LAST_BINARY_VERSION="1.0.0-beta.8"
 BINARY_NAME="namada-ts"
 BINARY_FOLDER="$HOME/.namada-ts"
 BINARY_PATH="$BINARY_FOLDER/$BINARY_NAME"
@@ -46,7 +46,7 @@ if [ $BINARY_EXIST_CHECK_EXIT_CODE -eq 0 ]; then
         echo "Done dowloading binary in $BINARY_PATH."
         echo "Your should export the binary to \$PATH by running:"
         echo "   export PATH=\$PATH:~/.namada-ts"
-        chmod +x "$BINARY_FOLDER/$BINARY_NAME"
+        chmod +x $BINARY_PATH
     fi
 else
     echo "Creating binary folder..."
@@ -62,7 +62,7 @@ else
         echo "You should clone the repository and build from source. Check the docs here: https://github.com/anoma/namada-trusted-setup#building-and-contributing-from-source."
         exit 1
     fi
-    chmod +x "$BINARY_FOLDER/$BINARY_NAME"
+    chmod +x $BINARY_PATH
     echo "Done dowloading binary in $BINARY_PATH."
     echo "Your should export the binary to \$PATH by running:"
     echo "   export PATH=\$PATH:~/.namada-ts"

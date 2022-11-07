@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, TOKEN_REGEX, UPDATE_TIME},
+    rest::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
 };
 
@@ -20,7 +20,9 @@ use futures_util::StreamExt;
 use phase1_cli::{
     ascii_logo::{ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests, CeremonyOpt, CoordinatorUrl,
+    requests,
+    CeremonyOpt,
+    CoordinatorUrl,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -205,7 +207,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         RandomSource::Entropy(entropy)
     };
 
-    println!("Computation of your contribution in progress... This might take a couple of seconds...");
+    println!("Computation of your contribution in progress...");
 
     let writer = OpenOptions::new().append(true).open(filename)?;
 
@@ -423,7 +425,7 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort,\nor the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
+    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort, or the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
     let token = io::get_user_input(
         "Enter your unique token or the FFA token (20 characters in hexadecimal format):".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
@@ -559,6 +561,17 @@ async fn get_contributions(coordinator: &Url) {
     }
 }
 
+#[inline(always)]
+async fn get_coordinator_state(coordinator: &Url, secret: &str) {
+    match requests::get_coordinator_state(coordinator, secret).await {
+        Ok(state) => {
+            let state_str = std::str::from_utf8(&state).unwrap();
+            println!("Coordinator state:\n{}", state_str)
+        }
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
+    }
+}
+
 #[cfg(debug_assertions)]
 #[inline(always)]
 async fn verify_contributions(client: &Client, coordinator: &Url, keypair: &KeyPair) {
@@ -577,18 +590,36 @@ async fn update_coordinator(client: &Client, coordinator: &Url, keypair: &KeyPai
     }
 }
 
+#[inline(always)]
+async fn update_cohorts(client: &Client, coordinator: &Url, keypair: &KeyPair) {
+    // Get content of zip file
+    let tokens =
+        std::fs::read(TOKENS_ZIP_FILE).expect(format!("Error while reading {} file", TOKENS_ZIP_FILE).as_str());
+
+    match requests::post_update_cohorts(client, coordinator, keypair, &tokens).await {
+        Ok(()) => println!("{}", "Cohorts updated".green().bold()),
+        Err(e) => eprintln!("{}", e.to_string().red().bold()),
+    }
+}
+
 enum Branch {
     AnotherMachine,
     Default(bool),
 }
-
 
 /// Performs the entire contribution cycle
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
     // Check that the passed-in coordinator url is correct
     let client = Client::new();
-    requests::ping_coordinator(&client, &url.coordinator).await.expect(&format!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold()));
+    requests::ping_coordinator(&client, &url.coordinator)
+        .await
+        .expect(&format!(
+            "{}",
+            "ERROR: could not contact the Coordinator, please check the url you provided"
+                .red()
+                .bold()
+        ));
 
     println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
@@ -765,6 +796,19 @@ async fn main() {
         }
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
+        }
+        CeremonyOpt::GetState(state) => {
+            let secret = state.secret.as_str();
+            get_coordinator_state(&state.url.coordinator, secret).await;
+        }
+        CeremonyOpt::UpdateCohorts(url) => {
+            let keypair = tokio::task::spawn_blocking(|| io::keypair_from_mnemonic())
+                .await
+                .unwrap()
+                .expect(&format!("{}", "Error while generating the keypair".red().bold()));
+
+            let client = Client::new();
+            update_cohorts(&client, &url.coordinator, &keypair).await;
         }
         #[cfg(debug_assertions)]
         CeremonyOpt::VerifyContributions(url) => {

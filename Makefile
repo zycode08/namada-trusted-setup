@@ -6,7 +6,10 @@ build:
 	$(CARGO) build
 
 check:
-	$(CARGO) check --all-targets
+	$(CARGO) check --workspace --all-targets
+
+check-release:
+	$(CARGO) check --release --workspace
 
 fmt:
 	$(CARGO_NIGHTLY) fmt --all
@@ -38,6 +41,7 @@ get-contributions: # Get the received contributions on local coordinator (0.0.0.
 	RUST_LOG=debug $(CARGO) run $(CLI_FLAGS) get-contributions
 
 run-coordinator:
-	HEALTH_PATH="." RUST_LOG=debug $(CARGO) run --features=parallel --bin phase1-coordinator
+	aws s3 rm s3://${AWS_S3_BUCKET} --recursive
+	RUST_LOG=debug $(CARGO) run --features=parallel --bin phase1-coordinator
 
 .PHONY : build check clean clippy clippy-fix close-ceremony fmt get-contributions run-coordinator test-coordinator test-e2e update verify
