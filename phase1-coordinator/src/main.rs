@@ -101,24 +101,29 @@ async fn download_tokens() -> Result<()> {
 
 /// Generate the random secret to access reserved endpoints and exports it as env. Publish this secret to Amazon Parameter Store.
 async fn generate_secret() -> Result<()> {
-    let mut secret_bytes = [0u8; 16];
+    let mut secret_bytes = [0u8; 32];
     rand::thread_rng().fill(&mut secret_bytes[..]);
     let secret = hex::encode(secret_bytes);
     std::env::set_var("ACCESS_SECRET", &secret);
+    let env = match std::env::var("AWS_S3_PROD") {
+        Ok(val) if val == "true" => "prod",
+        _ => "master",
+    };
+    
 
     let aws_client = SsmClient::new(REGION.clone());
     let put_request = rusoto_ssm::PutParameterRequest {
-        allowed_pattern: None,
-        data_type: Some("text".to_string()),
-        description: Some("Endpoints secret".to_string()),
+        description: Some("Trusted setup endpoints secret".to_string()),
         key_id: None,
-        name: "secret".to_string(),
+        name: format!("/namada/trusted-setup/{}/secret", env),
         overwrite: Some(true),
         policies: None,
         tags: None,
         tier: None,
         type_: Some("SecureString".to_string()),
         value: secret.clone(),
+        allowed_pattern: None,
+        data_type: None,
     };
     aws_client.put_parameter(put_request).await?;
 
