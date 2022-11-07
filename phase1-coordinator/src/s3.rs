@@ -11,6 +11,7 @@ use rusoto_s3::{
     StreamingBody,
     S3,
 };
+use std::str::FromStr;
 use thiserror::Error;
 
 pub const TOKENS_ZIP_FILE: &str = "tokens.zip";
@@ -18,15 +19,9 @@ pub const TOKENS_ZIP_FILE: &str = "tokens.zip";
 lazy_static! {
     static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
     pub static ref REGION: Region = {
-        match std::env::var("AWS_S3_ENDPOINT") {
-            Ok(endpoint_env) => Region::Custom {
-                name: "custom".to_string(),
-                endpoint: endpoint_env,
-            },
-            Err(_) => Region::Custom {
-                name: "eu-west-1".to_string(),
-                endpoint: format!("{}.s3-accelerate.amazonaws.com", *BUCKET),
-            },
+        match std::env::var("AWS_REGION") {
+            Ok(region) => Region::from_str(&region).expect("Region must be a valid region"),
+            Err(_) => Region::EuWest1,
         }
     };
 }
@@ -63,7 +58,11 @@ impl S3Ctx {
     pub async fn new() -> Result<Self> {
         let provider = ChainProvider::new();
         let credentials = provider.credentials().await?;
-        let client = S3Client::new(REGION.clone());
+        let transfer_acceleration_endpoint = Region::Custom {
+            name: REGION.name().to_string(),
+            endpoint: format!("{}.s3-accelerate.amazonaws.com", *BUCKET),
+        };
+        let client = S3Client::new(transfer_acceleration_endpoint);
         let options = PreSignedRequestOption {
             expires_in: std::time::Duration::from_secs(600),
         };
