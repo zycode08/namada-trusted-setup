@@ -37,6 +37,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
+use tracing::warn;
 
 #[cfg(debug_assertions)]
 pub const UPDATE_TIME: Duration = Duration::from_secs(5);
@@ -436,7 +437,8 @@ impl<'r> FromRequest<'r> for Secret {
     type Error = ResponseError;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        match request.headers().get_one(ACCESS_SECRET_HEADER) {
+        match request.headers().get_one(ACCESS_SECRET_HEADER) { 
+            //WARNING: not constant-time
             Some(secret) if secret == *ACCESS_SECRET => Outcome::Success(Self),
             _ => Outcome::Failure((Status::new(401), ResponseError::InvalidSecret)),
         }
@@ -622,7 +624,7 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &String) -> Res
 
     // Calculate the cohort number
     let read_lock = coordinator.read().await;
-    let cohort = read_lock.state().get_cohort();
+    let cohort = read_lock.state().get_current_cohort_index();
     let tokens = match read_lock.state().tokens(cohort) {
         Some(t) => t,
         None => return Err(ResponseError::CeremonyIsOver),
@@ -633,4 +635,66 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &String) -> Res
     }
 
     Ok(())
+}
+
+/// Performs the verification of the pending contributions
+/// 
+/// # Cancel safety
+/// 
+/// https://docs.rs/tokio/latest/tokio/macro.select.html#cancellation-safety
+/// 
+/// Because of the use of [`tokio::sync::rwlock::RwLock::write_owned`], which is not cancel safe, and a spawned blocking
+/// task, which cannot be cancelled, this function is not cancel safe.
+pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
+    // Get all the pending verifications, loop on each one of them and perform verification
+    // Technically, since we don't chunk contributions and we only have one contribution per round, we will always get
+    // one pending verification at max.
+    let mut write_lock = coordinator.write_owned().await;
+
+    // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
+    //  no external verifiers
+    // NOTE: atomic spawn_blocking function, cannot be cancelled by the async executor, must be executed atomically
+    task::spawn_blocking(move || -> Result<()> {
+        for (task, _) in write_lock.get_pending_verifications().to_owned() {
+            if let Err(e) = write_lock.default_verify(&task) {
+                warn!("Error while verifying a contribution: {}. Restarting the round...", e);
+                // FIXME: the verify_masp function may panic but the program doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
+
+                // Get the participant who produced the contribution
+                let finished_contributor = write_lock
+                    .state()
+                    .current_round_finished_contributors()
+                    .unwrap()
+                    .first()
+                    .unwrap()
+                    .clone();
+
+                // Reset the round to prevent a coordinator stall (the corrupted contribution is not automatically dropped)
+                write_lock
+                    .reset_round()
+                    .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+                // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
+                return write_lock
+                    .ban_participant(&finished_contributor)
+                    .map_err(|e| ResponseError::CoordinatorError(e));
+            }
+    } Ok(())}).await?
+}
+
+/// Performs the update of the [Coordinator](`crate::Coordinator`)
+/// 
+/// # Cancel safety
+/// 
+/// https://docs.rs/tokio/latest/tokio/macro.select.html#cancellation-safety
+/// 
+/// Because of the use of [`tokio::sync::rwlock::RwLock::write_owned`], which is not cancel safe, and a spawned blocking
+/// task, which cannot be cancelled, this function is not cancel safe.
+pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
+    let mut write_lock = coordinator.write_owned().await;
+
+    // NOTE: atomic spawn_blocking function, cannot be cancelled by the async executor, must be executed atomically
+    task::spawn_blocking(move || write_lock.update())
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))
 }

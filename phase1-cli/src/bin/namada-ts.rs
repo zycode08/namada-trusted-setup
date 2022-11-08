@@ -232,7 +232,7 @@ async fn contribute(
     coordinator: &Url,
     keypair: &KeyPair,
     mut contrib_info: ContributionInfo,
-    heartbeat_handle: &JoinHandle<()>,
+    heartbeat_handle: JoinHandle<()>,
 ) -> Result<u64> {
     // Get the necessary info to compute the contribution
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
@@ -412,6 +412,7 @@ async fn contribute(
     //  function returns. This would cause the contributor to send heartbeats even after it has been removed
     //  from the list of current contributors, causing an error
     heartbeat_handle.abort();
+    heartbeat_handle.await;
 
     Ok(round_height)
 }
@@ -502,7 +503,7 @@ async fn contribution_loop(
                 status_count += 1;
             }
             ContributorStatus::Round => {
-                round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), &heartbeat_handle)
+                round_height = contribute(&client, &coordinator, &keypair, contrib_info.clone(), heartbeat_handle)
                     .await
                     .expect(&format!("{}", "Contribution failed".red().bold()));
             }
@@ -545,7 +546,7 @@ async fn contribution_loop(
 #[inline(always)]
 async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
-        Ok(()) => println!("{}", "Ceremony completed!".green().bold()),
+        Ok(()) => println!("{}", "Notified the coordinator to shut down".yellow().bold()),
         Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }

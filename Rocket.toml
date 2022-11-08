@@ -16,8 +16,9 @@ msgpack = "2 MiB"
 [default.shutdown]
 ctrlc = true
 signals = ["term", "hup"]
-grace = 5
+grace = 120 # Give enough time to finish the current pending tasks
 mercy = 5
+force = false # To prevent automatioc shutdown of the async runtime after grace and mercy periods
 
 [release]
 cli_colors = false

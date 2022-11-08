@@ -1454,7 +1454,7 @@ impl CoordinatorState {
     ///
     /// Computes the current ceremony cohort, starting from 0, depending on the cohort duration.
     ///
-    pub fn get_cohort(&self) -> usize {
+    pub fn get_current_cohort_index(&self) -> usize {
         let ceremony_start_time = self.ceremony_start_time;
         let now = OffsetDateTime::now_utc();
         let timestamp_diff = (now.unix_timestamp() - ceremony_start_time.unix_timestamp()) as u64;

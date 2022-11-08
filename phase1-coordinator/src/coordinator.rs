@@ -552,11 +552,9 @@ impl Coordinator {
             info!("Advanced ceremony to round {}", next_round_height);
         }
 
-        // If cohorts are over shut the coordinator down
-        let cohort = self.state.get_cohort();
-        if cohort >= self.state.get_number_of_cohorts() {
+        // If cohorts are over, shut the coordinator down
+        if self.state.get_current_cohort_index() >= self.state.get_number_of_cohorts() {
             info!("Completed all the scheduled cohorts");
-            self.shutdown()?;
             // Return an error to force the calling task to request a graceful shutdown of the server
             return Err(CoordinatorError::CeremonyIsOver);
         }
