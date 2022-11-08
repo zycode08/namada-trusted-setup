@@ -1,13 +1,8 @@
 //! REST API endpoints exposed by the [Coordinator](`crate::Coordinator`).
 
-use crate::{
-    authentication::{Production, Signature},
-    objects::{ContributionInfo, LockedLocators, Task},
-    s3::{S3Ctx, S3Error},
-    storage::{ContributionLocator, ContributionSignatureLocator},
-    CoordinatorError,
-    CoordinatorState,
-    Participant,
+use std::{
+    collections::{HashMap, HashSet},
+    io::{Cursor, Read, Write},
 };
 use tracing::warn;
 
@@ -34,7 +29,7 @@ pub async fn join_queue(
     new_participant: NewParticipant,
     token: LazyJson<String>,
 ) -> Result<()> {
-    rest_utils::token_check(coordinator.deref().to_owned(), &token).await?;
+    rest_utils::token_check((*coordinator).clone(), &token).await?;
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
@@ -129,20 +124,11 @@ pub async fn contribute_chunk(
     .map_or_else(|e| Err(ResponseError::CoordinatorError(e)), |_| Ok(()))
 }
 
-/// Performs the update of the [Coordinator](`crate::Coordinator`)
-pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
-    let mut write_lock = coordinator.clone().write_owned().await;
-
-    task::spawn_blocking(move || write_lock.update())
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))
-}
-
 /// Update the [Coordinator](`crate::Coordinator`) state. This endpoint is accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
 #[get("/update")]
 pub async fn update_coordinator(coordinator: &State<Coordinator>, _auth: ServerAuth) -> Result<()> {
-    perform_coordinator_update(coordinator.deref().to_owned()).await
+    rest_utils::perform_coordinator_update((*coordinator).clone()).await
 }
 
 /// Let the [Coordinator](`crate::Coordinator`) know that the participant is still alive and participating (or waiting to participate) in the ceremony.
@@ -155,75 +141,18 @@ pub async fn heartbeat(coordinator: &State<Coordinator>, participant: Participan
         .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
-/// Stop the [Coordinator](`crate::Coordinator`) and shuts the server down. This endpoint is accessible only by the coordinator itself.
+/// Stop the [Coordinator](`crate::Coordinator`) and shuts the rest server down. This endpoint is accessible only by the coordinator itself.
 #[get("/stop")]
-pub async fn stop_coordinator(coordinator: &State<Coordinator>, _auth: ServerAuth, shutdown: Shutdown) -> Result<()> {
-    let mut write_lock = (*coordinator).clone().write_owned().await;
-    let result = task::spawn_blocking(move || write_lock.shutdown()).await?;
-
-    if let Err(e) = result {
-        return Err(ResponseError::ShutdownError(format!("{}", e)));
-    };
-
+pub async fn stop_coordinator(_auth: ServerAuth, shutdown: Shutdown) {
     // Shut Rocket server down
     shutdown.notify();
-
-    Ok(())
-}
-
-/// Performs the verification of the pending contributions
-pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
-    // Get all the pending verifications, loop on each one of them and perform verification
-    // Technically, since we don't chunk contributions and we only have one contribution per round, we will always get
-    // one pending verification at max.
-    let pending_verifications = coordinator.read().await.get_pending_verifications().to_owned();
-
-    for (task, _) in pending_verifications {
-        let mut write_lock = coordinator.clone().write_owned().await;
-        // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
-        //  no external verifiers
-        let verify_response = match task::spawn_blocking(move || write_lock.default_verify(&task)).await {
-            Ok(inner) => inner.map_err(|e| e.to_string()),
-            Err(e) => Err(e.to_string()),
-        };
-
-        if let Err(e) = verify_response {
-            warn!("Error while verifying a contribution: {}. Restarting the round...", e);
-            // FIXME: the verify_masp function may panic but the program doesn't shut down because we are executing it on a separate thread. It would be better though to make that function return a Result instead of panicking. Revert of round should be moved inside default_verify
-
-            // Get the participant who produced the contribution
-            let mut write_lock = coordinator.clone().write_owned().await;
-            return task::spawn_blocking(move || {
-                let finished_contributor = write_lock
-                    .state()
-                    .current_round_finished_contributors()
-                    .unwrap()
-                    .first()
-                    .unwrap()
-                    .clone();
-
-                // Reset the round to prevent a coordinator stall (the corrupted contribution is not automatically dropped)
-                write_lock
-                    .reset_round()
-                    .map_err(|e| ResponseError::CoordinatorError(e))?;
-
-                // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
-                write_lock
-                    .ban_participant(&finished_contributor)
-                    .map_err(|e| ResponseError::CoordinatorError(e))
-            })
-            .await?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Verify all the pending contributions. This endpoint is accessible only by the coordinator itself.
 #[cfg(debug_assertions)]
 #[get("/verify")]
 pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) -> Result<()> {
-    perform_verify_chunks(coordinator.deref().to_owned()).await
+    rest_utils::perform_verify_chunks((*coordinator).clone()).await
 }
 
 /// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
@@ -258,7 +187,7 @@ pub async fn update_cohorts(
 
     // Check that the new tokens for the current cohort match the old ones (to prevent inconsistencies during contributions in the current cohort)
     let read_lock = coordinator.read().await;
-    let cohort = read_lock.state().get_cohort();
+    let cohort = read_lock.state().get_current_cohort_index();
     let old_tokens = match read_lock.state().tokens(cohort) {
         Some(t) => t,
         None => return Err(ResponseError::CeremonyIsOver),
