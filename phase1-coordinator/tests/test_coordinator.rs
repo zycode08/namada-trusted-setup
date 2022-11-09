@@ -17,7 +17,8 @@ use phase1_coordinator::{
     coordinator_state::CoordinatorState,
     environment::Testing,
     objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
-    rest::{
+    rest,
+    rest_utils::{
         self,
         ContributorStatus,
         PostChunkRequest,
@@ -138,13 +139,13 @@ fn build_context() -> TestCtx {
         ])
         .manage(coordinator)
         .register("/", catchers![
-            rest::invalid_signature,
-            rest::unauthorized,
-            rest::missing_required_header,
-            rest::io_error,
-            rest::unprocessable_entity,
-            rest::mismatching_checksum,
-            rest::invalid_header
+            rest_utils::invalid_signature,
+            rest_utils::unauthorized,
+            rest_utils::missing_required_header,
+            rest_utils::io_error,
+            rest_utils::unprocessable_entity,
+            rest_utils::mismatching_checksum,
+            rest_utils::invalid_header
         ]);
 
     // Create participants

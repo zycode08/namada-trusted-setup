@@ -2393,6 +2393,7 @@ dependencies = [
  "setup-utils",
  "sha2 0.10.2",
  "snarkvm-curves",
+ "subtle",
  "tempfile",
  "thiserror",
  "time 0.3.11",

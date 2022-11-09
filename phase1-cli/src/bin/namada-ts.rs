@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io::{self, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
+    rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
 };
 
@@ -411,6 +411,7 @@ async fn contribute(
     //  only gets detached from the main execution unit but keeps running in the background until the main
     //  function returns. This would cause the contributor to send heartbeats even after it has been removed
     //  from the list of current contributors, causing an error
+    //  We don't need to await the hearbeat future
     heartbeat_handle.abort();
 
     Ok(round_height)
@@ -545,7 +546,7 @@ async fn contribution_loop(
 #[inline(always)]
 async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     match requests::get_stop_coordinator(client, coordinator, keypair).await {
-        Ok(()) => println!("{}", "Ceremony completed!".green().bold()),
+        Ok(()) => println!("{}", "Notified the coordinator to shut down".yellow().bold()),
         Err(e) => eprintln!("{}", e.to_string().red().bold()),
     }
 }

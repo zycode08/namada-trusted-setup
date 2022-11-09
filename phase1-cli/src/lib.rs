@@ -9,7 +9,7 @@ pub mod requests;
 
 use phase1_coordinator::{
     objects::round::LockedLocators,
-    rest::{ContributorStatus, PostChunkRequest},
+    rest_utils::{ContributorStatus, PostChunkRequest},
 };
 
 use reqwest::Url;
@@ -104,8 +104,6 @@ pub enum CeremonyOpt {
     UpdateCohorts(CoordinatorUrl),
     #[cfg(debug_assertions)]
     #[structopt(about = "Verify the pending contributions")]
-    VerifyContributions(CoordinatorUrl),
-    #[cfg(debug_assertions)]
     #[structopt(about = "Update manually the coordinator")]
     UpdateCoordinator(CoordinatorUrl),
 }

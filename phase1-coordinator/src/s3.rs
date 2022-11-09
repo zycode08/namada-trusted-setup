@@ -24,6 +24,10 @@ lazy_static! {
             Err(_) => Region::EuWest1,
         }
     };
+    static ref S3_REGION: Region = Region::Custom {
+        name: REGION.name().to_string(),
+        endpoint: format!("{}.s3-accelerate.amazonaws.com", *BUCKET),
+    };
 }
 
 #[derive(Error, Debug)]
@@ -58,11 +62,7 @@ impl S3Ctx {
     pub async fn new() -> Result<Self> {
         let provider = ChainProvider::new();
         let credentials = provider.credentials().await?;
-        let transfer_acceleration_endpoint = Region::Custom {
-            name: REGION.name().to_string(),
-            endpoint: format!("{}.s3-accelerate.amazonaws.com", *BUCKET),
-        };
-        let client = S3Client::new(transfer_acceleration_endpoint);
+        let client = S3Client::new(S3_REGION.clone());
         let options = PreSignedRequestOption {
             expires_in: std::time::Duration::from_secs(600),
         };
@@ -70,7 +70,7 @@ impl S3Ctx {
         Ok(Self {
             client,
             bucket: &BUCKET,
-            region: &REGION,
+            region: &S3_REGION,
             options,
             credentials,
         })
