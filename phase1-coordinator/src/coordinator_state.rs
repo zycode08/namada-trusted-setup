@@ -942,6 +942,23 @@ impl Default for RoundMetrics {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TokenState {
+    Available,
+    InUse,
+    Used,
+}
+
+impl TokenState {
+    /// Returns true if the token is currently in use or has been already used
+    fn is_blacklisted(&self) -> bool {
+        match self {
+            TokenState::Available => false,
+            _ => true
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoordinatorState {
     /// The parameters and settings of this coordinator.
@@ -980,25 +997,25 @@ pub struct CoordinatorState {
     /// Duration, in seconds, of each cohort
     cohort_duration: u64,
     /// The list of valid tokens for each cohort.
-    tokens: Vec<HashSet<String>>, //FIXME: HAshMap<String, bool> or a custom type (Unused, Current, Used) isntead of bool? Depends ohow to blacklist, remove the token from listof allowed or create a new blacklist struct?
+    tokens: Vec<HashMap<String, (Participant, TokenState)>>,
 }
 
 impl CoordinatorState {
-    /// Reads tokens from disk and generates a vector of them. Expects otokens to be in a separate folder containing only those files.
+    /// Reads tokens from disk and generates a vector of them. Expects tokens to be in a separate folder containing only those files.
     ///
     /// # Panics
     /// If folder, file names or content don't respect the specified format.
-    pub(super) fn load_tokens() -> Vec<HashSet<String>> {
+    pub(super) fn load_tokens() -> Vec<HashMap<String, (Participant, TokenState)>> {
         let tokens_file_prefix = std::env::var("TOKENS_FILE_PREFIX").unwrap_or("namada_tokens_cohort".to_string());
         let tokens_dir =
             std::fs::read_dir(TOKENS_PATH.as_str()).expect(format!("Error with path {}", &*TOKENS_PATH).as_str());
         let number_of_cohorts = tokens_dir.count();
-        let mut tokens = vec![HashSet::default(); number_of_cohorts];
+        let mut tokens = vec![HashMap::default(); number_of_cohorts];
 
         for cohort in 1..=number_of_cohorts {
             let path = format!("{}/{}_{}.json", *TOKENS_PATH, tokens_file_prefix, cohort);
             let file = std::fs::read(path).unwrap();
-            let token_set: HashSet<String> = serde_json::from_slice(&file).unwrap();
+            let token_set: HashMap<String, (Participant, TokenState)> = serde_json::from_slice(&file).unwrap(); //FIXME: does this work?
             tokens[cohort - 1] = token_set;
         }
 
@@ -1009,14 +1026,14 @@ impl CoordinatorState {
     ///
     /// # Panics
     /// If the files' name don't respect the expected format of if the bytes don't represent a valid HashSet<String>
-    pub(super) fn load_tokens_from_bytes(cohorts: &HashMap<String, Vec<u8>>) -> Vec<HashSet<String>> {
-        let mut tokens = vec![HashSet::default(); cohorts.len()];
+    pub(super) fn load_tokens_from_bytes(cohorts: &HashMap<String, Vec<u8>>) -> Vec<HashMap<String, (Participant, TokenState)>> {
+        let mut tokens = vec![HashMap::default(); cohorts.len()];
 
         for (file_name, bytes) in cohorts {
             let split: Vec<&str> = file_name.rsplit(".json").collect();
             let index_str = split[1].rsplit("_").collect::<Vec<&str>>()[0];
             let index = index_str.parse::<usize>().unwrap() - 1;
-            let token: HashSet<String> = serde_json::from_slice(bytes.as_ref()).unwrap();
+            let token: HashMap<String, (Participant, TokenState)> = serde_json::from_slice(bytes.as_ref()).unwrap(); //FIXME: does this work on file?
             tokens[index] = token;
         }
 
@@ -1026,7 +1043,7 @@ impl CoordinatorState {
     ///
     /// Updates the set of tokens for the ceremony
     ///
-    pub(super) fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
+    pub(super) fn update_tokens(&mut self, tokens: Vec<HashMap<String, (Participant, TokenState)>>) {
         self.tokens = tokens
     }
 
@@ -1043,6 +1060,12 @@ impl CoordinatorState {
         ceremony_start_time
     }
 
+    pub(crate) fn is_token_blacklisted(&self, cohort: usize, token: &str) -> Result<bool, CoordinatorError> {
+        let (_, token_state) = self.tokens.get(cohort).ok_or(CoordinatorError::CeremonyIsOver)?.get(token).ok_or(CoordinatorError::Error("Token not found"))?;
+
+        Ok(token_state.is_blacklisted())
+    }
+
     ///
     /// Creates a new instance of `CoordinatorState`.
     ///
@@ -1057,7 +1080,7 @@ impl CoordinatorState {
         environment: Environment,
         ceremony_start_time: Option<OffsetDateTime>,
         cohort_duration: Option<u64>,
-        tokens: Option<Vec<HashSet<String>>>,
+        tokens: Option<Vec<HashMap<String, (Participant, TokenState)>>>,
     ) -> Self {
         let cohort_duration = cohort_duration.unwrap_or_else(|| match std::env::var("NAMADA_COHORT_TIME") {
             Ok(n) => n.parse::<u64>().unwrap(),
@@ -1489,7 +1512,7 @@ impl CoordinatorState {
     /// Returns the list of valid tokens for a given cohort.
     ///
     #[inline]
-    pub fn tokens(&self, cohort: usize) -> Option<&HashSet<String>> {
+    pub fn tokens(&self, cohort: usize) -> Option<&HashMap<String, (Participant, TokenState)>> {
         self.tokens.get(cohort)
     }
 
@@ -2273,6 +2296,17 @@ impl CoordinatorState {
                 .filter(|(_, contributor)| contributor != participant)
                 .collect();
 
+            // Reset token state to available
+            // Need to cycle over all the cohorts because a user may join the queue at the very last moment of a cohort, effectively contributing in the following cohort
+            'outer: for map in self.tokens.iter_mut() {
+                for (_, (part, token)) in map {
+                    if part == participant {
+                        *token = TokenState::Available;
+                        break 'outer;
+                    }
+                }
+            }
+
             return Ok(DropParticipant::DropQueue(DropQueueParticipantData {
                 _participant: participant.clone(),
             }));
@@ -2520,6 +2554,8 @@ impl CoordinatorState {
         if let Some((ip, participant)) = participant_ip {
             self.contributors_ips.insert(ip, participant);
         }
+
+        // NOTE: token of the participant has already been blacklisted at the end of the contribution, no need to take actions here
 
         info!("{} was banned from the ceremony", participant);
 

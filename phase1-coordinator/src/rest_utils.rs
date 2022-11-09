@@ -607,7 +607,7 @@ impl PostChunkRequest {
 }
 
 /// Checks the validity of the token for the ceremony.
-pub(crate) async fn token_check(coordinator: Coordinator, token: &String) -> Result<()> {
+pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result<()> {
     // Check if the token's format is correct
     let regex = Regex::new(TOKEN_REGEX).unwrap();
 
@@ -623,9 +623,15 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &String) -> Res
         None => return Err(ResponseError::CeremonyIsOver),
     };
 
-    if !tokens.contains(token) {
+    if !tokens.contains_key(token) {
         return Err(ResponseError::InvalidToken(cohort + 1));
     }
+
+    // FIXME: check token not blacklisted nor in use only if env variable is set
+    if !read_lock.state().is_token_blacklisted(cohort, token)? {
+        return Err(ResponseError::InvalidToken(cohort + 1)); //FIXME: change error, differentiate between blacklist and currently in use
+    }
+
 
     Ok(())
 }
