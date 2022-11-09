@@ -181,7 +181,7 @@ pub async fn main() {
     );
 
     // Generate, publish and export the secret token
-    //generate_secret().await.expect("Error while generating secret token"); FIXME: uncomment
+    generate_secret().await.expect("Error while generating secret token");
 
     // Set the environment
     let keypair = tokio::task::spawn_blocking(|| io::generate_keypair(KeyPairUser::Coordinator))

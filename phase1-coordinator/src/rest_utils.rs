@@ -24,6 +24,7 @@ use rocket::{
 };
 
 use sha2::Sha256;
+use subtle::ConstantTimeEq;
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -431,9 +432,7 @@ impl<'r> FromRequest<'r> for Secret {
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match request.headers().get_one(ACCESS_SECRET_HEADER) {
-            //WARNING: not constant-time
-            //FIXME:
-            Some(secret) if secret == *ACCESS_SECRET => Outcome::Success(Self),
+            Some(secret) if secret.as_bytes().ct_eq(&*ACCESS_SECRET.as_bytes()).into() => Outcome::Success(Self),
             _ => Outcome::Failure((Status::new(401), ResponseError::InvalidSecret)),
         }
     }
