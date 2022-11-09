@@ -17,7 +17,7 @@ use rocket::{
     self,
     catchers,
     routes,
-    tokio::{self, sync::RwLock},
+    tokio::{self, sync::{RwLock, watch::{self, Receiver}}},
 };
 
 use anyhow::Result;
@@ -28,7 +28,7 @@ use std::{convert::TryInto, io::Write, sync::Arc};
 use tracing::{error, info, warn};
 
 /// Periodically updates the [`Coordinator`]
-async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, recv: Receiver<bool>) -> Result<()> {
     loop {
         tokio::time::sleep(UPDATE_TIME).await;
 
@@ -40,12 +40,18 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
             ),
             Err(e) => {
                 if let ResponseError::CoordinatorError(phase1_coordinator::CoordinatorError::CeremonyIsOver) = e {
-                    // Return Ok to initialize shutdown process in select! expression
+                    // Return Ok to initialize the shutdown process in select! expression
                     return Ok(());
                 } else {
                     return Err(e.into());
                 }
             }
+        }
+
+        // Return if shutdown signal has been received on the channel
+        if *recv.borrow() {
+            info!("Received shutdown signal, exiting update task");
+            return Ok(())
         }
     }
 }
@@ -55,7 +61,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>) -> Result<()>
 /// NOTE: a possible improvement could be to perform the verification when the try_contribute function gets called, allowing us to remove this task and
 /// speed up the verification process. This would also allow us to immediately provide to a client the state of validity of its contribution. This improvement could
 /// be possible because we only have one contribution per round and one verifier (the coordinator's one). To implement this logic though, it would require a major rework of the phase1_coordinator logic.
-async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>, recv: Receiver<bool>) -> Result<()> {
     loop {
         tokio::time::sleep(UPDATE_TIME).await;
 
@@ -67,6 +73,12 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>) -> Result<(
             start.elapsed(),
             UPDATE_TIME
         );
+
+        // Return if shutdown signal has been received on the channel
+        if *recv.borrow() {
+            info!("Received shutdown signal, exiting verify task");
+            return Ok(())
+        }
     }
 }
 
@@ -125,7 +137,7 @@ async fn generate_secret() -> Result<()> {
 }
 
 /// Perform the steps to finalize the ceremony state before shut down
-async fn finalize_state(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     info!("Performing last contribution verification (if any)...");
     if let Err(e) = rest_utils::perform_verify_chunks(coordinator.clone()).await {
         // Log any error without interrupting the shutdown procedure
@@ -248,7 +260,6 @@ pub async fn main() {
             rest_utils::invalid_header
         ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
-    let shutdown = ignite_rocket.shutdown();
 
     // Sleep until ceremony start time has been reached
     #[cfg(not(debug_assertions))]
@@ -273,29 +284,23 @@ pub async fn main() {
     }
 
     info!("Booting up coordinator rest server");
+
+    // Create channel to signal the update and verify tasks when to terminate (rocket tasks can be terminated with the shutdown handler)
+    let (tx, rx) = watch::channel(false);
+    let shutdown = ignite_rocket.shutdown();
     
     // Spawn task to update the coordinator periodically
-    let mut update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator));
+    let mut update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator, rx.clone()));
 
     // Spawn task to verify the contributions periodically
-    let mut verify_handle = rocket::tokio::spawn(verify_contributions(verify_coordinator));
+    let mut verify_handle = rocket::tokio::spawn(verify_contributions(verify_coordinator, rx));
 
     // Spawn Rocket server task
     let mut rocket_handle = rocket::tokio::spawn(ignite_rocket.launch());
 
-    // let (a, b) = tokio::join!( FIXME: remove
-    //     verify_handle,
-    //     rocket_handle
-    // );
-
     // Pass mutable refs to be able to manually abort the tasks when needed
-    // NOTE: the passed-in futures are not cancel-safe per se. We enforce safety during the shutdown by means of the following three:
-    //  - spawn_blocking functions: the async runtime cannot cancel these functions and so these run till they return
-    //  - Arc<RwLock<Coordinator>>: all of the functions involved in the shutdown process require a write lock of the coordinator, so they cannot proceed
-    //      until the previous function has released the lock
-    //  - The involved spawn_blocking functions acquire a write lock for their entire duration, meaning no other function can be executed in parallel
-    //  An alternative solution for a graceful shutdown would have been to implement a communication channel shared by the three tasks to notify the start
-    //  of the shutdown preocedure and implement the cleanup logic in each of these functions
+    // NOTE: the passed-in futures are not cancel-safe per se. We enforce safety during the shutdown by means of a communication channel to notify the concurrent tasks to terminate
+    // The rocket tasks is instead shut down from the Shutdown handler
     tokio::select! {
         update_result = &mut update_handle => {
             match update_result.expect("Update task panicked") {
@@ -305,19 +310,25 @@ pub async fn main() {
 
                     // Cancel concurrent tasks
                     info!("Cancelling concurrent tasks...");
-                    verify_handle.abort();
+                    tx.send(true).expect("Error while sending shutdown notification to concurrent tasks, channel is already closed");
                     shutdown.notify();
 
-                    // FIXME: channel
-
-                    tokio::join!( //FIXME: handle
+                    let (v_res, r_res) = tokio::join!(
                         verify_handle,
                         rocket_handle
                     );
 
+                    if let Err(e) = v_res {
+                        warn!("Ignoring error while joining verify task: {}", e);
+                    }
+
+                    if let Err(e) = r_res {
+                        warn!("Ignoring error while joining rocket task: {}", e);
+                    }
+
                     info!("Concurrent tasks terminated");
 
-                    finalize_state(coordinator).await.expect("Failed ceremony state finalize");
+                    finalize_ceremony(coordinator).await.expect("Failed ceremony state finalize");
                 },
                 Err(e) => error!("Update of Coordinator failed: {}", e),
             }
@@ -336,16 +347,24 @@ pub async fn main() {
 
                     // Cancel concurrent tasks
                     info!("Cancelling concurrent tasks...");
-                    verify_handle.abort();
-                    update_handle.abort();
+                    tx.send(true).expect("Error while sending shutdown notification to concurrent tasks, channel is already closed");
 
-                    tokio::join!( //FIXME: handle
+                    let (v_res, u_res) = tokio::join!(
                         verify_handle,
                         update_handle
                     );
+
+                    if let Err(e) = v_res {
+                        warn!("Ignoring error while joining verify task: {}", e);
+                    }
+
+                    if let Err(e) = u_res {
+                        warn!("Ignoring error while joining update task: {}", e);
+                    }
+        
                     info!("Concurrent tasks terminated");
                     
-                    finalize_state(coordinator).await.expect("Failed ceremony state finalize");
+                    finalize_ceremony(coordinator).await.expect("Failed ceremony state finalize");
                 },
                 Err(e) => error!("Rocket failed: {}", e)
             }

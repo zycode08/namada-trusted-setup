@@ -439,6 +439,7 @@ impl<'r> FromRequest<'r> for Secret {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match request.headers().get_one(ACCESS_SECRET_HEADER) { 
             //WARNING: not constant-time
+            //FIXME:
             Some(secret) if secret == *ACCESS_SECRET => Outcome::Success(Self),
             _ => Outcome::Failure((Status::new(401), ResponseError::InvalidSecret)),
         }
@@ -653,7 +654,6 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 
     // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
     //  no external verifiers
-    // NOTE: atomic spawn_blocking function, cannot be cancelled by the async executor, must be executed atomically
     task::spawn_blocking(move || -> Result<()> {
         for (task, _) in write_lock.get_pending_verifications().to_owned() {
             if let Err(e) = write_lock.default_verify(&task) {
@@ -693,7 +693,6 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {
     let mut write_lock = coordinator.write_owned().await;
 
-    // NOTE: atomic spawn_blocking function, cannot be cancelled by the async executor, must be executed atomically
     task::spawn_blocking(move || write_lock.update())
         .await?
         .map_err(|e| ResponseError::CoordinatorError(e))
