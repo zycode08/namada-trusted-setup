@@ -310,31 +310,6 @@ async fn test_get_status() {
 }
 
 #[tokio::test]
-async fn test_get_status() {
-    let access_token = "test-access_token";
-    std::env::set_var("ACCESS_SECRET", access_token);
-    // Spawn the server and get the test context
-    let (ctx, handle) = test_prelude().await;
-    // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
-
-    // Retrieve coordinator.json file with valid token
-    let url = Url::parse(&ctx.coordinator_url).unwrap();
-    let response = requests::get_coordinator_state(&url, access_token).await;
-    assert!(response.is_ok());
-
-    // Check deserialization
-    let _status: CoordinatorState = serde_json::from_slice(&response.unwrap()).unwrap();
-
-    // Provide invalid token
-    let response = requests::get_coordinator_state(&url, "wrong token").await;
-    assert!(response.is_err());
-
-    // Drop the server
-    handle.abort()
-}
-
-#[tokio::test]
 async fn test_get_contributor_queue_status() {
     let client = Client::new();
     // Spawn the server and get the test context
