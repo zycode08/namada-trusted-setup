@@ -26,6 +26,7 @@ use crate::{
     },
     s3::S3Ctx,
     CoordinatorState,
+    coordinator_state::TokenState,
     Participant,
 };
 use rocket::{
@@ -44,13 +45,17 @@ pub async fn join_queue(
     new_participant: NewParticipant,
     token: LazyJson<String>,
 ) -> Result<()> {
-    rest_utils::token_check((*coordinator).clone(), &token).await?;
+    // NOTE: check on the token happens only here meaning that a contributor can join the ceremony at the very last moment of a cohort and
+    // contribute effectively in the following cohort
+    rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     task::spawn_blocking(move || write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10))
         .await?
         .map_err(|e| ResponseError::CoordinatorError(e))
+
+    // FIXME: change state of token if all test passed
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -181,7 +186,7 @@ pub async fn update_cohorts(
     let mut zip = zip::ZipArchive::new(reader).map_err(|e| ResponseError::IoError(e.to_string()))?;
     let mut zip_clone = zip.clone();
 
-    let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashSet<String>>> {
+    let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashMap<String, (Participant, TokenState)>>> {
         let mut cohorts: HashMap<String, Vec<u8>> = HashMap::new();
         let file_names: Vec<String> = zip_clone.file_names().map(|name| name.to_owned()).collect();
 
@@ -195,6 +200,7 @@ pub async fn update_cohorts(
             cohorts.insert(file, buffer);
         }
 
+        // FIXME: copy the previous token states to the new tokens here or in load_tokens_from_bytes
         Ok(CoordinatorState::load_tokens_from_bytes(&cohorts))
     })
     .await
@@ -209,11 +215,11 @@ pub async fn update_cohorts(
     };
 
     match new_tokens.get(cohort) {
-        Some(new_tokens) if new_tokens.len() == old_tokens.len() => {
-            if new_tokens.difference(old_tokens).count() != 0 {
-                return Err(ResponseError::InvalidNewTokens);
+        Some(new_tokens) => {
+            if new_tokens != old_tokens {
+                return Err(ResponseError::InvalidNewTokens)
             }
-        }
+        },
         _ => return Err(ResponseError::InvalidNewTokens),
     }
     drop(read_lock);

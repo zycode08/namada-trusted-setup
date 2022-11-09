@@ -12,6 +12,7 @@ use crate::{
         ParticipantInfo,
         ResetCurrentRoundStorageAction,
         RoundMetrics,
+        TokenState,
     },
     environment::{Deployment, Environment},
     objects::{
@@ -584,7 +585,7 @@ impl Coordinator {
     ///
     /// Updates the set of tokens for the ceremony
     ///
-    pub fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
+    pub fn update_tokens(&mut self, tokens: Vec<HashMap<String, (Participant, TokenState)>>) {
         self.state.update_tokens(tokens)
     }
 
