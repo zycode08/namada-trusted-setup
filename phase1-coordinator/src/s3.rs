@@ -18,14 +18,12 @@ pub const TOKENS_ZIP_FILE: &str = "tokens.zip";
 
 lazy_static! {
     static ref BUCKET: String = std::env::var("AWS_S3_BUCKET").unwrap_or("bucket".to_string());
-
     pub static ref REGION: Region = {
         match std::env::var("AWS_REGION") {
             Ok(region) => Region::from_str(&region).expect("Region must be a valid region"),
             Err(_) => Region::EuWest1,
         }
     };
-
     static ref S3_REGION: Region = Region::Custom {
         name: REGION.name().to_string(),
         endpoint: format!("{}.s3-accelerate.amazonaws.com", *BUCKET),

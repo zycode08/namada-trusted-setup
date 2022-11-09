@@ -126,7 +126,6 @@ async fn generate_secret() -> Result<()> {
         Ok(val) if val == "true" => "prod",
         _ => "master",
     };
-    
 
     let aws_client = SsmClient::new(REGION.clone());
     let put_request = rusoto_ssm::PutParameterRequest {
