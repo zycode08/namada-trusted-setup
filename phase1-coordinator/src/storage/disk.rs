@@ -39,7 +39,7 @@ pub struct Disk {
 
 impl Disk {
     /// Loads a new instance of `Disk`.
-    /// 
+    ///
     /// # Panics
     /// If tokens' files cannot be found on disk
     pub fn load(environment: &Environment) -> Result<Self, CoordinatorError>
@@ -70,7 +70,7 @@ impl Disk {
                 // Load previous state from storage
                 let mut state = match state {
                     Object::CoordinatorState(s) => s,
-                    _ => return Err(CoordinatorError::StorageFailed)
+                    _ => return Err(CoordinatorError::StorageFailed),
                 };
 
                 // Update tokens
@@ -78,11 +78,11 @@ impl Disk {
 
                 // Persist modified state to disk
                 storage.update(&Locator::CoordinatorState, Object::CoordinatorState(state))?
-            },
+            }
             Err(_) => storage.insert(
                 Locator::CoordinatorState,
                 Object::CoordinatorState(CoordinatorState::new(environment.clone(), None, None, None)),
-            )?
+            )?,
         }
 
         // Create the contributions summary locator if it does not exist yet.

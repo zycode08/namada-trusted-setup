@@ -27,15 +27,7 @@ use sha2::Sha256;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{
-    borrow::Cow,
-    convert::TryFrom,
-    io::Cursor,
-    net::IpAddr,
-    ops::Deref,
-    sync::Arc,
-    time::Duration,
-};
+use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 use tracing::warn;
 
@@ -59,7 +51,8 @@ lazy_static! {
         Ok(path) => path,
         Err(_) => "./health.json".to_string(),
     };
-    pub(crate) static ref ACCESS_SECRET: String = std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
+    pub(crate) static ref ACCESS_SECRET: String =
+        std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
 }
 
 pub(crate) type Coordinator = Arc<RwLock<crate::Coordinator>>;
@@ -437,7 +430,7 @@ impl<'r> FromRequest<'r> for Secret {
     type Error = ResponseError;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        match request.headers().get_one(ACCESS_SECRET_HEADER) { 
+        match request.headers().get_one(ACCESS_SECRET_HEADER) {
             //WARNING: not constant-time
             //FIXME:
             Some(secret) if secret == *ACCESS_SECRET => Outcome::Success(Self),
@@ -639,11 +632,11 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &String) -> Res
 }
 
 /// Performs the verification of the pending contributions
-/// 
+///
 /// # Cancel safety
-/// 
+///
 /// https://docs.rs/tokio/latest/tokio/macro.select.html#cancellation-safety
-/// 
+///
 /// Because of the use of [`tokio::sync::rwlock::RwLock::write_owned`], which is not cancel safe, and a spawned blocking
 /// task, which cannot be cancelled, this function is not cancel safe.
 pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
@@ -679,15 +672,18 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
                     .ban_participant(&finished_contributor)
                     .map_err(|e| ResponseError::CoordinatorError(e));
             }
-    } Ok(())}).await?
+        }
+        Ok(())
+    })
+    .await?
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)
-/// 
+///
 /// # Cancel safety
-/// 
+///
 /// https://docs.rs/tokio/latest/tokio/macro.select.html#cancellation-safety
-/// 
+///
 /// Because of the use of [`tokio::sync::rwlock::RwLock::write_owned`], which is not cancel safe, and a spawned blocking
 /// task, which cannot be cancelled, this function is not cancel safe.
 pub async fn perform_coordinator_update(coordinator: Coordinator) -> Result<()> {

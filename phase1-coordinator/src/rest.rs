@@ -6,20 +6,35 @@ use std::{
 };
 use tracing::warn;
 
+use crate::{
+    objects::{ContributionInfo, LockedLocators},
+    rest_utils::{
+        self,
+        ContributorStatus,
+        Coordinator,
+        CurrentContributor,
+        LazyJson,
+        NewParticipant,
+        PostChunkRequest,
+        ResponseError,
+        Result,
+        Secret,
+        ServerAuth,
+        HEALTH_PATH,
+        TOKENS_PATH,
+        TOKENS_ZIP_FILE,
+    },
+    s3::S3Ctx,
+    CoordinatorState,
+    Participant,
+};
 use rocket::{
     get,
     post,
     serde::json::Json,
     tokio::{fs, task},
     Shutdown,
-    State
-};
-use crate::{
-    objects::{ContributionInfo, LockedLocators},
-    s3::S3Ctx,
-    rest_utils::{self, Coordinator, HEALTH_PATH, ResponseError, ContributorStatus, NewParticipant, CurrentContributor, LazyJson, PostChunkRequest, ServerAuth, TOKENS_ZIP_FILE, TOKENS_PATH, Secret, Result},
-    CoordinatorState,
-    Participant
+    State,
 };
 
 /// Add the incoming contributor to the queue of contributors.
