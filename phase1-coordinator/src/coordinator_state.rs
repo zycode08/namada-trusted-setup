@@ -1053,11 +1053,16 @@ impl CoordinatorState {
     /// These two parameters are meant to stay constant during the entire ceremony.
     /// The tokens are instead reloaded from files when restarting a coordinator to support a token update
     #[inline]
-    pub(super) fn new(environment: Environment, ceremony_start_time: Option<OffsetDateTime>, cohort_duration: Option<u64>, tokens: Option<Vec<HashSet<String>>>) -> Self {        
-        let cohort_duration = cohort_duration.unwrap_or_else(|| {match std::env::var("NAMADA_COHORT_TIME") {
+    pub(super) fn new(
+        environment: Environment,
+        ceremony_start_time: Option<OffsetDateTime>,
+        cohort_duration: Option<u64>,
+        tokens: Option<Vec<HashSet<String>>>,
+    ) -> Self {
+        let cohort_duration = cohort_duration.unwrap_or_else(|| match std::env::var("NAMADA_COHORT_TIME") {
             Ok(n) => n.parse::<u64>().unwrap(),
             Err(_) => 86400,
-        }});
+        });
 
         Self {
             environment,
@@ -1186,7 +1191,12 @@ impl CoordinatorState {
                 contributors_ips: std::mem::take(&mut self.contributors_ips),
                 queue,
                 banned: std::mem::take(&mut self.banned),
-                ..Self::new(self.environment.clone(), Some(self.ceremony_start_time), Some(self.cohort_duration), Some(std::mem::take(&mut self.tokens)))
+                ..Self::new(
+                    self.environment.clone(),
+                    Some(self.ceremony_start_time),
+                    Some(self.cohort_duration),
+                    Some(std::mem::take(&mut self.tokens)),
+                )
             };
 
             self.initialize(new_round_height);
@@ -1228,7 +1238,12 @@ impl CoordinatorState {
                 queue: std::mem::take(&mut self.queue),
                 banned: std::mem::take(&mut self.banned),
                 dropped: std::mem::take(&mut self.dropped),
-                ..Self::new(self.environment.clone(), Some(self.ceremony_start_time), Some(self.cohort_duration), Some(std::mem::take(&mut self.tokens)))
+                ..Self::new(
+                    self.environment.clone(),
+                    Some(self.ceremony_start_time),
+                    Some(self.cohort_duration),
+                    Some(std::mem::take(&mut self.tokens)),
+                )
             };
 
             self.initialize(current_round_height);
@@ -3683,7 +3698,7 @@ mod tests {
         let contributor_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone(), None, None,  None);
+        let mut state = CoordinatorState::new(environment.clone(), None, None, None);
         assert_eq!(0, state.queue.len());
         assert_eq!(None, state.current_round_height);
 
@@ -3738,7 +3753,7 @@ mod tests {
         let environment = TEST_ENVIRONMENT.clone();
 
         // Initialize a new coordinator state.
-        let mut state = CoordinatorState::new(environment.clone(), None, None,  None);
+        let mut state = CoordinatorState::new(environment.clone(), None, None, None);
         assert_eq!(0, state.queue.len());
         assert_eq!(None, state.current_round_height);
 

@@ -17,7 +17,13 @@ use rocket::{
     self,
     catchers,
     routes,
-    tokio::{self, sync::{RwLock, watch::{self, Receiver}}},
+    tokio::{
+        self,
+        sync::{
+            watch::{self, Receiver},
+            RwLock,
+        },
+    },
 };
 
 use anyhow::Result;
@@ -51,7 +57,7 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, recv: Receive
         // Return if shutdown signal has been received on the channel
         if *recv.borrow() {
             info!("Received shutdown signal, exiting update task");
-            return Ok(())
+            return Ok(());
         }
     }
 }
@@ -77,7 +83,7 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>, recv: Recei
         // Return if shutdown signal has been received on the channel
         if *recv.borrow() {
             info!("Received shutdown signal, exiting verify task");
-            return Ok(())
+            return Ok(());
         }
     }
 }
@@ -288,7 +294,7 @@ pub async fn main() {
     // Create channel to signal the update and verify tasks when to terminate (rocket tasks can be terminated with the shutdown handler)
     let (tx, rx) = watch::channel(false);
     let shutdown = ignite_rocket.shutdown();
-    
+
     // Spawn task to update the coordinator periodically
     let mut update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator, rx.clone()));
 
@@ -306,7 +312,7 @@ pub async fn main() {
             match update_result.expect("Update task panicked") {
                 Ok(()) => {
                     // Cohorts are over, terminate the ceremony
-                    info!("Cohorts are over, notifying rest server to shut down...");   
+                    info!("Cohorts are over, notifying rest server to shut down...");
 
                     // Cancel concurrent tasks
                     info!("Cancelling concurrent tasks...");
@@ -361,9 +367,9 @@ pub async fn main() {
                     if let Err(e) = u_res {
                         warn!("Ignoring error while joining update task: {}", e);
                     }
-        
+
                     info!("Concurrent tasks terminated");
-                    
+
                     finalize_ceremony(coordinator).await.expect("Failed ceremony state finalize");
                 },
                 Err(e) => error!("Rocket failed: {}", e)
@@ -371,6 +377,3 @@ pub async fn main() {
         }
     }
 }
-
-// FIXME: run test and fmt
-// FIXME: rebase 
