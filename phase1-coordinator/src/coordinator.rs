@@ -12,7 +12,6 @@ use crate::{
         ParticipantInfo,
         ResetCurrentRoundStorageAction,
         RoundMetrics,
-        TokenState,
     },
     environment::{Deployment, Environment},
     objects::{
@@ -387,7 +386,7 @@ impl Coordinator {
         // Load an instance of storage.
         let storage = environment.storage()?;
         // Load an instance of coordinator self.
-        let state = match storage.get(&Locator::CoordinatorState)? {
+        let state = match storage.get(&Locator::CoordinatorState)? { //FIXME: how does it handle tmp_state which is not in the file, should recreate it with Default
             Object::CoordinatorState(state) => state,
             _ => return Err(CoordinatorError::StorageFailed),
         };
@@ -585,7 +584,7 @@ impl Coordinator {
     ///
     /// Updates the set of tokens for the ceremony
     ///
-    pub fn update_tokens(&mut self, tokens: Vec<HashMap<String, (Participant, TokenState)>>) {
+    pub fn update_tokens(&mut self, tokens: Vec<HashSet<String>>) {
         self.state.update_tokens(tokens)
     }
 
@@ -645,11 +644,12 @@ impl Coordinator {
         &mut self,
         participant: Participant,
         participant_ip: Option<IpAddr>,
+        token: String,
         reliability_score: u8,
     ) -> Result<(), CoordinatorError> {
         // Attempt to add the participant to the next round.
         self.state
-            .add_to_queue(participant, participant_ip, reliability_score, self.time.as_ref())?;
+            .add_to_queue(participant, participant_ip, token, reliability_score, self.time.as_ref())?;
 
         // Save the coordinator state in storage.
         self.save_state()?;
@@ -1081,6 +1081,9 @@ impl Coordinator {
             let response = ContributionLocator::new(round_height, chunk_id, contribution_id, false);
             self.storage.remove(&Locator::ContributionFile(response.clone()))?;
 
+            // Blacklist participant's token and ip
+            self.state.blacklist_participant(participant)?;
+
             // Save the coordinator state in storage.
             self.save_state()?;
 
@@ -1115,6 +1118,9 @@ impl Coordinator {
                     let completed_task = Task::new(chunk_id, contribution_id);
                     self.state
                         .completed_task(participant, &completed_task, self.time.as_ref())?;
+
+                    // Blacklist participant's token and ip
+                    self.state.blacklist_participant(participant)?;
 
                     // Save the coordinator state in storage.
                     self.save_state()?;
@@ -2847,6 +2853,7 @@ mod tests {
                 coordinator.state.add_to_queue(
                     contributor.clone(),
                     Some(*contributor_ip),
+                    String::from("irrelevant_token"),
                     10,
                     coordinator.time.as_ref(),
                 )?;
