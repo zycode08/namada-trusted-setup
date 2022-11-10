@@ -13,6 +13,7 @@ use phase1_coordinator::{
 };
 
 use reqwest::Url;
+use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -85,6 +86,33 @@ pub enum Branches {
     },
 }
 
+pub enum TokenCohort {
+    Finished,
+    InProgress,
+    Pending
+} 
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Token {
+    pub from: i64,
+    pub to: i64,
+    pub index: u64,
+    pub id: String
+}
+
+impl Token {
+    pub fn is_valid_cohort(&self) -> TokenCohort {
+        let utc_now = chrono::offset::Utc::now().timestamp();
+        if self.from < utc_now && utc_now < self.to {
+            TokenCohort::InProgress
+        } else if utc_now < self.from && self.from < self.to {
+            TokenCohort::Pending
+        } else {
+            TokenCohort::Finished
+        }
+    }
+}
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "namada-ts", about = "Namada CLI for trusted setup.")]
 pub enum CeremonyOpt {
@@ -100,6 +128,9 @@ pub enum CeremonyOpt {
     GetContributions(CoordinatorUrl),
     #[structopt(about = "Get the state of the coordinator")]
     GetState(CoordinatorState),
+    #[cfg(debug_assertions)]
+    #[structopt(about = "Verify the pending contributions")]
+    VerifyContributions(CoordinatorUrl),
     #[structopt(about = "Update the cohorts' tokens")]
     UpdateCohorts(CoordinatorUrl),
     #[cfg(debug_assertions)]
