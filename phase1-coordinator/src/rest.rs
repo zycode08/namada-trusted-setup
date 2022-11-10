@@ -26,7 +26,6 @@ use crate::{
     },
     s3::S3Ctx,
     CoordinatorState,
-    coordinator_state::TokenState,
     Participant,
 };
 use rocket::{
@@ -46,16 +45,16 @@ pub async fn join_queue(
     token: LazyJson<String>,
 ) -> Result<()> {
     // NOTE: check on the token happens only here meaning that a contributor can join the ceremony at the very last moment of a cohort and
-    // contribute effectively in the following cohort
+    // contribute effectively in the following cohort. Forcing the contribution to happen in the correct cohort would take more complicated checks
+    // and could lower the amount of contributions received
     rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    task::spawn_blocking(move || write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10))
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))
-
-    // FIXME: change state of token if all test passed
+    task::spawn_blocking(move || {
+        write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, token.clone(), 10)
+    }).await?
+        .map_err(|e| ResponseError::CoordinatorError(e)) 
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -186,7 +185,7 @@ pub async fn update_cohorts(
     let mut zip = zip::ZipArchive::new(reader).map_err(|e| ResponseError::IoError(e.to_string()))?;
     let mut zip_clone = zip.clone();
 
-    let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashMap<String, (Participant, TokenState)>>> {
+    let new_tokens = task::spawn_blocking(move || -> Result<Vec<HashSet<String>>> {
         let mut cohorts: HashMap<String, Vec<u8>> = HashMap::new();
         let file_names: Vec<String> = zip_clone.file_names().map(|name| name.to_owned()).collect();
 
@@ -200,7 +199,7 @@ pub async fn update_cohorts(
             cohorts.insert(file, buffer);
         }
 
-        // FIXME: copy the previous token states to the new tokens here or in load_tokens_from_bytes
+        // NOTE: tokens currently in use are still in memory, no need to take care of those
         Ok(CoordinatorState::load_tokens_from_bytes(&cohorts))
     })
     .await
@@ -342,6 +341,7 @@ pub async fn post_contribution_info(
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
+/// FIXME: should state json as return fomrat? Why returns a file?
 #[get("/contribution_info")]
 pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
@@ -353,6 +353,7 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
 }
 
 /// Retrieve the coordinator.json status file
+/// /// FIXME: should state json as return fomrat? Why returns a file?
 #[get("/coordinator_status")]
 pub async fn get_coordinator_state(coordinator: &State<Coordinator>, _auth: Secret) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;

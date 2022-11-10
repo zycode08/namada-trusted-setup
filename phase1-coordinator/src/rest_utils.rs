@@ -54,6 +54,10 @@ lazy_static! {
     };
     pub(crate) static ref ACCESS_SECRET: String =
         std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
+    static ref TOKEN_BLACKLIST: bool = match std::env::var("TOKEN_BLACKLIST") {
+        Ok(s) if s == "true" => true,
+        _ => false,
+    };
 }
 
 pub(crate) type Coordinator = Arc<RwLock<crate::Coordinator>>;
@@ -97,6 +101,10 @@ pub enum ResponseError {
     SerdeError(String),
     #[error("Error while terminating the ceremony: {0}")]
     ShutdownError(String),
+    #[error("The provided token is currently being used in the ceremony")]
+    TokenAlreadyInUse,
+    #[error("The provided token has already been used in the ceremony")]
+    BlacklistedToken,
     #[error("The participant {0} is not allowed to access the endpoint {1} because of: {2}")]
     UnauthorizedParticipant(Participant, String, String),
     #[error("Could not find contributor with public key {0}")]
@@ -607,6 +615,7 @@ impl PostChunkRequest {
 }
 
 /// Checks the validity of the token for the ceremony.
+/// Returns the current cohort index
 pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result<()> {
     // Check if the token's format is correct
     let regex = Regex::new(TOKEN_REGEX).unwrap();
@@ -615,23 +624,28 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result
         return Err(ResponseError::InvalidTokenFormat);
     }
 
-    // Calculate the cohort number
+    // Check that token is not in use nor blacklisted (only if env is set)
     let read_lock = coordinator.read().await;
+    if *TOKEN_BLACKLIST {
+        if read_lock.state().is_token_in_use(token) {
+            return Err(ResponseError::TokenAlreadyInUse);
+        }
+
+        if read_lock.state().is_token_blacklisted(token) {
+            return Err(ResponseError::BlacklistedToken);
+        }
+    }
+
+    // Check that the token is correct for the current cohort number
     let cohort = read_lock.state().get_current_cohort_index();
     let tokens = match read_lock.state().tokens(cohort) {
         Some(t) => t,
         None => return Err(ResponseError::CeremonyIsOver),
     };
 
-    if !tokens.contains_key(token) {
+    if !tokens.contains(token) {
         return Err(ResponseError::InvalidToken(cohort + 1));
     }
-
-    // FIXME: check token not blacklisted nor in use only if env variable is set
-    if !read_lock.state().is_token_blacklisted(cohort, token)? {
-        return Err(ResponseError::InvalidToken(cohort + 1)); //FIXME: change error, differentiate between blacklist and currently in use
-    }
-
 
     Ok(())
 }
