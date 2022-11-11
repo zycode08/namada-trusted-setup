@@ -2853,7 +2853,7 @@ mod tests {
                 coordinator.state.add_to_queue(
                     contributor.clone(),
                     Some(*contributor_ip),
-                    String::from("irrelevant_token"),
+                    String::from("irrelevant_token"), // No check will be done on this token
                     10,
                     coordinator.time.as_ref(),
                 )?;

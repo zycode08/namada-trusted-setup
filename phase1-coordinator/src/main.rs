@@ -380,6 +380,3 @@ pub async fn main() {
         }
     }
 }
-
-// FIXME: add unit and e2e tests for token blacklisting
-// FIXME: add test for temp state reload

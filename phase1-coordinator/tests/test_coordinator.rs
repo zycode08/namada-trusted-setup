@@ -70,6 +70,9 @@ struct TestCtx {
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
+    std::env::set_var("TOKEN_BLACKLIST", "true");
+    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
+
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
@@ -107,7 +110,7 @@ fn build_context() -> TestCtx {
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
-    let token = String::from("test-token");
+    let token = String::from("7fe7c70eda056784fcf4");
 
     coordinator.initialize().unwrap();
     let coordinator_keypair = KeyPair::custom_new(
@@ -420,7 +423,6 @@ fn test_update_coordinator() {
 fn test_join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
-    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
 
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
@@ -447,7 +449,7 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!("4eb8d831fdd098390683")),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -458,19 +460,30 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.contributors[1].keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!("4935c7fbd09e4f925f75")),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Wrong request, token already in queue
+    let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[1].keypair,
+        Some(&format!("4eb8d831fdd098390683")),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Wrong request, already existing contributor
-    let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!("4935c7fbd09e4f925f75")),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -647,6 +660,7 @@ fn test_wrong_post_contribution_info() {
 /// - get_contributions_info
 /// - Update cohorts' tokens
 /// - join_queue with already contributed Ip
+/// - join_queue with already contributed token
 /// - Skip to second cohort
 /// - Try joinin queue with expired token
 /// - Try joinin queue with correct token
@@ -654,7 +668,6 @@ fn test_wrong_post_contribution_info() {
 #[test]
 fn test_contribution() {
     const COHORT_TIME: u64 = 15;
-    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
     std::env::set_var("NAMADA_COHORT_TIME", COHORT_TIME.to_string()); // 15 seconds for each cohort
     use setup_utils::calculate_hash;
 
@@ -798,6 +811,19 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
+        Some(&format!("4935c7fbd09e4f925f75")),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Join queue with already contributed Token
+    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
+
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
         Some(&format!("7fe7c70eda056784fcf4")),
     );
     let response = req.dispatch();
@@ -805,8 +831,6 @@ fn test_contribution() {
     assert!(response.body().is_some());
 
     // Skip to second cohort and try joining the queue with expired token
-    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
-
     let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
     std::thread::sleep(std::time::Duration::from_secs(sleep_time));
 
