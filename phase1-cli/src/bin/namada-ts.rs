@@ -22,7 +22,8 @@ use phase1_cli::{
     keys::{self, EncryptedKeypair, TomlConfig},
     requests,
     CeremonyOpt,
-    CoordinatorUrl, Token,
+    CoordinatorUrl,
+    Token,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -32,11 +33,12 @@ use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
+    process,
     sync::Arc,
-    time::Instant, process,
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Utc};
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
@@ -240,7 +242,7 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
-    let end_lock_time = contrib_info.timestamps.challenge_locked + Duration::minutes(20);
+    let end_lock_time = contrib_info.timestamps.challenge_locked + chrono::Duration::minutes(20);
     println!(
         "{}",
         format!("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts now on {} and ends in 20 minutes on {}  \nHave fun!",
@@ -441,14 +443,19 @@ async fn contribution_loop(
         let token_data: Token = serde_json::from_str(&decoded_token).expect("Can't deserialize the token.");
         match token_data.is_valid_cohort() {
             phase1_cli::TokenCohort::Finished => {
-                println!("Your cohort number is {} and is alredy completed.", token_data.index);
+                println!("Your cohort round is {} and is alredy completed.", token_data.index);
                 process::exit(0);
-            },
+            }
             phase1_cli::TokenCohort::Pending => {
-                println!("Your cohort number is {} and will start at {} and finish at {}.", token_data.index, token_data.from, token_data.to);
+                let token_from_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.from));
+                let token_to_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.to));
+                println!(
+                    "Your cohort round is {} and will start at {} and finish at {}.",
+                    token_data.index, token_from_datetime, token_to_datetime
+                );
                 process::exit(0);
-            },
-            _ => ()
+            }
+            _ => (),
         }
     } else {
         println!("The token provided is not valid.");

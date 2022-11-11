@@ -13,7 +13,7 @@ use phase1_coordinator::{
 };
 
 use reqwest::Url;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -89,23 +89,23 @@ pub enum Branches {
 pub enum TokenCohort {
     Finished,
     InProgress,
-    Pending
-} 
+    Pending,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Token {
-    pub from: i64,
-    pub to: i64,
+    pub from: u64,
+    pub to: u64,
     pub index: u64,
-    pub id: String
+    pub id: String,
 }
 
 impl Token {
     pub fn is_valid_cohort(&self) -> TokenCohort {
-        let utc_now = chrono::offset::Utc::now().timestamp();
-        if self.from < utc_now && utc_now < self.to {
+        let utc_now = chrono::offset::Utc::now().timestamp() as u64;
+        if self.from <= utc_now && utc_now < self.to {
             TokenCohort::InProgress
-        } else if utc_now < self.from && self.from < self.to {
+        } else if utc_now < self.from {
             TokenCohort::Pending
         } else {
             TokenCohort::Finished
