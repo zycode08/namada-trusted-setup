@@ -38,7 +38,7 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
 pub const UNKNOWN: &str = "Unknown";
-pub const TOKEN_REGEX: &str = r"^[[:xdigit:]]{20}$";
+pub const TOKEN_REGEX: &str = r"^[A-HJ-NP-Za-km-z1-9]*$";
 
 // Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
@@ -77,7 +77,7 @@ pub enum ResponseError {
     InvalidSignature,
     #[error("Authentification token for cohort {0} is invalid")]
     InvalidToken(usize),
-    #[error("Authentification token has an invalid token format (hexadecimal 10 bytes)")]
+    #[error("Authentification token has an invalid token format")]
     InvalidTokenFormat,
     #[error("Io Error: {0}")]
     IoError(String),

@@ -23,6 +23,7 @@ use phase1_cli::{
     requests,
     CeremonyOpt,
     CoordinatorUrl,
+    Token,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -32,11 +33,12 @@ use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
+    process,
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Utc};
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
@@ -46,6 +48,8 @@ use tokio::{fs as async_fs, io::AsyncWriteExt, task::JoinHandle, time};
 use tokio_util::io::ReaderStream;
 
 use tracing::{debug, trace};
+
+use bs58;
 
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
@@ -238,7 +242,7 @@ async fn contribute(
     println!("{} Locking chunk", "[4/11]".bold().dimmed());
     let locked_locators = requests::get_lock_chunk(client, coordinator, keypair).await?;
     contrib_info.timestamps.challenge_locked = Utc::now();
-    let end_lock_time = contrib_info.timestamps.challenge_locked + Duration::minutes(20);
+    let end_lock_time = contrib_info.timestamps.challenge_locked + chrono::Duration::minutes(20);
     println!(
         "{}",
         format!("From now on, you will have a maximum of 20 minutes to contribute and upload your contribution after which you will be dropped out of the ceremony!\nYour time starts now on {} and ends in 20 minutes on {}  \nHave fun!",
@@ -426,12 +430,37 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort, or the FFA (Free For All) token available to everybody towards the end of the ceremony.\nExample token: 'b19271c0e0754cb7d31d'".bright_cyan());
+    println!("{}","You can only join the ceremony with the unique token you received by email for your cohort.".bright_cyan());
     let token = io::get_user_input(
-        "Enter your unique token or the FFA token (20 characters in hexadecimal format):".bright_yellow(),
+        "Enter your token:".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
     )
     .unwrap();
+
+    let decoded_bytes = bs58::decode(token.clone()).into_vec();
+    if let Ok(token_bytes) = decoded_bytes {
+        let decoded_token = String::from_utf8(token_bytes).expect("Can't decode the token");
+        let token_data: Token = serde_json::from_str(&decoded_token).expect("Can't deserialize the token.");
+        match token_data.is_valid_cohort() {
+            phase1_cli::TokenCohort::Finished => {
+                println!("Your cohort round is {} and is alredy completed.", token_data.index);
+                process::exit(0);
+            }
+            phase1_cli::TokenCohort::Pending => {
+                let token_from_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.from));
+                let token_to_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.to));
+                println!(
+                    "Your cohort round is {} and will start at {} and finish at {}.",
+                    token_data.index, token_from_datetime, token_to_datetime
+                );
+                process::exit(0);
+            }
+            _ => (),
+        }
+    } else {
+        println!("The token provided is not valid.");
+        process::exit(0);
+    };
 
     requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
