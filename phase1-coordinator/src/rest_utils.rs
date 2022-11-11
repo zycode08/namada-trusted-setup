@@ -121,6 +121,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
         let mut builder = Response::build();
 
         let response_code = match self {
+            ResponseError::BlacklistedToken => Status::Unauthorized,
             ResponseError::CeremonyIsOver => Status::Unauthorized,
             ResponseError::InvalidHeader(_) => Status::BadRequest,
             ResponseError::InvalidSecret => Status::Unauthorized,
@@ -132,6 +133,7 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
             ResponseError::MissingSigningKey => Status::BadRequest,
             ResponseError::SerdeError(_) => Status::UnprocessableEntity,
+            ResponseError::TokenAlreadyInUse => Status::Unauthorized,
             ResponseError::UnauthorizedParticipant(_, _, _) => Status::Unauthorized,
             ResponseError::WrongDigestEncoding(_) => Status::BadRequest,
             _ => Status::InternalServerError,
