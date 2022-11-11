@@ -264,7 +264,9 @@ async fn test_update_cohorts() {
     std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
-    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]"]);
+    let new_invalid_tokens = get_serialized_tokens_zip(vec![
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]",
+    ]);
 
     // Wrong, request from non-coordinator participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();

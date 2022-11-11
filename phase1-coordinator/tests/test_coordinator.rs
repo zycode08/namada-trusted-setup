@@ -110,7 +110,9 @@ fn build_context() -> TestCtx {
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
-    let token = String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C");
+    let token = String::from(
+        "9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C",
+    );
 
     coordinator.initialize().unwrap();
     let coordinator_keypair = KeyPair::custom_new(
@@ -276,7 +278,9 @@ fn test_update_cohorts() {
     std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
-    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]"]);
+    let new_invalid_tokens = get_serialized_tokens_zip(vec![
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]",
+    ]);
 
     // Wrong, request from non-coordinator participant
     let mut req = client.post("/update_cohorts");
@@ -431,7 +435,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV3")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV3"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -449,7 +455,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -460,7 +468,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.contributors[1].keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -472,7 +482,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.contributors[1].keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -483,7 +495,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -811,7 +825,9 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -824,7 +840,9 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -838,7 +856,9 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -849,7 +869,9 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
