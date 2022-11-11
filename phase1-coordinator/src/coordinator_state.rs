@@ -945,7 +945,7 @@ impl Default for RoundMetrics {
 /// A temporary runtime state holding values which are specific to the current ceremony run. This state must not be persisted to 
 /// storage to allow a reset of it in case of a ceremony restart
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TmpState { //FIXME: references?
+struct TmpState {
     /// The list of valid tokens for each cohort
     tokens: Vec<HashSet<String>>,
     /// The map of tokens currently in ceremony
@@ -1511,12 +1511,10 @@ impl CoordinatorState {
         self.tmp_state.tokens.get(cohort)
     }
 
-    // FIXME: change drain with retain?
-    // FIXME: how is the env used?
     ///
     /// Moves the ip address and token from the list of currently in use to the black lists
     /// 
-    pub fn blacklist_participant(&mut self, participant: &Participant) -> Result<(), CoordinatorError> { //FIXME: are errors propagated and do they shut the server down? They should
+    pub fn blacklist_participant(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
         // Blacklist token
         let target_token = self.tmp_state.tokens_in_use.iter().find(|(_, part)| *part == participant).ok_or(CoordinatorError::Error(anyhow!("Missing token for participant {}", participant)))?.0.clone();
 
@@ -2318,10 +2316,10 @@ impl CoordinatorState {
         // Remove temporary state if participant is a contributor
         if let Participant::Contributor(_) = participant {
             // Remove ip (if any) from the list of current ips to allow the participant to rejoin
-            self.tmp_state.current_ips = self.tmp_state.current_ips.drain().filter(|(_, contributor)| contributor != participant).collect();
+            self.tmp_state.current_ips.retain(|_, part| part != participant);
 
             // Remove token from the list of current tokens
-            self.tmp_state.tokens_in_use = self.tmp_state.tokens_in_use.drain().filter(|(_, contributor)| contributor != participant).collect();
+            self.tmp_state.tokens_in_use.retain(|_, part| part != participant);
         }
 
         // Remove the participant from the queue and precommit, if present.
@@ -2597,11 +2595,7 @@ impl CoordinatorState {
             .collect();
 
         // Unban ip
-        self.blacklisted_ips = self
-            .blacklisted_ips
-            .drain()
-            .filter(|(_, contributor)| contributor != participant)
-            .collect();
+        self.blacklisted_ips.retain(|_, part| part != participant);
     }
 
     ///
