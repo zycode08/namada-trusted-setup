@@ -52,9 +52,15 @@ pub async fn join_queue(
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     task::spawn_blocking(move || {
-        write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, token.clone(), 10)
-    }).await?
-        .map_err(|e| ResponseError::CoordinatorError(e)) 
+        write_lock.add_to_queue(
+            new_participant.participant,
+            new_participant.ip_address,
+            token.clone(),
+            10,
+        )
+    })
+    .await?
+    .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -216,9 +222,9 @@ pub async fn update_cohorts(
     match new_tokens.get(cohort) {
         Some(new_tokens) => {
             if new_tokens != old_tokens {
-                return Err(ResponseError::InvalidNewTokens)
+                return Err(ResponseError::InvalidNewTokens);
             }
-        },
+        }
         _ => return Err(ResponseError::InvalidNewTokens),
     }
     drop(read_lock);

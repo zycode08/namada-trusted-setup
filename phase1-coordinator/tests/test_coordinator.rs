@@ -65,7 +65,7 @@ struct TestCtx {
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
     // Keep TempDir in scope for some tests
-    _tokens_tmp_dir: tempfile::TempDir
+    _tokens_tmp_dir: tempfile::TempDir,
 }
 
 /// Build the rocket server for testing with the proper configuration.
@@ -188,7 +188,7 @@ fn build_context() -> TestCtx {
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
         coordinator: coord_verifier,
-        _tokens_tmp_dir: tmp_dir
+        _tokens_tmp_dir: tmp_dir,
     }
 }
 

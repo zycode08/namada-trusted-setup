@@ -1249,10 +1249,20 @@ fn coordinator_drop_contributor_and_release_locks() {
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
     coordinator
-        .add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), token3, 10)
+        .add_to_queue(
+            test_contributor_3.participant.clone(),
+            Some(contributor_3_ip),
+            token3,
+            10,
+        )
         .unwrap();
     coordinator
-        .add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), token4, 10)
+        .add_to_queue(
+            test_contributor_4.participant.clone(),
+            Some(contributor_4_ip),
+            token4,
+            10,
+        )
         .unwrap();
 
     // Update the ceremony to round 2.
@@ -1388,10 +1398,20 @@ fn coordinator_drop_several_contributors() {
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
     coordinator
-        .add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), token3, 10)
+        .add_to_queue(
+            test_contributor_3.participant.clone(),
+            Some(contributor_3_ip),
+            token3,
+            10,
+        )
         .unwrap();
     coordinator
-        .add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), token4, 10)
+        .add_to_queue(
+            test_contributor_4.participant.clone(),
+            Some(contributor_4_ip),
+            token4,
+            10,
+        )
         .unwrap();
 
     // Update the ceremony to round 2.
@@ -1553,10 +1573,20 @@ fn coordinator_drop_contributor_and_update_verifier_tasks() {
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
     coordinator
-        .add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), token3, 10)
+        .add_to_queue(
+            test_contributor_3.participant.clone(),
+            Some(contributor_3_ip),
+            token3,
+            10,
+        )
         .unwrap();
     coordinator
-        .add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), token4, 10)
+        .add_to_queue(
+            test_contributor_4.participant.clone(),
+            Some(contributor_4_ip),
+            token4,
+            10,
+        )
         .unwrap();
 
     // Update the ceremony to round 2.
@@ -1882,8 +1912,18 @@ fn drop_all_contributors_and_complete_round() -> anyhow::Result<()> {
     let test_contributor_2 = create_contributor_test_details("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(test_contributor_1.participant.clone(), Some(contributor_1_ip), token, 10)?;
-    coordinator.add_to_queue(test_contributor_2.participant.clone(), Some(contributor_2_ip), token2, 9)?;
+    coordinator.add_to_queue(
+        test_contributor_1.participant.clone(),
+        Some(contributor_1_ip),
+        token,
+        10,
+    )?;
+    coordinator.add_to_queue(
+        test_contributor_2.participant.clone(),
+        Some(contributor_2_ip),
+        token2,
+        9,
+    )?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -1926,8 +1966,18 @@ fn drop_all_contributors_and_complete_round() -> anyhow::Result<()> {
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
-    coordinator.add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), token3, 10)?;
-    coordinator.add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), token4, 10)?;
+    coordinator.add_to_queue(
+        test_contributor_3.participant.clone(),
+        Some(contributor_3_ip),
+        token3,
+        10,
+    )?;
+    coordinator.add_to_queue(
+        test_contributor_4.participant.clone(),
+        Some(contributor_4_ip),
+        token4,
+        10,
+    )?;
 
     // Update the ceremony to round 2.
     coordinator.update()?;

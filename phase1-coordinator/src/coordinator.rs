@@ -648,8 +648,13 @@ impl Coordinator {
         reliability_score: u8,
     ) -> Result<(), CoordinatorError> {
         // Attempt to add the participant to the next round.
-        self.state
-            .add_to_queue(participant, participant_ip, token, reliability_score, self.time.as_ref())?;
+        self.state.add_to_queue(
+            participant,
+            participant_ip,
+            token,
+            reliability_score,
+            self.time.as_ref(),
+        )?;
 
         // Save the coordinator state in storage.
         self.save_state()?;

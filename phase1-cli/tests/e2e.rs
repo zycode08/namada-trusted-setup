@@ -58,14 +58,14 @@ struct TestCtx {
     coordinator: TestParticipant,
     coordinator_url: String,
     // Keep TempDir in scope for some tests
-    _tokens_tmp_dir: tempfile::TempDir
+    _tokens_tmp_dir: tempfile::TempDir,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
 async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) {
     std::env::set_var("TOKEN_BLACKLIST", "true");
     // NOTE: never set NAMADA_MPC_IP_BAN here because we cannot test the IPs here (cannot mock them)
-    
+
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
@@ -127,7 +127,12 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     };
 
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor1_ip), String::from("7fe7c70eda056784fcf4"), 10)
+        .add_to_queue(
+            contributor1.clone(),
+            Some(contributor1_ip),
+            String::from("7fe7c70eda056784fcf4"),
+            10,
+        )
         .unwrap();
     coordinator.update().unwrap();
 
@@ -191,7 +196,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         unknown_participant,
         coordinator: coord_verifier,
         coordinator_url,
-        _tokens_tmp_dir: tmp_dir
+        _tokens_tmp_dir: tmp_dir,
     };
 
     (ctx, handle)
@@ -428,11 +433,23 @@ async fn test_join_queue() {
     .unwrap();
 
     // Wrong request, token already in use
-    response = requests::post_join_queue(&client, &url, &ctx.contributors[1].keypair, &String::from("4eb8d831fdd098390683")).await;
+    response = requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.contributors[1].keypair,
+        &String::from("4eb8d831fdd098390683"),
+    )
+    .await;
     assert!(response.is_err());
 
     // Wrong request, already existing contributor
-    response = requests::post_join_queue(&client, &url, &ctx.unknown_participant.keypair, &String::from("4935c7fbd09e4f925f75")).await;
+    response = requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.unknown_participant.keypair,
+        &String::from("4935c7fbd09e4f925f75"),
+    )
+    .await;
     assert!(response.is_err());
 
     // Drop the server
@@ -518,7 +535,6 @@ async fn test_wrong_post_contribution_info() {
     handle.abort()
 }
 
-// FIXME: test blacklisted token
 /// Test a full contribution:
 ///
 /// - get_challenge_url

@@ -8,8 +8,8 @@ use crate::{
     CoordinatorError,
     TimeSource,
 };
-use lazy_static::lazy_static;
 use anyhow::anyhow;
+use lazy_static::lazy_static;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -942,7 +942,7 @@ impl Default for RoundMetrics {
     }
 }
 
-/// A runtime state holding values which are specific to the current ceremony run. This state must not be persisted to 
+/// A runtime state holding values which are specific to the current ceremony run. This state must not be persisted to
 /// storage to allow a reset of it in case of a ceremony restart
 #[derive(Debug, Clone)]
 struct RuntimeState {
@@ -951,14 +951,18 @@ struct RuntimeState {
     /// The map of tokens currently in ceremony
     tokens_in_use: HashMap<String, Participant>,
     /// The map of ip addresses currently in ceremony
-    current_ips: HashMap<IpAddr, Participant>
+    current_ips: HashMap<IpAddr, Participant>,
 }
 
 impl Default for RuntimeState {
     fn default() -> Self {
         // Called when deserializing CoordinatorState from file
         // Read tokens from files
-        Self { tokens: CoordinatorState::load_tokens(), tokens_in_use: Default::default(), current_ips: Default::default() }
+        Self {
+            tokens: CoordinatorState::load_tokens(),
+            tokens_in_use: Default::default(),
+            current_ips: Default::default(),
+        }
     }
 }
 
@@ -1003,7 +1007,7 @@ pub struct CoordinatorState {
     blacklisted_tokens: HashMap<String, Participant>,
     /// Temporary runtime state, should not be persisted to storage to reset it in case of restart
     #[serde(skip)]
-    runtime_state: RuntimeState
+    runtime_state: RuntimeState,
 }
 
 impl CoordinatorState {
@@ -1076,9 +1080,7 @@ impl CoordinatorState {
     /// These two parameters are meant to stay constant during the entire ceremony.
     /// The tokens are instead reloaded from files when restarting a coordinator to support a token update
     #[inline]
-    pub(super) fn new(
-        environment: Environment,
-    ) -> Self {
+    pub(super) fn new(environment: Environment) -> Self {
         let cohort_duration = match std::env::var("NAMADA_COHORT_TIME") {
             Ok(n) => n.parse::<u64>().unwrap(),
             Err(_) => 86400,
@@ -1105,7 +1107,7 @@ impl CoordinatorState {
             ceremony_start_time,
             cohort_duration,
             blacklisted_tokens: HashMap::default(),
-            runtime_state: RuntimeState::default()
+            runtime_state: RuntimeState::default(),
         }
     }
 
@@ -1218,9 +1220,7 @@ impl CoordinatorState {
                 banned: std::mem::take(&mut self.banned),
                 blacklisted_tokens: std::mem::take(&mut self.blacklisted_tokens),
                 runtime_state: std::mem::take(&mut self.runtime_state),
-                ..Self::new(
-                    self.environment.clone(),
-                )
+                ..Self::new(self.environment.clone())
             };
 
             self.initialize(new_round_height);
@@ -1266,9 +1266,7 @@ impl CoordinatorState {
                 dropped: std::mem::take(&mut self.dropped),
                 blacklisted_tokens: std::mem::take(&mut self.blacklisted_tokens),
                 runtime_state: std::mem::take(&mut self.runtime_state),
-                ..Self::new(
-                    self.environment.clone(),
-                )
+                ..Self::new(self.environment.clone())
             };
 
             self.initialize(current_round_height);
@@ -1511,7 +1509,6 @@ impl CoordinatorState {
         self.runtime_state.tokens.get(cohort)
     }
 
-    // FIXME: compile for teests only
     pub fn get_tokens(&self) -> &Vec<HashSet<String>> {
         &self.runtime_state.tokens
     }
@@ -1526,25 +1523,49 @@ impl CoordinatorState {
 
     ///
     /// Moves the ip address and token from the list of currently in use to the black lists
-    /// 
+    ///
     pub fn blacklist_participant(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
         // Blacklist token
-        let target_token = self.runtime_state.tokens_in_use.iter().find(|(_, part)| *part == participant).ok_or(CoordinatorError::Error(anyhow!("Missing token for participant {}", participant)))?.0.clone();
+        let target_token = self
+            .runtime_state
+            .tokens_in_use
+            .iter()
+            .find(|(_, part)| *part == participant)
+            .ok_or(CoordinatorError::Error(anyhow!(
+                "Missing token for participant {}",
+                participant
+            )))?
+            .0
+            .clone();
 
         // Safe to unwrap here
         let (token, part) = self.runtime_state.tokens_in_use.remove_entry(&target_token).unwrap();
 
         if let Some(part) = self.blacklisted_tokens.insert(token, part) {
-            return Err(CoordinatorError::Error(anyhow!("Token {} was already blacklisted for participant {}!", target_token, part)));
+            return Err(CoordinatorError::Error(anyhow!(
+                "Token {} was already blacklisted for participant {}!",
+                target_token,
+                part
+            )));
         }
 
         // Blacklist Ip address
-        if let Some(target_ip) = self.runtime_state.current_ips.iter().find_map(|(ip, part)| if part == participant {Some(ip)} else {None}).cloned() {
+        if let Some(target_ip) = self
+            .runtime_state
+            .current_ips
+            .iter()
+            .find_map(|(ip, part)| if part == participant { Some(ip) } else { None })
+            .cloned()
+        {
             // Safe to unwrap here
             let (ip, part) = self.runtime_state.current_ips.remove_entry(&target_ip).unwrap();
 
             if let Some(part) = self.blacklisted_ips.insert(ip, part) {
-                return Err(CoordinatorError::Error(anyhow!("Ip {} was already blacklisted for participant {}!", target_ip, part)));
+                return Err(CoordinatorError::Error(anyhow!(
+                    "Ip {} was already blacklisted for participant {}!",
+                    target_ip,
+                    part
+                )));
             }
         }
 
@@ -1553,14 +1574,14 @@ impl CoordinatorState {
 
     ///
     /// Returns true if the token is currently in use
-    /// 
+    ///
     pub fn is_token_in_use(&self, token: &str) -> bool {
         self.runtime_state.tokens_in_use.contains_key(token)
     }
 
     ///
     /// Returns true if the token has been blacklisted
-    /// 
+    ///
     pub fn is_token_blacklisted(&self, token: &str) -> bool {
         self.blacklisted_tokens.contains_key(token)
     }
@@ -3813,7 +3834,8 @@ mod tests {
 
         // Attempt to add the contributor and verifier again.
         for _ in 0..10 {
-            let contributor_result = state.add_to_queue(contributor.clone(), Some(contributor_ip), token2.clone(), 10, &time);
+            let contributor_result =
+                state.add_to_queue(contributor.clone(), Some(contributor_ip), token2.clone(), 10, &time);
             assert!(contributor_result.is_err());
             assert_eq!(1, state.queue.len());
         }
