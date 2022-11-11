@@ -97,6 +97,8 @@ fn build_context() -> TestCtx {
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
+    let token = String::from("test-token");
+
     coordinator.initialize().unwrap();
     let coordinator_keypair = KeyPair::custom_new(
         coordinator.environment().default_verifier_signing_key(),
@@ -111,7 +113,7 @@ fn build_context() -> TestCtx {
     };
 
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
+        .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), token, 10)
         .unwrap();
     coordinator.update().unwrap();
 

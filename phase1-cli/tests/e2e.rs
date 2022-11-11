@@ -98,6 +98,9 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
+    let token = String::from("test-token");
+    let token2 = String::from("test-token-2");
+
     coordinator.initialize().unwrap();
     let coordinator_keypair = KeyPair::custom_new(
         coordinator.environment().default_verifier_signing_key(),
@@ -122,10 +125,10 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     };
 
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor1_ip), 10)
+        .add_to_queue(contributor1.clone(), Some(contributor1_ip), token, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor2.clone(), Some(contributor2_ip), 9)
+        .add_to_queue(contributor2.clone(), Some(contributor2_ip), token2, 9)
         .unwrap();
     coordinator.update().unwrap();
 

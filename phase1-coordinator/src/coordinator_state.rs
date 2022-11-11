@@ -1511,23 +1511,28 @@ impl CoordinatorState {
         self.tmp_state.tokens.get(cohort)
     }
 
+    // FIXME: change drain with retain?
+    // FIXME: how is the env used?
     ///
     /// Moves the ip address and token from the list of currently in use to the black lists
     /// 
     pub fn blacklist_participant(&mut self, participant: &Participant) -> Result<(), CoordinatorError> { //FIXME: are errors propagated and do they shut the server down? They should
         // Blacklist token
-        let (target_token, _) = self.tmp_state.tokens_in_use.iter().find(|(_, part)| *part == participant).ok_or(CoordinatorError::Error(anyhow!("Missing token for participant {}", participant)))?;
+        let target_token = self.tmp_state.tokens_in_use.iter().find(|(_, part)| *part == participant).ok_or(CoordinatorError::Error(anyhow!("Missing token for participant {}", participant)))?.0.clone();
 
-        self.tmp_state.tokens_in_use.remove(target_token);
-        if let Some(part) = self.blacklisted_tokens.insert(target_token.clone(), participant.clone()) {
+        // Safe to unwrap here
+        let (token, part) = self.tmp_state.tokens_in_use.remove_entry(&target_token).unwrap();
+
+        if let Some(part) = self.blacklisted_tokens.insert(token, part) {
             return Err(CoordinatorError::Error(anyhow!("Token {} was already blacklisted for participant {}!", target_token, part)));
         }
 
         // Blacklist Ip address
-        if let Some((target_ip, _)) = self.tmp_state.current_ips.iter().find(|(_, part)| *part == participant) {
-            self.tmp_state.current_ips.remove(target_ip);
+        if let Some(target_ip) = self.tmp_state.current_ips.iter().find_map(|(ip, part)| if part == participant {Some(ip)} else {None}).cloned() {
+            // Safe to unwrap here
+            let (ip, part) = self.tmp_state.current_ips.remove_entry(&target_ip).unwrap();
 
-            if let Some(part) = self.blacklisted_ips.insert(target_ip.clone(), participant.clone()) {
+            if let Some(part) = self.blacklisted_ips.insert(ip, part) {
                 return Err(CoordinatorError::Error(anyhow!("Ip {} was already blacklisted for participant {}!", target_ip, part)));
             }
         }
