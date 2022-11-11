@@ -210,17 +210,21 @@ pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
 
 /// Verify a signature against a pubkey and message
 pub fn verify_signature(pubkey: String, signature: String, message: String) -> bool {
-    let pk = ed25519_compact::PublicKey::from_slice(pubkey.as_bytes());
-    let signature = ed25519_compact::Signature::from_slice(signature.as_bytes());
+    let pk = ed25519_compact::PublicKey::from_slice(&hex::decode(pubkey).unwrap());
+    let signature = ed25519_compact::Signature::from_slice(&hex::decode(signature).unwrap());
 
     match (pk, signature) {
         (Ok(pk), Ok(signature)) => {
             match pk.verify(&message, &signature) {
                 Ok(_) => true,
-                Err(_) => false,
+                Err(e) => {
+                    false
+                },
             }
         }
-        _ => false
+        _ => {
+            false   
+        }
     }
 }
 
