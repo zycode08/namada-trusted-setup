@@ -944,7 +944,7 @@ impl Default for RoundMetrics {
 
 /// A temporary runtime state holding values which are specific to the current ceremony run. This state must not be persisted to 
 /// storage to allow a reset of it in case of a ceremony restart
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 struct TmpState {
     /// The list of valid tokens for each cohort
     tokens: Vec<HashSet<String>>,
@@ -956,6 +956,7 @@ struct TmpState {
 
 impl Default for TmpState {
     fn default() -> Self {
+        // Called when deserializing CoordinatorState from file
         // Read tokens from files
         Self { tokens: CoordinatorState::load_tokens(), tokens_in_use: Default::default(), current_ips: Default::default() }
     }
@@ -1001,10 +1002,9 @@ pub struct CoordinatorState {
     /// Map of tokens which have been used in the ceremony
     blacklisted_tokens: HashMap<String, Participant>,
     /// Temporary runtime state, should not be persisted to storage to reset it in case of restart
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     tmp_state: TmpState
 }
-// FIXME: add test for temp state reload
 
 impl CoordinatorState {
     /// Reads tokens from disk and generates a vector of them. Expects tokens to be in a separate folder containing only those files.
@@ -1738,7 +1738,7 @@ impl CoordinatorState {
         &mut self,
         participant: Participant,
         participant_ip: Option<IpAddr>,
-        token: String, //FIXME: optional for contributors only?
+        token: String,
         reliability_score: u8,
         time: &dyn TimeSource,
     ) -> Result<(), CoordinatorError> {

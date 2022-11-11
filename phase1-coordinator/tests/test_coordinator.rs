@@ -64,6 +64,8 @@ struct TestCtx {
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
+    // Keep TempDir in scope for some tests
+    _tokens_tmp_dir: tempfile::TempDir
 }
 
 /// Build the rocket server for testing with the proper configuration.
@@ -72,14 +74,22 @@ fn build_context() -> TestCtx {
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
     // Create token file
-    let tmp_dir = tempfile::tempdir().unwrap();
+    // Need a fixed-name temp dir because of the lazy_static variables based on env
+    // Sometimes TempDir is not deleted correctly at drop, need to manually cancel the directory if it sill exists from a previous run
+    let os_temp_dir = std::env::temp_dir();
+    std::fs::remove_dir_all(os_temp_dir.join("my-temporary-dir")).ok();
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("my-temporary-dir")
+        .rand_bytes(0)
+        .tempdir()
+        .unwrap();
+
     let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
     token_file
         .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
         .unwrap();
     std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
-    std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
@@ -175,6 +185,7 @@ fn build_context() -> TestCtx {
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
         coordinator: coord_verifier,
+        _tokens_tmp_dir: tmp_dir
     }
 }
 

@@ -341,7 +341,6 @@ pub async fn post_contribution_info(
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
-/// FIXME: should state json as return fomrat? Why returns a file?
 #[get("/contribution_info")]
 pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
@@ -353,7 +352,6 @@ pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<
 }
 
 /// Retrieve the coordinator.json status file
-/// /// FIXME: should state json as return fomrat? Why returns a file?
 #[get("/coordinator_status")]
 pub async fn get_coordinator_state(coordinator: &State<Coordinator>, _auth: Secret) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;
