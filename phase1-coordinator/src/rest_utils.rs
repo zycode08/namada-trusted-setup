@@ -77,7 +77,7 @@ pub enum ResponseError {
     InvalidSignature,
     #[error("Authentification token for cohort {0} is invalid")]
     InvalidToken(usize),
-    #[error("Authentification token has an invalid token format (hexadecimal 10 bytes)")]
+    #[error("Authentification token has an invalid token format")]
     InvalidTokenFormat,
     #[error("Io Error: {0}")]
     IoError(String),

@@ -430,7 +430,7 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!("{}","You can only join the ceremony either with the unique token you received by email for your cohort, or the FFA (Free For All) token available to everybody towards the end of the ceremony.".bright_cyan());
+    println!("{}","You can only join the ceremony with the unique token you received by email for your cohort.".bright_cyan());
     let token = io::get_user_input(
         "Enter your token:".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
