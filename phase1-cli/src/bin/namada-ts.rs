@@ -430,7 +430,10 @@ async fn contribution_loop(
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!("{}","You can only join the ceremony with the unique token you received by email for your cohort.".bright_cyan());
+    println!(
+        "{}",
+        "You can only join the ceremony with the unique token you received by email for your cohort.".bright_cyan()
+    );
     let token = io::get_user_input(
         "Enter your token:".bright_yellow(),
         Some(&Regex::new(TOKEN_REGEX).unwrap()),
@@ -443,7 +446,7 @@ async fn contribution_loop(
         let token_data: Token = serde_json::from_str(&decoded_token).expect("Can't deserialize the token.");
         match token_data.is_valid_cohort() {
             phase1_cli::TokenCohort::Finished => {
-                println!("Your cohort round is {} and is alredy completed.", token_data.index);
+                println!("Your cohort round is {} and is already completed.", token_data.index);
                 process::exit(0);
             }
             phase1_cli::TokenCohort::Pending => {
@@ -541,7 +544,7 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Couldn't read the contributor info file".red().bold()));
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
-                println!("{}\n{}\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy{}\n\n",
+                println!("{}\n{}\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy\n\n{}",
                                                 "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
                                                 "Share your attestation that proves your contribution to the world:".bright_cyan(),
                                                 round_height,
