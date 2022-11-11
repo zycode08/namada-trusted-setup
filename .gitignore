@@ -32,3 +32,6 @@ genesis.toml
 # AWS
 aws
 docker-compose.yml
+
+config.json
+emails.csv

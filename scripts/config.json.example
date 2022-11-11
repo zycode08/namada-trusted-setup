@@ -1,0 +1,7 @@
+{
+  "participant_per_cohort": 4,
+  "cohort_duration": 1200,
+  "ceremony_start_utc": 1667224800,
+  "cohort_filename_format": "namada_tokens_cohort_{}.json",
+  "mailchimp_filename_format": "namada_cohort_{}.json"
+}
