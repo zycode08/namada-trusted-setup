@@ -57,6 +57,8 @@ struct TestCtx {
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
     coordinator_url: String,
+    // Keep TempDir in scope for some tests
+    _tokens_tmp_dir: tempfile::TempDir
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
@@ -192,6 +194,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         unknown_participant,
         coordinator: coord_verifier,
         coordinator_url,
+        _tokens_tmp_dir: tmp_dir
     };
 
     (ctx, handle)

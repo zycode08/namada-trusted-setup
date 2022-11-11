@@ -386,7 +386,7 @@ impl Coordinator {
         // Load an instance of storage.
         let storage = environment.storage()?;
         // Load an instance of coordinator self.
-        let state = match storage.get(&Locator::CoordinatorState)? { //FIXME: how does it handle tmp_state which is not in the file, should recreate it with Default
+        let state = match storage.get(&Locator::CoordinatorState)? {
             Object::CoordinatorState(state) => state,
             _ => return Err(CoordinatorError::StorageFailed),
         };

@@ -324,7 +324,6 @@ fn coordinator_drop_contributor_basic() {
     );
 }
 
-// FIXME: load some tokens in these tests?
 #[test]
 #[serial]
 /// Drops a contributor in between two contributors.
