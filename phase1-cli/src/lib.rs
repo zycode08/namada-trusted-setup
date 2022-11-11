@@ -114,6 +114,16 @@ impl Token {
 }
 
 #[derive(Debug, StructOpt)]
+pub struct VerifySignatureContribution {
+    #[structopt(about = "The contribution public key")]
+    pub pubkey: String,
+    #[structopt(about = "The contribution message hash")]
+    pub message: String,
+    #[structopt(about = "The contribution signature")]
+    pub signature: String
+}
+
+#[derive(Debug, StructOpt)]
 #[structopt(name = "namada-ts", about = "Namada CLI for trusted setup.")]
 pub enum CeremonyOpt {
     #[structopt(about = "Contribute to the ceremony")]
@@ -134,7 +144,8 @@ pub enum CeremonyOpt {
     #[structopt(about = "Update the cohorts' tokens")]
     UpdateCohorts(CoordinatorUrl),
     #[cfg(debug_assertions)]
-    #[structopt(about = "Verify the pending contributions")]
     #[structopt(about = "Update manually the coordinator")]
     UpdateCoordinator(CoordinatorUrl),
+    #[structopt(about = "Verify signature")]
+    VerifySignature(VerifySignatureContribution),
 }
