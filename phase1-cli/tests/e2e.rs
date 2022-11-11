@@ -83,7 +83,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
     token_file
-        .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
+        .write_all("[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]".as_bytes())
         .unwrap();
     std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
     std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
@@ -130,7 +130,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         .add_to_queue(
             contributor1.clone(),
             Some(contributor1_ip),
-            String::from("7fe7c70eda056784fcf4"),
+            String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"),
             10,
         )
         .unwrap();
@@ -264,7 +264,7 @@ async fn test_update_cohorts() {
     std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
-    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
+    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]"]);
 
     // Wrong, request from non-coordinator participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -280,8 +280,8 @@ async fn test_update_cohorts() {
 
     // Valid new tokens
     let new_valid_tokens = get_serialized_tokens_zip(vec![
-        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
-        "[\"4935c7fbd09e4f925f11\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp\"]",
     ]);
 
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
@@ -311,9 +311,9 @@ async fn test_get_status() {
 
     // Check Json deserialization of CoordinatorState (RuntimeState must be empty)
     assert_eq!(status.get_tokens()[0].len(), 3);
-    assert!(status.get_tokens()[0].contains("7fe7c70eda056784fcf4"));
-    assert!(status.get_tokens()[0].contains("4eb8d831fdd098390683"));
-    assert!(status.get_tokens()[0].contains("4935c7fbd09e4f925f75"));
+    assert!(status.get_tokens()[0].contains("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"));
+    assert!(status.get_tokens()[0].contains("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"));
+    assert!(status.get_tokens()[0].contains("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"));
     assert!(status.get_current_ips().is_empty());
     assert!(status.get_current_tokens().is_empty());
 
@@ -413,7 +413,7 @@ async fn test_join_queue() {
         &client,
         &url,
         &ctx.unknown_participant.keypair,
-        &String::from("7fe7c70eda056784fcf5"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7er"),
     )
     .await;
     assert!(response.is_err());
@@ -427,7 +427,7 @@ async fn test_join_queue() {
         &client,
         &url,
         &ctx.unknown_participant.keypair,
-        &String::from("4eb8d831fdd098390683"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"),
     )
     .await
     .unwrap();
@@ -437,7 +437,7 @@ async fn test_join_queue() {
         &client,
         &url,
         &ctx.contributors[1].keypair,
-        &String::from("4eb8d831fdd098390683"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"),
     )
     .await;
     assert!(response.is_err());
@@ -447,7 +447,7 @@ async fn test_join_queue() {
         &client,
         &url,
         &ctx.unknown_participant.keypair,
-        &String::from("4935c7fbd09e4f925f75"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"),
     )
     .await;
     assert!(response.is_err());
@@ -677,8 +677,8 @@ async fn test_contribution() {
     // Update cohorts
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
     let new_valid_tokens = get_serialized_tokens_zip(vec![
-        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
-        "[\"4935c7fbd09e4f925f11\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp\"]",
     ]);
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
     assert!(response.is_ok());
@@ -689,7 +689,7 @@ async fn test_contribution() {
         &client,
         &url,
         &ctx.unknown_participant.keypair,
-        &String::from("7fe7c70eda056784fcf4"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"),
     )
     .await;
     assert!(response.is_err());
@@ -702,7 +702,7 @@ async fn test_contribution() {
         &client,
         &url,
         &ctx.contributors[1].keypair,
-        &String::from("7fe7c70eda056784fcf4"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"),
     )
     .await;
     assert!(response.is_err());
@@ -712,7 +712,7 @@ async fn test_contribution() {
         &client,
         &url,
         &ctx.unknown_participant.keypair,
-        &String::from("4935c7fbd09e4f925f11"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp"),
     )
     .await
     .unwrap();

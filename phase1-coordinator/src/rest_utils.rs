@@ -38,7 +38,7 @@ pub const UPDATE_TIME: Duration = Duration::from_secs(5);
 pub const UPDATE_TIME: Duration = Duration::from_secs(60);
 
 pub const UNKNOWN: &str = "Unknown";
-pub const TOKEN_REGEX: &str = r"^[A-HJ-NP-Za-km-z1-9]*$";
+pub const TOKEN_REGEX: &str = r"^[A-HJ-NP-Za-km-z1-9]{115}$";
 
 // Headers
 pub const BODY_DIGEST_HEADER: &str = "Digest";
