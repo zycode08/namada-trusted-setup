@@ -58,8 +58,8 @@ impl Disk {
             resolver: DiskResolver::new(environment.local_base_directory()),
         };
 
-         // Create the coordinator state locator if it does not exist yet.
-         if !storage.exists(&Locator::CoordinatorState) {
+        // Create the coordinator state locator if it does not exist yet.
+        if !storage.exists(&Locator::CoordinatorState) {
             storage.insert(
                 Locator::CoordinatorState,
                 Object::CoordinatorState(CoordinatorState::new(environment.clone())),
