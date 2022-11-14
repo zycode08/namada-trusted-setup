@@ -78,8 +78,6 @@ pub struct ContributionInfo {
     pub email: Option<String>,
     // ed25519 public key, hex encoded
     pub public_key: String,
-    // User participates in incentivized program or not
-    pub is_incentivized: bool,
     // User can choose to contribute on another machine
     pub is_another_machine: bool,
     // User can choose the default method to generate randomness or his own.
@@ -154,6 +152,7 @@ impl ContributionInfo {
 /// A summarized version of [`ContributionInfo`]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TrimmedContributionInfo {
+    full_name: Option<String>,
     public_key: String,
     is_another_machine: bool,
     is_own_seed_of_randomness: bool,
@@ -166,12 +165,13 @@ pub struct TrimmedContributionInfo {
 impl From<ContributionInfo> for TrimmedContributionInfo {
     fn from(parent: ContributionInfo) -> Self {
         Self {
+            full_name: parent.full_name,
             public_key: parent.public_key,
             is_another_machine: parent.is_another_machine,
             is_own_seed_of_randomness: parent.is_own_seed_of_randomness,
             ceremony_round: parent.ceremony_round,
-            contribution_hash: parent.contribution_hash,
-            contribution_hash_signature: parent.contribution_hash_signature,
+            contribution_hash: parent.contribution_file_hash,
+            contribution_hash_signature: parent.contribution_file_signature,
             timestamps: parent.timestamps.into(),
         }
     }
@@ -216,7 +216,6 @@ mod tests {
         // Test custom
         test_info.full_name = Some(String::from("Test Name"));
         test_info.email = Some(String::from("test_name@test.dev"));
-        test_info.is_incentivized = true;
         test_info.ceremony_round = 12;
         test_info.contribution_hash = String::from("Not a valid hash");
         test_info.contribution_hash_signature = String::from("Not a valid signature");
