@@ -68,12 +68,14 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, recv: Receive
 /// speed up the verification process. This would also allow us to immediately provide to a client the state of validity of its contribution. This improvement could
 /// be possible because we only have one contribution per round and one verifier (the coordinator's one). To implement this logic though, it would require a major rework of the phase1_coordinator logic.
 async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>, recv: Receiver<bool>) -> Result<()> {
+    let s3_ctx = S3Ctx::new().await?;
+
     loop {
         tokio::time::sleep(UPDATE_TIME).await;
 
         info!("Verifying contributions...");
         let start = std::time::Instant::now();
-        rest_utils::perform_verify_chunks(coordinator.clone()).await?;
+        rest_utils::perform_verify_chunks(coordinator.clone(), &s3_ctx).await?;
         info!(
             "Verification of contributions completed in {:#?}. {:#?} to the next verification round...",
             start.elapsed(),
@@ -149,7 +151,7 @@ async fn generate_secret() -> Result<()> {
 /// Perform the steps to finalize the ceremony state before shut down
 async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
     info!("Performing last contribution verification (if any)...");
-    if let Err(e) = rest_utils::perform_verify_chunks(coordinator.clone()).await {
+    if let Err(e) = rest_utils::perform_verify_chunks(coordinator.clone(), &S3Ctx::new().await?).await {
         // Log any error without interrupting the shutdown procedure
         warn!("Ignoring error while performing last verification: {}", e);
     }
@@ -250,7 +252,6 @@ pub async fn main() {
         rest::stop_coordinator,
         rest::get_contributor_queue_status,
         rest::post_contribution_info,
-        rest::get_contributions_info,
         rest::get_coordinator_state,
         rest::get_healthcheck,
         rest::update_cohorts

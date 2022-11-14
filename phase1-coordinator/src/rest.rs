@@ -177,7 +177,7 @@ pub async fn stop_coordinator(_auth: ServerAuth, shutdown: Shutdown) {
 #[cfg(debug_assertions)]
 #[get("/verify")]
 pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) -> Result<()> {
-    rest_utils::perform_verify_chunks((*coordinator).clone()).await
+    rest_utils::perform_verify_chunks((*coordinator).clone(), &S3Ctx::new().await?).await
 }
 
 /// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
@@ -347,6 +347,7 @@ pub async fn post_contribution_info(
 }
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
+#[cfg(debug_assertions)]
 #[get("/contribution_info")]
 pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;

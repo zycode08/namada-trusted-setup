@@ -135,6 +135,7 @@ pub enum CeremonyOpt {
     ExportKeypair(MnemonicPath),
     #[structopt(about = "Generate the list of addresses of the contributors")]
     GenerateAddresses(Contributors),
+    #[cfg(debug_assertions)]
     #[structopt(about = "Get a list of all the contributions received")]
     GetContributions(CoordinatorUrl),
     #[structopt(about = "Get the state of the coordinator")]

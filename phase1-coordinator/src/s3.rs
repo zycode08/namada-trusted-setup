@@ -76,6 +76,21 @@ impl S3Ctx {
         })
     }
 
+    /// Upload contributors.json file to S3 for the frontend
+    pub(crate) async fn upload_contributions_info(&self, contributions_info: Vec<u8>) -> Result<()> {
+        let put_object_request = PutObjectRequest {
+            bucket: self.bucket.clone(),
+            key: "contributors.json".to_string(),
+            body: Some(StreamingBody::from(contributions_info)),
+            ..Default::default()
+        };
+
+        self.client
+            .put_object(put_object_request)
+            .await
+            .map_or_else(|e| Err(S3Error::UploadError(e.to_string())), |_| Ok(()))
+    }
+
     /// Get the url of a challenge on S3.
     pub(crate) async fn get_challenge_url(&self, key: String) -> Option<String> {
         let head = HeadObjectRequest {
