@@ -208,6 +208,26 @@ pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
     Ok(KeyPair::try_from_seed(&seed)?)
 }
 
+/// Verify a signature against a pubkey and message
+pub fn verify_signature(pubkey: String, signature: String, message: String) -> bool {
+    let pk = ed25519_compact::PublicKey::from_slice(&hex::decode(pubkey).unwrap());
+    let signature = ed25519_compact::Signature::from_slice(&hex::decode(signature).unwrap());
+
+    match (pk, signature) {
+        (Ok(pk), Ok(signature)) => {
+            match pk.verify(&message, &signature) {
+                Ok(_) => true,
+                Err(e) => {
+                    false
+                },
+            }
+        }
+        _ => {
+            false   
+        }
+    }
+}
+
 /// Interactively check if the user has correctly stored the mnemonic phrase
 #[cfg(not(debug_assertions))]
 fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {

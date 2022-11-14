@@ -130,6 +130,14 @@ This flag is available also when contributing offline:
 cargo run --release --bin namada-ts --features cli contribute offline --custom-seed
 ```
 
+### Verify your contribution
+If you want to verify your contribution you can do it via CLI. After you have successfully contributed, a file called `namada_contributor_info_round_${round_height}.json` will be generated and saved in the same folder of the `namada-ts` binary. The file contains a json structure. You should copy the value following fields:
+- `public_key`
+- `contribution_hash`
+- `contribution_hash_signature`
+
+and input them to `namada-ts verify-signature $public_key $contribution_hash $contribution_hash_signature`.
+
 ## Understanding the ceremony
 
 This section describes how it feels to contribute to the ceremony.

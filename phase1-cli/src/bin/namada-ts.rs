@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
-    io::{self, KeyPairUser},
+    io::{self, KeyPairUser, verify_signature},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
     rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
     storage::Object,
@@ -23,7 +23,7 @@ use phase1_cli::{
     requests,
     CeremonyOpt,
     CoordinatorUrl,
-    Token,
+    Token, VerifySignatureContribution,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -860,5 +860,13 @@ async fn main() {
             let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
         }
+        CeremonyOpt::VerifySignature(VerifySignatureContribution { pubkey, message, signature }) => {
+            let result = verify_signature(pubkey, signature, message);
+            if result {
+                println!("The contribution signature is correct.")
+            } else {
+                println!("The contribution signature is not correct.")
+            }
+        } 
     }
 }
