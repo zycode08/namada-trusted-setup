@@ -644,11 +644,17 @@ impl Coordinator {
         &mut self,
         participant: Participant,
         participant_ip: Option<IpAddr>,
+        token: String,
         reliability_score: u8,
     ) -> Result<(), CoordinatorError> {
         // Attempt to add the participant to the next round.
-        self.state
-            .add_to_queue(participant, participant_ip, reliability_score, self.time.as_ref())?;
+        self.state.add_to_queue(
+            participant,
+            participant_ip,
+            token,
+            reliability_score,
+            self.time.as_ref(),
+        )?;
 
         // Save the coordinator state in storage.
         self.save_state()?;
@@ -1080,6 +1086,9 @@ impl Coordinator {
             let response = ContributionLocator::new(round_height, chunk_id, contribution_id, false);
             self.storage.remove(&Locator::ContributionFile(response.clone()))?;
 
+            // Blacklist participant's token and ip
+            self.state.blacklist_participant(participant)?;
+
             // Save the coordinator state in storage.
             self.save_state()?;
 
@@ -1114,6 +1123,9 @@ impl Coordinator {
                     let completed_task = Task::new(chunk_id, contribution_id);
                     self.state
                         .completed_task(participant, &completed_task, self.time.as_ref())?;
+
+                    // Blacklist participant's token and ip
+                    self.state.blacklist_participant(participant)?;
 
                     // Save the coordinator state in storage.
                     self.save_state()?;
@@ -2846,6 +2858,7 @@ mod tests {
                 coordinator.state.add_to_queue(
                     contributor.clone(),
                     Some(*contributor_ip),
+                    String::from("irrelevant_token"), // No check will be done on this token
                     10,
                     coordinator.time.as_ref(),
                 )?;

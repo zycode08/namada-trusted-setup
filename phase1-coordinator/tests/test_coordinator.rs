@@ -64,22 +64,35 @@ struct TestCtx {
     contributors: Vec<TestParticipant>,
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
+    // Keep TempDir in scope for some tests
+    _tokens_tmp_dir: tempfile::TempDir,
 }
 
 /// Build the rocket server for testing with the proper configuration.
 fn build_context() -> TestCtx {
+    std::env::set_var("TOKEN_BLACKLIST", "true");
+    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
+
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
     // Create token file
-    let tmp_dir = tempfile::tempdir().unwrap();
+    // Need a fixed-name temp dir because of the lazy_static variables based on env
+    // Sometimes TempDir is not deleted correctly at drop, need to manually cancel the directory if it sill exists from a previous run
+    let os_temp_dir = std::env::temp_dir();
+    std::fs::remove_dir_all(os_temp_dir.join("my-temporary-dir")).ok();
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("my-temporary-dir")
+        .rand_bytes(0)
+        .tempdir()
+        .unwrap();
+
     let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
     token_file
-        .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
+        .write_all("[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]".as_bytes())
         .unwrap();
     std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
-    std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
 
     // Instantiate the coordinator
     let mut coordinator = Coordinator::new(environment, Arc::new(Production)).unwrap();
@@ -97,6 +110,10 @@ fn build_context() -> TestCtx {
     let contributor2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let unknown_contributor_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
 
+    let token = String::from(
+        "9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C",
+    );
+
     coordinator.initialize().unwrap();
     let coordinator_keypair = KeyPair::custom_new(
         coordinator.environment().default_verifier_signing_key(),
@@ -111,7 +128,7 @@ fn build_context() -> TestCtx {
     };
 
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), 10)
+        .add_to_queue(contributor1.clone(), Some(contributor1_ip.clone()), token, 10)
         .unwrap();
     coordinator.update().unwrap();
 
@@ -173,6 +190,7 @@ fn build_context() -> TestCtx {
         contributors: vec![test_participant1, test_participant2],
         unknown_participant,
         coordinator: coord_verifier,
+        _tokens_tmp_dir: tmp_dir,
     }
 }
 
@@ -260,7 +278,9 @@ fn test_update_cohorts() {
     std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
-    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
+    let new_invalid_tokens = get_serialized_tokens_zip(vec![
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]",
+    ]);
 
     // Wrong, request from non-coordinator participant
     let mut req = client.post("/update_cohorts");
@@ -280,8 +300,8 @@ fn test_update_cohorts() {
 
     // Valid new tokens
     let new_valid_tokens = get_serialized_tokens_zip(vec![
-        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
-        "[\"4935c7fbd09e4f925f11\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp\"]",
     ]);
 
     req = client.post("/update_cohorts");
@@ -407,7 +427,6 @@ fn test_update_coordinator() {
 fn test_join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
-    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
 
     let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
 
@@ -416,7 +435,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("7fe7c70eda056784fcf5")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV3"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -434,7 +455,9 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
@@ -445,19 +468,36 @@ fn test_join_queue() {
     req = set_request::<String>(
         req,
         &ctx.contributors[1].keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"
+        )),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Wrong request, token already in queue
+    let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.contributors[1].keypair,
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Wrong request, already existing contributor
-    let socket_address = SocketAddr::new(IpAddr::V4("0.0.0.4".parse().unwrap()), 8080);
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -634,6 +674,7 @@ fn test_wrong_post_contribution_info() {
 /// - get_contributions_info
 /// - Update cohorts' tokens
 /// - join_queue with already contributed Ip
+/// - join_queue with already contributed token
 /// - Skip to second cohort
 /// - Try joinin queue with expired token
 /// - Try joinin queue with correct token
@@ -641,7 +682,6 @@ fn test_wrong_post_contribution_info() {
 #[test]
 fn test_contribution() {
     const COHORT_TIME: u64 = 15;
-    std::env::set_var("NAMADA_MPC_IP_BAN", "true");
     std::env::set_var("NAMADA_COHORT_TIME", COHORT_TIME.to_string()); // 15 seconds for each cohort
     use setup_utils::calculate_hash;
 
@@ -767,8 +807,8 @@ fn test_contribution() {
     // Update cohorts
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
     let new_valid_tokens = get_serialized_tokens_zip(vec![
-        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
-        "[\"4935c7fbd09e4f925f11\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp\"]",
     ]);
 
     req = client.post("/update_cohorts");
@@ -785,15 +825,30 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("7fe7c70eda056784fcf4")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"
+        )),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Join queue with already contributed Token
+    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
+
+    req = client.post("/contributor/join_queue").remote(socket_address);
+    req = set_request::<String>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Skip to second cohort and try joining the queue with expired token
-    let socket_address = SocketAddr::new(ctx.unknown_participant.address, 8080);
-
     let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
     std::thread::sleep(std::time::Duration::from_secs(sleep_time));
 
@@ -801,7 +856,9 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("4eb8d831fdd098390683")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
@@ -812,7 +869,9 @@ fn test_contribution() {
     req = set_request::<String>(
         req,
         &ctx.unknown_participant.keypair,
-        Some(&format!("4935c7fbd09e4f925f11")),
+        Some(&format!(
+            "9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp"
+        )),
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);

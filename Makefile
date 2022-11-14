@@ -44,4 +44,4 @@ run-coordinator:
 	aws s3 rm s3://${AWS_S3_BUCKET} --recursive
 	RUST_LOG=debug $(CARGO) run --features=parallel --bin phase1-coordinator
 
-.PHONY : build check clean clippy clippy-fix close-ceremony fmt get-contributions run-coordinator test-coordinator test-e2e update verify
+.PHONY : build check clean clippy clippy-fix close-ceremony fmt get-contributions run-coordinator update verify

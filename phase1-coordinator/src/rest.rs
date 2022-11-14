@@ -44,13 +44,23 @@ pub async fn join_queue(
     new_participant: NewParticipant,
     token: LazyJson<String>,
 ) -> Result<()> {
-    rest_utils::token_check((*coordinator).clone(), &token).await?;
+    // NOTE: check on the token happens only here meaning that a contributor can join the ceremony at the very last moment of a cohort and
+    // contribute effectively in the following cohort. Forcing the contribution to happen in the correct cohort would take more complicated checks
+    // and could lower the amount of contributions received
+    rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
 
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
-    task::spawn_blocking(move || write_lock.add_to_queue(new_participant.participant, new_participant.ip_address, 10))
-        .await?
-        .map_err(|e| ResponseError::CoordinatorError(e))
+    task::spawn_blocking(move || {
+        write_lock.add_to_queue(
+            new_participant.participant,
+            new_participant.ip_address,
+            token.clone(),
+            10,
+        )
+    })
+    .await?
+    .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -195,6 +205,7 @@ pub async fn update_cohorts(
             cohorts.insert(file, buffer);
         }
 
+        // NOTE: tokens currently in use are still in memory, no need to take care of those
         Ok(CoordinatorState::load_tokens_from_bytes(&cohorts))
     })
     .await
@@ -209,8 +220,8 @@ pub async fn update_cohorts(
     };
 
     match new_tokens.get(cohort) {
-        Some(new_tokens) if new_tokens.len() == old_tokens.len() => {
-            if new_tokens.difference(old_tokens).count() != 0 {
+        Some(new_tokens) => {
+            if new_tokens != old_tokens {
                 return Err(ResponseError::InvalidNewTokens);
             }
         }

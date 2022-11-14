@@ -57,10 +57,15 @@ struct TestCtx {
     unknown_participant: TestParticipant,
     coordinator: TestParticipant,
     coordinator_url: String,
+    // Keep TempDir in scope for some tests
+    _tokens_tmp_dir: tempfile::TempDir,
 }
 
 /// Launch the rocket server for testing with the proper configuration as a separate async Task.
 async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) {
+    std::env::set_var("TOKEN_BLACKLIST", "true");
+    // NOTE: never set NAMADA_MPC_IP_BAN here because we cannot test the IPs here (cannot mock them)
+
     // Reset storage to prevent state conflicts between tests and initialize test environment
     let environment = coordinator::initialize_test_environment(&Testing::default().into());
 
@@ -78,7 +83,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let file_path = tmp_dir.path().join("namada_tokens_cohort_1.json");
     let mut token_file = std::fs::File::create(file_path).unwrap();
     token_file
-        .write_all("[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]".as_bytes())
+        .write_all("[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]".as_bytes())
         .unwrap();
     std::env::set_var("NAMADA_TOKENS_PATH", tmp_dir.path());
     std::env::set_var("TOKENS_FILE_PREFIX", "namada_tokens_cohort");
@@ -122,10 +127,12 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     };
 
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor1_ip), 10)
-        .unwrap();
-    coordinator
-        .add_to_queue(contributor2.clone(), Some(contributor2_ip), 9)
+        .add_to_queue(
+            contributor1.clone(),
+            Some(contributor1_ip),
+            String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"),
+            10,
+        )
         .unwrap();
     coordinator.update().unwrap();
 
@@ -189,6 +196,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
         unknown_participant,
         coordinator: coord_verifier,
         coordinator_url,
+        _tokens_tmp_dir: tmp_dir,
     };
 
     (ctx, handle)
@@ -200,7 +208,7 @@ async fn test_stop_coordinator() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Wrong, request from non-coordinator participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -249,14 +257,16 @@ async fn test_update_cohorts() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Check tokens.zip file presence only when correct input
     // Remove tokens.zip file if present
     std::fs::remove_file(TOKENS_ZIP_FILE).ok();
 
     // Create new tokens zip file
-    let new_invalid_tokens = get_serialized_tokens_zip(vec!["[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\"]"]);
+    let new_invalid_tokens = get_serialized_tokens_zip(vec![
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\"]",
+    ]);
 
     // Wrong, request from non-coordinator participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -272,8 +282,8 @@ async fn test_update_cohorts() {
 
     // Valid new tokens
     let new_valid_tokens = get_serialized_tokens_zip(vec![
-        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
-        "[\"4935c7fbd09e4f925f11\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp\"]",
     ]);
 
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
@@ -291,7 +301,7 @@ async fn test_get_status() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Retrieve coordinator.json file with valid token
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -299,7 +309,15 @@ async fn test_get_status() {
     assert!(response.is_ok());
 
     // Check deserialization
-    let _status: CoordinatorState = serde_json::from_slice(&response.unwrap()).unwrap();
+    let status: CoordinatorState = serde_json::from_slice(&response.unwrap()).unwrap();
+
+    // Check Json deserialization of CoordinatorState (RuntimeState must be empty)
+    assert_eq!(status.get_tokens()[0].len(), 3);
+    assert!(status.get_tokens()[0].contains("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"));
+    assert!(status.get_tokens()[0].contains("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"));
+    assert!(status.get_tokens()[0].contains("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"));
+    assert!(status.get_current_ips().is_empty());
+    assert!(status.get_current_tokens().is_empty());
 
     // Provide invalid token
     let response = requests::get_coordinator_state(&url, "wrong token").await;
@@ -315,7 +333,7 @@ async fn test_get_contributor_queue_status() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Non-existing contributor key
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -342,7 +360,7 @@ async fn test_heartbeat() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Non-existing contributor key
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -364,7 +382,7 @@ async fn test_update_coordinator() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Wrong, request from non-coordinator
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -389,35 +407,51 @@ async fn test_join_queue() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Wrong request, invalid token
     let url = Url::parse(&ctx.coordinator_url).unwrap();
     let mut response = requests::post_join_queue(
         &client,
         &url,
-        &ctx.contributors[0].keypair,
-        &String::from("7fe7c70eda056784fcf5"),
+        &ctx.unknown_participant.keypair,
+        &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7er"),
     )
     .await;
     assert!(response.is_err());
 
     // Wrong request, invalid token format
-    response = requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("test")).await;
+    response = requests::post_join_queue(&client, &url, &ctx.unknown_participant.keypair, &String::from("test")).await;
     assert!(response.is_err());
 
     // Ok request
     requests::post_join_queue(
         &client,
         &url,
-        &ctx.contributors[0].keypair,
-        &String::from("7fe7c70eda056784fcf4"),
+        &ctx.unknown_participant.keypair,
+        &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"),
     )
     .await
     .unwrap();
 
+    // Wrong request, token already in use
+    response = requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.contributors[1].keypair,
+        &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek"),
+    )
+    .await;
+    assert!(response.is_err());
+
     // Wrong request, already existing contributor
-    response = requests::post_join_queue(&client, &url, &ctx.contributors[0].keypair, &String::from("test")).await;
+    response = requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.unknown_participant.keypair,
+        &String::from("9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2"),
+    )
+    .await;
     assert!(response.is_err());
 
     // Drop the server
@@ -431,7 +465,7 @@ async fn test_wrong_lock_chunk() {
     // Spawn the server and get the test context
     let (ctx, _) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Wrong request, unknown participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -446,7 +480,7 @@ async fn test_wrong_contribute_chunk() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     let c = ContributionLocator::new(ROUND_HEIGHT, 0, 1, false);
     let s = ContributionSignatureLocator::new(ROUND_HEIGHT, 0, 1, false);
@@ -471,7 +505,7 @@ async fn test_wrong_verify() {
     // Spawn the server and get the test context
     let (ctx, _) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Wrong, request from non-coordinator participant
     let url = Url::parse(&ctx.coordinator_url).unwrap();
@@ -485,7 +519,7 @@ async fn test_wrong_post_contribution_info() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     let contrib_info = ContributionInfo::default();
 
@@ -514,6 +548,7 @@ async fn test_wrong_post_contribution_info() {
 /// - verify_chunk
 /// - get_contributions_info
 /// - Update cohorts' tokens
+/// - join_queue with already contributed token
 /// - Skip to second cohort
 /// - Try joinin queue with expired token
 /// - Try joinin queue with correct token
@@ -530,7 +565,7 @@ async fn test_contribution() {
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
     // Wait for server startup
-    time::sleep(Duration::from_millis(1000)).await;
+    time::sleep(Duration::from_secs(1)).await;
     let url = Url::parse(&ctx.coordinator_url).unwrap();
     let start_time = std::time::Instant::now();
 
@@ -644,12 +679,22 @@ async fn test_contribution() {
     // Update cohorts
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_err());
     let new_valid_tokens = get_serialized_tokens_zip(vec![
-        "[\"7fe7c70eda056784fcf4\", \"4eb8d831fdd098390683\", \"4935c7fbd09e4f925f75\"]",
-        "[\"4935c7fbd09e4f925f11\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C\", \"9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7ek\", \"9nFeNpukSn1eVwNc2vkfP8SP4HrxTh9F86CY5pNWw8RF3jZa91q2i3yvE7ugpn9w2RzoZBZrdskgckmvJuVKq6ZWxfV8TepZYFd9SeARGHexi7tGGV2\"]",
+        "[\"9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp\"]",
     ]);
     let response = requests::post_update_cohorts(&client, &url, &ctx.coordinator.keypair, &new_valid_tokens).await;
     assert!(response.is_ok());
     assert!(std::fs::metadata(TOKENS_ZIP_FILE).is_ok());
+
+    // Join queue with already contributed Token
+    let response = requests::post_join_queue(
+        &client,
+        &url,
+        &ctx.unknown_participant.keypair,
+        &String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"),
+    )
+    .await;
+    assert!(response.is_err());
 
     // Skip to second cohort and try joining the queue with expired token
     let sleep_time = COHORT_TIME - start_time.elapsed().as_secs();
@@ -659,7 +704,7 @@ async fn test_contribution() {
         &client,
         &url,
         &ctx.contributors[1].keypair,
-        &String::from("7fe7c70eda056784fcf4"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP7rdLh2njm5ewmCGxSLTW3GYmKP51fKjbRUvHDmntjEaQiq7iFux9tumgWEWVHwHQCs31oitpqBpMWpMydo1DnuFyLpsD6C"),
     )
     .await;
     assert!(response.is_err());
@@ -669,7 +714,7 @@ async fn test_contribution() {
         &client,
         &url,
         &ctx.unknown_participant.keypair,
-        &String::from("4935c7fbd09e4f925f11"),
+        &String::from("9nFeNpukSn1eVwNc2vkfP8TAaw6DXNAgCNpxiQc437BxT3iF2xUMdo6wYQjqwxHwAZjVhQzdH3QMpJSbXvaDcnkVu6Ktt22AfYDypK2h72vuQK9fGNp"),
     )
     .await
     .unwrap();

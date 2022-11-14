@@ -112,8 +112,9 @@ fn execute_round(proving_system: ProvingSystem, curve: CurveKind) -> anyhow::Res
     // Meanwhile, add a contributor and verifier to the queue.
     let (contributor, contributor_signing_key, seed) = create_contributor("1");
     let contributor_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+    let token = String::from("test_token");
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor.clone(), Some(contributor_ip), 10)?;
+    coordinator.add_to_queue(contributor.clone(), Some(contributor_ip), token.clone(), 10)?;
     assert_eq!(1, coordinator.number_of_queue_contributors());
 
     // Advance the ceremony from round 0 to round 1.
@@ -137,7 +138,7 @@ fn execute_round(proving_system: ProvingSystem, curve: CurveKind) -> anyhow::Res
     // changing the outcome of this test, if necessary.
     //
     let (contributor, _, _) = create_contributor("1");
-    coordinator.add_to_queue(contributor.clone(), Some(contributor_ip), 10)?;
+    coordinator.add_to_queue(contributor.clone(), Some(contributor_ip), token, 10)?;
     assert_eq!(1, coordinator.number_of_queue_contributors());
 
     // Update the ceremony from round 1 to round 2.
@@ -230,16 +231,18 @@ fn coordinator_drop_contributor_basic() {
     assert_eq!(0, coordinator.current_round_height().unwrap());
 
     // Add a contributor and verifier to the queue.
+    let token1 = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)
+        .add_to_queue(contributor1.clone(), Some(contributor_1_ip), token1, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)
+        .add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)
         .unwrap();
     assert_eq!(2, coordinator.number_of_queue_contributors());
     assert!(coordinator.is_queue_contributor(&contributor1));
@@ -344,6 +347,9 @@ fn coordinator_drop_contributor_in_between_two_contributors() -> anyhow::Result<
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
+    let token3 = String::from("test_token_3");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
@@ -351,9 +357,9 @@ fn coordinator_drop_contributor_in_between_two_contributors() -> anyhow::Result<
     let (contributor3, contributor_signing_key3, seed3) = create_contributor("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
-    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), 8)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
+    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), token3, 8)?;
     assert_eq!(3, coordinator.number_of_queue_contributors());
 
     // Update the ceremony to round 1.
@@ -467,6 +473,9 @@ fn coordinator_drop_contributor_with_contributors_in_pending_tasks() -> anyhow::
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
+    let token3 = String::from("test_token_3");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
@@ -474,9 +483,9 @@ fn coordinator_drop_contributor_with_contributors_in_pending_tasks() -> anyhow::
     let (contributor3, contributor_signing_key3, seed3) = create_contributor("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
-    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), 8)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
+    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), token3, 8)?;
     assert_eq!(3, coordinator.number_of_queue_contributors());
 
     // Update the ceremony to round 1.
@@ -623,6 +632,9 @@ fn coordinator_drop_contributor_locked_chunks() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
+    let token3 = String::from("test_token_3");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
@@ -630,9 +642,9 @@ fn coordinator_drop_contributor_locked_chunks() -> anyhow::Result<()> {
     let (contributor3, contributor_signing_key3, seed3) = create_contributor("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
-    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), 8)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
+    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), token3, 8)?;
     assert_eq!(3, coordinator.number_of_queue_contributors());
 
     // Update the ceremony to round 1.
@@ -785,13 +797,15 @@ fn coordinator_drop_contributor_removes_contributions() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
     assert_eq!(2, coordinator.number_of_queue_contributors());
     assert!(coordinator.is_queue_contributor(&contributor1));
     assert!(coordinator.is_queue_contributor(&contributor2));
@@ -900,6 +914,9 @@ fn coordinator_drop_contributor_clear_locks() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height().unwrap());
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
+    let token3 = String::from("test_token_3");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
@@ -908,13 +925,13 @@ fn coordinator_drop_contributor_clear_locks() -> anyhow::Result<()> {
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
     coordinator
-        .add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)
+        .add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)
+        .add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)
         .unwrap();
     coordinator
-        .add_to_queue(contributor3.clone(), Some(contributor_3_ip), 8)
+        .add_to_queue(contributor3.clone(), Some(contributor_3_ip), token3, 8)
         .unwrap();
     assert_eq!(3, coordinator.number_of_queue_contributors());
 
@@ -1106,13 +1123,15 @@ fn coordinator_drop_contributor_removes_subsequent_contributions() -> anyhow::Re
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -1191,16 +1210,18 @@ fn coordinator_drop_contributor_and_release_locks() {
     assert_eq!(0, coordinator.current_round_height().unwrap());
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let contributor_1 = create_contributor_test_details("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor_2 = create_contributor_test_details("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let verifier_1 = create_verifier_test_details("1");
     coordinator
-        .add_to_queue(contributor_1.participant.clone(), Some(contributor_1_ip), 10)
+        .add_to_queue(contributor_1.participant.clone(), Some(contributor_1_ip), token, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor_2.participant.clone(), Some(contributor_2_ip), 9)
+        .add_to_queue(contributor_2.participant.clone(), Some(contributor_2_ip), token2, 9)
         .unwrap();
 
     // Update the ceremony to round 1.
@@ -1221,15 +1242,27 @@ fn coordinator_drop_contributor_and_release_locks() {
     }
 
     // Add some more participants to proceed to the next round
+    let token3 = String::from("test_token_3");
+    let token4 = String::from("test_token_4");
     let test_contributor_3 = create_contributor_test_details("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
     coordinator
-        .add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), 10)
+        .add_to_queue(
+            test_contributor_3.participant.clone(),
+            Some(contributor_3_ip),
+            token3,
+            10,
+        )
         .unwrap();
     coordinator
-        .add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), 10)
+        .add_to_queue(
+            test_contributor_4.participant.clone(),
+            Some(contributor_4_ip),
+            token4,
+            10,
+        )
         .unwrap();
 
     // Update the ceremony to round 2.
@@ -1270,6 +1303,9 @@ fn coordinator_drop_several_contributors() {
     assert_eq!(0, coordinator.current_round_height().unwrap());
 
     // Add some contributors and one verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
+    let token3 = String::from("test_token_3");
     let contributor_1 = create_contributor_test_details("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor_2 = create_contributor_test_details("2");
@@ -1278,13 +1314,13 @@ fn coordinator_drop_several_contributors() {
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let verifier_1 = create_verifier_test_details("1");
     coordinator
-        .add_to_queue(contributor_1.participant.clone(), Some(contributor_1_ip), 10)
+        .add_to_queue(contributor_1.participant.clone(), Some(contributor_1_ip), token, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor_2.participant.clone(), Some(contributor_2_ip), 10)
+        .add_to_queue(contributor_2.participant.clone(), Some(contributor_2_ip), token2, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor_3.participant.clone(), Some(contributor_3_ip), 10)
+        .add_to_queue(contributor_3.participant.clone(), Some(contributor_3_ip), token3, 10)
         .unwrap();
 
     // Update the ceremony to round 1.
@@ -1355,15 +1391,27 @@ fn coordinator_drop_several_contributors() {
     }
 
     // Add some more participants to proceed to the next round
+    let token3 = String::from("test_token_3");
+    let token4 = String::from("test_token_4");
     let test_contributor_3 = create_contributor_test_details("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
     coordinator
-        .add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), 10)
+        .add_to_queue(
+            test_contributor_3.participant.clone(),
+            Some(contributor_3_ip),
+            token3,
+            10,
+        )
         .unwrap();
     coordinator
-        .add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), 10)
+        .add_to_queue(
+            test_contributor_4.participant.clone(),
+            Some(contributor_4_ip),
+            token4,
+            10,
+        )
         .unwrap();
 
     // Update the ceremony to round 2.
@@ -1486,16 +1534,18 @@ fn coordinator_drop_contributor_and_update_verifier_tasks() {
     assert_eq!(0, coordinator.current_round_height().unwrap());
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let contributor_1 = create_contributor_test_details("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let contributor_2 = create_contributor_test_details("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let verifier_1 = create_verifier_test_details("1");
     coordinator
-        .add_to_queue(contributor_1.participant.clone(), Some(contributor_1_ip), 10)
+        .add_to_queue(contributor_1.participant.clone(), Some(contributor_1_ip), token, 10)
         .unwrap();
     coordinator
-        .add_to_queue(contributor_2.participant.clone(), Some(contributor_2_ip), 9)
+        .add_to_queue(contributor_2.participant.clone(), Some(contributor_2_ip), token2, 9)
         .unwrap();
 
     // Update the ceremony to round 1.
@@ -1516,15 +1566,27 @@ fn coordinator_drop_contributor_and_update_verifier_tasks() {
     }
 
     // Add some more participants to proceed to the next round
+    let token3 = String::from("test_token_3");
+    let token4 = String::from("test_token_4");
     let test_contributor_3 = create_contributor_test_details("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
     coordinator
-        .add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), 10)
+        .add_to_queue(
+            test_contributor_3.participant.clone(),
+            Some(contributor_3_ip),
+            token3,
+            10,
+        )
         .unwrap();
     coordinator
-        .add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), 10)
+        .add_to_queue(
+            test_contributor_4.participant.clone(),
+            Some(contributor_4_ip),
+            token4,
+            10,
+        )
         .unwrap();
 
     // Update the ceremony to round 2.
@@ -1562,6 +1624,9 @@ fn coordinator_drop_multiple_contributors() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
+    let token3 = String::from("test_token_3");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
@@ -1569,9 +1634,9 @@ fn coordinator_drop_multiple_contributors() -> anyhow::Result<()> {
     let (contributor3, contributor_signing_key3, seed3) = create_contributor("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
-    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), 8)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
+    coordinator.add_to_queue(contributor3.clone(), Some(contributor_3_ip), token3, 8)?;
     assert_eq!(3, coordinator.number_of_queue_contributors());
 
     // Update the ceremony to round 1.
@@ -1712,13 +1777,15 @@ fn try_lock_blocked() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Meanwhile, add 2 contributors and 1 verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 10)?;
     assert_eq!(2, coordinator.number_of_queue_contributors());
 
     // Advance the ceremony from round 0 to round 1.
@@ -1838,13 +1905,25 @@ fn drop_all_contributors_and_complete_round() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let test_contributor_1 = create_contributor_test_details("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let test_contributor_2 = create_contributor_test_details("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(test_contributor_1.participant.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(test_contributor_2.participant.clone(), Some(contributor_2_ip), 9)?;
+    coordinator.add_to_queue(
+        test_contributor_1.participant.clone(),
+        Some(contributor_1_ip),
+        token,
+        10,
+    )?;
+    coordinator.add_to_queue(
+        test_contributor_2.participant.clone(),
+        Some(contributor_2_ip),
+        token2,
+        9,
+    )?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -1881,12 +1960,24 @@ fn drop_all_contributors_and_complete_round() -> anyhow::Result<()> {
     }
 
     // Add some more participants to proceed to the next round
+    let token3 = String::from("test_token_3");
+    let token4 = String::from("test_token_4");
     let test_contributor_3 = create_contributor_test_details("3");
     let contributor_3_ip = IpAddr::V4("0.0.0.3".parse().unwrap());
     let test_contributor_4 = create_contributor_test_details("4");
     let contributor_4_ip = IpAddr::V4("0.0.0.4".parse().unwrap());
-    coordinator.add_to_queue(test_contributor_3.participant.clone(), Some(contributor_3_ip), 10)?;
-    coordinator.add_to_queue(test_contributor_4.participant.clone(), Some(contributor_4_ip), 10)?;
+    coordinator.add_to_queue(
+        test_contributor_3.participant.clone(),
+        Some(contributor_3_ip),
+        token3,
+        10,
+    )?;
+    coordinator.add_to_queue(
+        test_contributor_4.participant.clone(),
+        Some(contributor_4_ip),
+        token4,
+        10,
+    )?;
 
     // Update the ceremony to round 2.
     coordinator.update()?;
@@ -1918,13 +2009,15 @@ fn drop_contributor_and_reassign_tasks() -> anyhow::Result<()> {
     assert_eq!(0, coordinator.current_round_height()?);
 
     // Add a contributor and verifier to the queue.
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
     let (verifier, verifier_signing_key) = create_verifier("1");
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 9)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 9)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -1999,9 +2092,10 @@ fn contributor_timeout_drop_test() -> anyhow::Result<()> {
     coordinator.initialize()?;
 
     let (contributor1, _contributor_signing_key1, _seed1) = create_contributor("1");
+    let token = String::from("test_token");
     let contributor_1_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -2059,13 +2153,15 @@ fn contributor_wait_verifier_test() -> anyhow::Result<()> {
     // Initialize the ceremony to round 0.
     coordinator.initialize()?;
 
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
     let (contributor2, contributor_signing_key2, seed2) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
 
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 10)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -2136,8 +2232,9 @@ fn participant_lock_timeout_drop_test() -> anyhow::Result<()> {
 
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+    let token = String::from("test_token");
 
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -2202,8 +2299,10 @@ fn queue_seen_timeout_drop_test() -> anyhow::Result<()> {
 
     let (contributor1, _, _) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
 
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -2211,7 +2310,7 @@ fn queue_seen_timeout_drop_test() -> anyhow::Result<()> {
     // Add another contributor who we are gonna try to drop
     let (contributor2, _, _) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 10)?;
 
     assert_eq!(1, coordinator.current_contributors().len());
     assert!(coordinator.is_queue_contributor(&contributor2));
@@ -2268,8 +2367,10 @@ fn queue_seen_timeout_heartbeat_test() -> anyhow::Result<()> {
 
     let (contributor1, _, _) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
+    let token = String::from("test_token");
+    let token2 = String::from("test_token_2");
 
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;
@@ -2278,7 +2379,7 @@ fn queue_seen_timeout_heartbeat_test() -> anyhow::Result<()> {
     let (contributor2, _, _) = create_contributor("2");
     let contributor_2_ip = IpAddr::V4("0.0.0.2".parse().unwrap());
 
-    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), 10)?;
+    coordinator.add_to_queue(contributor2.clone(), Some(contributor_2_ip), token2, 10)?;
 
     assert_eq!(1, coordinator.current_contributors().len());
     assert!(coordinator.is_queue_contributor(&contributor2));
@@ -2340,8 +2441,9 @@ fn rollback_locked_chunk() -> anyhow::Result<()> {
 
     let (contributor1, contributor_signing_key1, seed1) = create_contributor("1");
     let contributor_1_ip = IpAddr::V4("0.0.0.1".parse().unwrap());
+    let token = String::from("test_token");
 
-    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), 10)?;
+    coordinator.add_to_queue(contributor1.clone(), Some(contributor_1_ip), token, 10)?;
 
     // Update the ceremony to round 1.
     coordinator.update()?;

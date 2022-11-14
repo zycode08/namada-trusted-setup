@@ -181,7 +181,8 @@ pub async fn main() {
         "NAMADA_TOKENS_PATH",
         "CEREMONY_START_TIMESTAMP",
         "TOKENS_FILE_PREFIX",
-        "NAMADA_COHORT_TIME"
+        "NAMADA_COHORT_TIME",
+        "TOKEN_BLACKLIST"
     );
 
     // Generate, publish and export the secret token
@@ -202,10 +203,8 @@ pub async fn main() {
     #[cfg(not(debug_assertions))]
     let environment: Production = { Production::new(&keypair) };
 
-    // Download token file from S3, only if local folder is missing
-    if std::fs::metadata(TOKENS_PATH.as_str()).is_err() {
-        download_tokens().await.expect("Error while retrieving tokens");
-    }
+    // Always download token files from S3 to check for updates
+    download_tokens().await.expect("Error while retrieving tokens");
 
     // Initialize the coordinator
     let coordinator =
