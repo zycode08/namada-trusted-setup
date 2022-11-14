@@ -217,7 +217,7 @@ pub fn verify_signature(pubkey: String, signature: String, message: String) -> b
         (Ok(pk), Ok(signature)) => {
             match pk.verify(&message, &signature) {
                 Ok(_) => true,
-                Err(e) => {
+                Err(_) => {
                     false
                 },
             }

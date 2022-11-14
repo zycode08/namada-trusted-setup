@@ -3,7 +3,7 @@ use phase1_coordinator::{
     commands::{Computation, RandomSource, SEED_LENGTH},
     io::{self, KeyPairUser, verify_signature},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
+    rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, UPDATE_TIME},
     storage::Object,
 };
 
@@ -427,18 +427,10 @@ async fn contribution_loop(
     client: Arc<Client>,
     coordinator: Arc<Url>,
     keypair: Arc<KeyPair>,
+    token: String,
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!(
-        "{}",
-        "You can only join the ceremony with the unique token you received by email for your cohort.".bright_cyan()
-    );
-    let token = io::get_user_input(
-        "Enter your token:".bright_yellow(),
-        Some(&Regex::new(TOKEN_REGEX).unwrap()),
-    )
-    .unwrap();
 
     let decoded_bytes = bs58::decode(token.clone()).into_vec();
     if let Ok(token_bytes) = decoded_bytes {
@@ -461,7 +453,7 @@ async fn contribution_loop(
             _ => (),
         }
     } else {
-        println!("The token provided is not valid.");
+        println!("The token provided is not base58 encoded.");
         process::exit(0);
     };
 
@@ -642,7 +634,7 @@ enum Branch {
 
 /// Performs the entire contribution cycle
 #[inline(always)]
-async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
+async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch) {
     // Check that the passed-in coordinator url is correct
     let client = Client::new();
     requests::ping_coordinator(&client, &url.coordinator)
@@ -682,7 +674,7 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
     match branch {
         Branch::AnotherMachine => contrib_info.is_another_machine = true,
         Branch::Default(custom_seed) if custom_seed => contrib_info.is_own_seed_of_randomness = true,
-        _ => (),
+        _ => unreachable!(),
     }
 
     if contrib_info.is_incentivized {
@@ -713,6 +705,7 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
         Arc::new(client),
         Arc::new(url.coordinator),
         Arc::new(keypair),
+        token,
         contrib_info,
     )
     .await;
@@ -726,9 +719,9 @@ async fn main() {
     match opt {
         CeremonyOpt::Contribute(branch) => {
             match branch {
-                phase1_cli::Branches::AnotherMachine { url } => contribution_prelude(url, Branch::AnotherMachine).await,
-                phase1_cli::Branches::Default { url, custom_seed } => {
-                    contribution_prelude(url, Branch::Default(custom_seed)).await
+                phase1_cli::Branches::AnotherMachine { request } => contribution_prelude(request.url, request.token, Branch::AnotherMachine).await,
+                phase1_cli::Branches::Default { request, custom_seed } => {
+                    contribution_prelude(request.url, request.token, Branch::Default(custom_seed)).await
                 }
                 phase1_cli::Branches::Offline { custom_seed } => {
                     if custom_seed {
@@ -831,7 +824,7 @@ async fn main() {
             get_contributions(&url.coordinator).await;
         }
         CeremonyOpt::GetState(state) => {
-            let secret = state.secret.as_str();
+            let secret = state.token.as_str();
             get_coordinator_state(&state.url.coordinator, secret).await;
         }
         CeremonyOpt::UpdateCohorts(url) => {
