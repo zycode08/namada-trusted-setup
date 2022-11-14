@@ -3,7 +3,7 @@
 use crate::{
     authentication::{Production, Signature},
     objects::Task,
-    s3::S3Error,
+    s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
     CoordinatorError,
     Participant,
@@ -22,6 +22,8 @@ use rocket::{
     tokio::{sync::RwLock, task},
     State,
 };
+
+use anyhow::anyhow;
 
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
@@ -649,7 +651,7 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result
 ///
 /// Because of the use of [`tokio::sync::rwlock::RwLock::write_owned`], which is not cancel safe, and a spawned blocking
 /// task, which cannot be cancelled, this function is not cancel safe.
-pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
+pub async fn perform_verify_chunks(coordinator: Coordinator, s3_ctx: &S3Ctx) -> Result<()> {
     // Get all the pending verifications, loop on each one of them and perform verification
     // Technically, since we don't chunk contributions and we only have one contribution per round, we will always get
     // one pending verification at max.
@@ -657,7 +659,7 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
 
     // NOTE: we are going to rely on the single default verifier built in the coordinator itself,
     //  no external verifiers
-    task::spawn_blocking(move || -> Result<()> {
+    let contributions_info = task::spawn_blocking(move || -> Result<Vec<u8>> {
         for (task, _) in write_lock.get_pending_verifications().to_owned() {
             if let Err(e) = write_lock.default_verify(&task) {
                 warn!("Error while verifying a contribution: {}. Restarting the round...", e);
@@ -678,14 +680,18 @@ pub async fn perform_verify_chunks(coordinator: Coordinator) -> Result<()> {
                     .map_err(|e| ResponseError::CoordinatorError(e))?;
 
                 // Ban the participant who produced the invalid contribution. Must be banned after the reset beacuse one can't ban a finished contributor
-                return write_lock
+                write_lock
                     .ban_participant(&finished_contributor)
-                    .map_err(|e| ResponseError::CoordinatorError(e));
+                    .map_err(|e| ResponseError::CoordinatorError(e))?;
             }
         }
-        Ok(())
+
+        write_lock.storage().get_contributions_summary().map_err(|e| ResponseError::CoordinatorError(e))
     })
-    .await?
+    .await??;
+
+    // Upload json file to S3
+    s3_ctx.upload_contributions_info(contributions_info).await.map_err(|e| ResponseError::CoordinatorError(CoordinatorError::Error(anyhow!(e.to_string()))))
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)

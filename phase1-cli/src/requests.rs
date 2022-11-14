@@ -429,6 +429,7 @@ pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Res
 }
 
 /// Retrieve the list of contributions, json encoded
+#[cfg(debug_assertions)]
 pub async fn get_contributions_info(coordinator_address: &Url) -> Result<Vec<u8>> {
     let client = Client::builder().brotli(true).build()?;
 
