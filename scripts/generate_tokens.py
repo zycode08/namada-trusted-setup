@@ -9,6 +9,9 @@ from datetime import datetime
 from math import ceil
 from typing import Dict, List, Tuple, Union
 
+FFA_TOKEN_PREFIX="ffa"
+PER_USER_TOKEN="put"
+
 
 def load_json(path: str) -> Dict[str, Union[int, str]]:
     return json.load(open(path, "r"))
@@ -39,10 +42,13 @@ def setup_ceremony_output_folder(config: Dict[str, str]) -> Tuple[bool, Union[st
             return False, None
 
 
-def generate_token(ceremony_start: int, cohort_index, cohort_duration):
+def generate_token(ceremony_start: int, cohort_index: int, cohort_duration: int, is_ffa: bool = False):
+    if is_ffa:
+        return FFA_TOKEN_PREFIX + "_" + secrets.token_hex(nbytes=16)
+    
     cohort_start = ceremony_start + cohort_duration * cohort_index
     cohort_end = cohort_start + cohort_duration
-    return base58.b58encode(json.dumps({
+    return PER_USER_TOKEN + "_" + base58.b58encode(json.dumps({
         "from": cohort_start,
         "to": cohort_end,
         "index": cohort_index + 1,
@@ -81,6 +87,7 @@ def main(args: argparse.Namespace):
     total_participant = len(emails)
     ceremony_end = int(ceremony_start + cohort_duration * total_participant)
     total_cohorts = ceil(total_participant / config['participant_per_cohort'])
+    ffa_total_cohorts = config["ffa_cohorts"]
 
     print("Ceremony start: {}".format(format_timestamp_to_datetime(ceremony_start)))
     print("Ceremony end: {}".format(format_timestamp_to_datetime(ceremony_end)))
@@ -112,6 +119,17 @@ def main(args: argparse.Namespace):
 
         dump_mailchimp_data(output_folder, mailchimp_filename_format, cohort_index + 1, mailchimp_cohort_data)
         dump_coordinator_data(output_folder, cohort_filename_format, cohort_index + 1, coordinator_cohort_data)
+
+    ffa_token = generate_token(None, None, None, True)
+
+    for ffa_cohort_index in range(ffa_total_cohorts):
+        coordinator_cohort_data = []
+        for _ in range(max_cohort_participant):
+            coordinator_cohort_data.append(ffa_token)
+        
+        dump_coordinator_data(output_folder, cohort_filename_format, total_cohorts + ffa_cohort_index + 1, coordinator_cohort_data)
+
+    dump_coordinator_data(output_folder, cohort_filename_format,  total_cohorts + ffa_total_cohorts + 1, [[] for _ in range(max_cohort_participant)])
 
     create_coordinate_token_zip(output_folder)
 
