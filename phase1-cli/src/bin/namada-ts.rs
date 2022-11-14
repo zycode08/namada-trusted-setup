@@ -78,15 +78,14 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
-    println!("{}","If you decide to participate in the incentivized trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data is for internal use and won't be published publicly!)".bright_cyan());
-    let incentivization = io::get_user_input(
-        "Do you want to participate in the incentivized trusted setup? [y/n]".bright_yellow(),
+    let anonymous = io::get_user_input(
+        "Do you want to participate anonymously (if not, you'll be asked to provide us with your name and email address)? [y/n]".bright_yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
-    if incentivization == "y" {
-        // Ask for personal info
+    // Ask for personal info
+    if anonymous == "n" {
         contrib_info.full_name = Some(io::get_user_input(
             "Please enter your full name (first and last name):".bright_yellow(),
             Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
@@ -95,8 +94,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
             "Please enter your email address:".bright_yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
         )?);
-        contrib_info.is_incentivized = true;
-    };
+    }
 
     Ok(contrib_info)
 }
@@ -579,6 +577,7 @@ async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     }
 }
 
+#[cfg(debug_assertions)]
 #[inline(always)]
 async fn get_contributions(coordinator: &Url) {
     match requests::get_contributions_info(coordinator).await {
@@ -681,23 +680,8 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
         _ => unreachable!(),
     }
 
-    if contrib_info.is_incentivized {
-        println!("{}\n{}", "IMPORTANT".bright_red().underline().bold(),
-        "You are participating in the incentivized trusted setup.\nThe mnemonic generated in the next step is the ONLY way to recover your keypair that will receive rewards in Namada at genesis.".bright_red());
-    } else {
-        println!(
-            "{}",
-            "The CLI will generate in the background a keypair that is used to interact with the coordinator."
-                .bright_cyan()
-        );
-    }
     io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
-    let user = if contrib_info.is_incentivized {
-        KeyPairUser::IncentivizedContributor
-    } else {
-        KeyPairUser::Contributor
-    };
-    let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(user))
+    let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(KeyPairUser::Contributor))
         .await
         .unwrap()
         .expect(&format!("{}", "Error while generating the keypair".red().bold()));
@@ -824,6 +808,7 @@ async fn main() {
             .await
             .expect(&format!("{}", "Error while generating the addresses".red().bold()));
         }
+        #[cfg(debug_assertions)]
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
         }
