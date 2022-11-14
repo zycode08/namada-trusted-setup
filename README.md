@@ -69,7 +69,7 @@ mv target/release/namada-ts /usr/local/bin
 
 Start your contribution
 ```
-namada-ts contribute default https://contribute.namada.net
+namada-ts contribute default https://contribute.namada.net $TOKEN
 ```
 
 ## Contributing from prebuilt binaries (manual setup)
@@ -79,7 +79,7 @@ After download, you might need to give execution permissions with `chmod +x nama
 
 Finally start the client with:
 ```
-./namada-ts-{distrib}-{version} contribute default https://contribute.namada.net
+./namada-ts-{distrib}-{version} contribute default https://contribute.namada.net $TOKEN
 ```
 
 ## Contributing from prebuilt binaries (automated setup)
@@ -90,7 +90,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/anoma/nam
 
 and you are ready to contribute:
 ```
-namada-ts contribute default https://contribute.namada.net
+namada-ts contribute default https://contribute.namada.net $TOKEN
 ```
 
 ### Troubleshooting
@@ -105,7 +105,7 @@ You can generate the parameters on a machine that is offline or never connected 
 On the online machine give the following command:
 
 ```
-cargo run --release --bin namada-ts --features cli contribute another-machine https://contribute.namada.net
+cargo run --release --bin namada-ts --features cli contribute another-machine https://contribute.namada.net $TOKEN
 ```
 
 This will start the communication process to join the ceremony and download/upload the necessary files. On the offline machine use the following command:
@@ -121,7 +121,7 @@ You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. Th
 
 To use this feature, add the `--custom-seed` flag to your command:
 ```
-cargo run --release --bin namada-ts --features cli contribute default --custom-seed https://contribute.namada.net
+cargo run --release --bin namada-ts --features cli contribute default --custom-seed https://contribute.namada.net $TOKEN
 ```
 
 This flag is available also when contributing offline:
