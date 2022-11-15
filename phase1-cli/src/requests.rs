@@ -421,6 +421,26 @@ pub async fn post_contribution_info(
     Ok(())
 }
 
+/// Send an attestation of the contribution to the Coordinator.
+pub async fn post_attestation(
+    client: &Client,
+    coordinator_address: &Url,
+    keypair: &KeyPair,
+    request_body: &String,
+) -> Result<()> {
+    submit_request::<String>(
+        client,
+        coordinator_address,
+        "/contributor/attestation",
+        Some(keypair),
+        None,
+        Request::Post(Some(request_body)),
+    )
+    .await?;
+
+    Ok(())
+}
+
 /// Query health endpoint of the Coordinator to check the connection
 pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/healthcheck", None, None, Request::Get).await?;
