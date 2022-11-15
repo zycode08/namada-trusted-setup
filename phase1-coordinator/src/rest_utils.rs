@@ -9,7 +9,10 @@ use crate::{
     Participant,
 };
 
-pub use crate::{coordinator_state::TOKENS_PATH, s3::TOKENS_ZIP_FILE};
+pub use crate::{
+    coordinator_state::{PRIVATE_TOKEN_PREFIX, TOKENS_PATH},
+    s3::TOKENS_ZIP_FILE,
+};
 use blake2::Digest;
 use rocket::{
     catch,
@@ -619,7 +622,9 @@ impl PostChunkRequest {
 pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result<u64> {
     // Check that token is not in use nor blacklisted (only if env is set)
     let read_lock = coordinator.read().await;
-    if *TOKEN_BLACKLIST {
+
+    // Check that token is not in use nor blacklisted (only if env is set and token is not FFA)
+    if *TOKEN_BLACKLIST && token.starts_with(PRIVATE_TOKEN_PREFIX) {
         if read_lock.state().is_token_in_use(token) {
             return Err(ResponseError::TokenAlreadyInUse);
         }
