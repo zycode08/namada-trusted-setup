@@ -459,10 +459,11 @@ async fn contribution_loop(
         };
     }
 
-    requests::post_join_queue(&client, &coordinator, &keypair, &token)
+    let cohort = requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
     contrib_info.timestamps.joined_queue = Utc::now();
+    contrib_info.joined_cohort = cohort;
 
     // Spawn heartbeat task to prevent the Coordinator from
     // dropping the contributor out of the ceremony in the middle of a contribution.

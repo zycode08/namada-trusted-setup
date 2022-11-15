@@ -191,8 +191,8 @@ pub async fn post_join_queue(
     coordinator_address: &Url,
     keypair: &KeyPair,
     token: &String,
-) -> Result<()> {
-    submit_request::<String>(
+) -> Result<u64> {
+    let response = submit_request::<String>(
         client,
         coordinator_address,
         "contributor/join_queue",
@@ -202,7 +202,7 @@ pub async fn post_join_queue(
     )
     .await?;
 
-    Ok(())
+    Ok(response.json::<u64>().await?)
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to lock the next [Chunk](`phase1-coordinator::objects::Chunk`).
