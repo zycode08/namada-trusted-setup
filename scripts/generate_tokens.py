@@ -92,13 +92,13 @@ def main(args: argparse.Namespace):
     total_participant = len(emails)
     total_cohorts = ceil(total_participant / config['participant_per_cohort'])
     ffa_total_cohorts = config["ffa_cohorts"]
-    ceremony_end = int(ceremony_start + cohort_duration * total_cohorts)
+    ceremony_end = int(ceremony_start + cohort_duration * (total_cohorts + ffa_total_cohorts))
 
     print("Ceremony start: {}".format(format_timestamp_to_datetime(ceremony_start)))
     print("Ceremony end: {}".format(format_timestamp_to_datetime(ceremony_end)))
     print("Total participants: {}".format(total_participant))
     print("Cohort duration: {} minutes".format(cohort_duration // 60))
-    print("Total cohorts: {}".format(total_cohorts))
+    print("Total cohorts: {}".format(total_cohorts + ffa_total_cohorts))
 
     answer = input("Is this correct? [y/n] ")
     if answer != "y":
@@ -128,13 +128,9 @@ def main(args: argparse.Namespace):
     ffa_token = generate_token(None, None, None, True)
 
     for ffa_cohort_index in range(ffa_total_cohorts):
-        coordinator_cohort_data = []
-        for _ in range(max_cohort_participant):
-            coordinator_cohort_data.append(ffa_token)
-        
-        dump_coordinator_data(output_folder, cohort_filename_format, total_cohorts + ffa_cohort_index + 1, coordinator_cohort_data)
+        dump_coordinator_data(output_folder, cohort_filename_format, total_cohorts + ffa_cohort_index + 1, [ffa_token])
 
-    dump_coordinator_data(output_folder, cohort_filename_format,  total_cohorts + ffa_total_cohorts + 1, [[] for _ in range(max_cohort_participant)])
+    dump_coordinator_data(output_folder, cohort_filename_format,  total_cohorts + ffa_total_cohorts + 1, [])
 
     create_coordinate_token_zip(output_folder)
 

@@ -18,6 +18,7 @@ CEREMONY_START_TIMESTAMP = int(os.getenv('CEREMONY_START_TIMESTAMP'))
 CEREMONY_ANNOUNCEMENT_DATE = os.getenv('CEREMONY_ANNOUNCEMENT_DATE')
 NUMBER_OF_COHORTS = int(os.getenv('NUMBER_OF_COHORTS'))
 NAMADA_TOKENS_PATH = os.getenv('NAMADA_TOKENS_PATH')
+COHORT_DURATION = int(os.getenv('COHORT_DURATION'))
 ceremony_start_date = datetime.utcfromtimestamp(CEREMONY_START_TIMESTAMP)
 ceremony_announcement_date = datetime.strptime(
     CEREMONY_ANNOUNCEMENT_DATE, "%Y-%m-%d %H:%M:%S")
@@ -47,17 +48,17 @@ def load_emails_and_tokens():
 
 def cohort_tag(cohort): return "ts_cohort_" + str(cohort)
 
-def calculate_cohort_reminder_1_week(ceremony_start_date: datetime, cohort: int):
-    return calculate_cohort_datetime(ceremony_start_date, cohort) - timedelta(days=7)
-
 def calculate_cohort_reminder_1_day(ceremony_start_date: datetime, cohort: int):
     return calculate_cohort_datetime(ceremony_start_date, cohort) - timedelta(days=1)
 
+def calculate_cohort_reminder_1_hour(ceremony_start_date: datetime, cohort: int):
+    return calculate_cohort_datetime(ceremony_start_date, cohort) - timedelta(hours=1)
+
 def calculate_cohort_datetime(ceremony_start_date: datetime, cohort: int):
-    return ceremony_start_date + timedelta(days=cohort)
+    return ceremony_start_date + timedelta(seconds=cohort * COHORT_DURATION)
 
 def calculate_cohort_datetime_end(ceremony_start_date: datetime, cohort: int):
-    return calculate_cohort_datetime(ceremony_start_date, cohort) + timedelta(days=1)
+    return calculate_cohort_datetime(ceremony_start_date, cohort) + timedelta(seconds=COHORT_DURATION)
 
 def update_member_merge_tags(email: string, token: string, cohort_datetime: datetime, cohort: int):
     # Update member list's merge tags: TS_TOKEN, TS_CO_DATE
@@ -162,15 +163,16 @@ segment_ids = create_and_load_segment_ids(emails)
 # Spot secured
 announce_ceremony(ceremony_announcement_date,
                   campaign_settings['spot_secured'], segment_ids)
-# REMINDER: 1 week
-# schedule_campaign_for_all_cohorts(
-#     calculate_cohort_reminder_1_week, ceremony_start_date, campaign_settings['reminder_1_week'], segment_ids)
+
 # REMINDER: 1 day
 # schedule_campaign_for_all_cohorts(
 #     calculate_cohort_reminder_1_day, ceremony_start_date, campaign_settings['reminder_1_day'], segment_ids)
+# REMINDER: 1 hour
+schedule_campaign_for_all_cohorts(
+    calculate_cohort_reminder_1_hour, ceremony_start_date, campaign_settings['reminder_1_hour'], segment_ids)
 # Launch email
 schedule_campaign_for_all_cohorts(
     calculate_cohort_datetime, ceremony_start_date, campaign_settings['cohort_live'], segment_ids)
-# Thank you email
+# # Thank you email
 schedule_campaign_for_all_cohorts(
     calculate_cohort_datetime_end, ceremony_start_date, campaign_settings['thank_you'], segment_ids)
