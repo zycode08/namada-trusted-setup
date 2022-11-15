@@ -121,7 +121,7 @@ pub struct VerifySignatureContribution {
     #[structopt(about = "The contribution message hash")]
     pub message: String,
     #[structopt(about = "The contribution signature")]
-    pub signature: String
+    pub signature: String,
 }
 
 #[derive(Debug, StructOpt)]

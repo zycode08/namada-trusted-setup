@@ -4,12 +4,13 @@ use rusoto_core::{region::Region, request::TlsError};
 use rusoto_credential::{AwsCredentials, ChainProvider, CredentialsError, ProvideAwsCredentials};
 use rusoto_s3::{
     util::{PreSignedRequest, PreSignedRequestOption},
+    DeleteObjectRequest,
     GetObjectRequest,
     HeadObjectRequest,
     PutObjectRequest,
     S3Client,
     StreamingBody,
-    S3, DeleteObjectRequest,
+    S3,
 };
 use std::str::FromStr;
 use thiserror::Error;
@@ -89,7 +90,7 @@ impl S3Ctx {
             .delete_object(delete_object_request)
             .await
             .map_or_else(|e| Err(S3Error::UploadError(e.to_string())), |_| Ok(()))?;
-        
+
         // Upload the updated file
         let put_object_request = PutObjectRequest {
             bucket: self.bucket.clone(),

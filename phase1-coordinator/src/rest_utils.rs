@@ -697,12 +697,18 @@ pub async fn perform_verify_chunks(coordinator: Coordinator, s3_ctx: &S3Ctx) -> 
             }
         }
 
-        write_lock.storage().get_contributions_summary().map_err(|e| ResponseError::CoordinatorError(e))
+        write_lock
+            .storage()
+            .get_contributions_summary()
+            .map_err(|e| ResponseError::CoordinatorError(e))
     })
     .await??;
 
     // Upload json file to S3
-    s3_ctx.upload_contributions_info(contributions_info).await.map_err(|e| ResponseError::CoordinatorError(CoordinatorError::Error(anyhow!(e.to_string()))))
+    s3_ctx
+        .upload_contributions_info(contributions_info)
+        .await
+        .map_err(|e| ResponseError::CoordinatorError(CoordinatorError::Error(anyhow!(e.to_string()))))
 }
 
 /// Performs the update of the [Coordinator](`crate::Coordinator`)
