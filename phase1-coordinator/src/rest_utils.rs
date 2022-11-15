@@ -9,7 +9,10 @@ use crate::{
     Participant,
 };
 
-pub use crate::{coordinator_state::{PRIVATE_TOKEN_PREFIX, TOKENS_PATH}, s3::TOKENS_ZIP_FILE};
+pub use crate::{
+    coordinator_state::{PRIVATE_TOKEN_PREFIX, TOKENS_PATH},
+    s3::TOKENS_ZIP_FILE,
+};
 use blake2::Digest;
 use rocket::{
     catch,
