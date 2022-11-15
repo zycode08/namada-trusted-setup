@@ -1527,28 +1527,26 @@ impl CoordinatorState {
     /// Moves the ip address and token from the list of currently in use to the black lists
     ///
     pub fn blacklist_participant(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
-        // Blacklist token
+        // Blacklist token (if not FFA)
         let target_token = self
             .runtime_state
             .tokens_in_use
             .iter()
             .find(|(_, part)| *part == participant)
-            .ok_or(CoordinatorError::Error(anyhow!(
-                "Missing token for participant {}",
-                participant
-            )))?
-            .0
-            .clone();
+            .map(|(t, _)| t.clone());
 
-        // Safe to unwrap here
-        let (token, part) = self.runtime_state.tokens_in_use.remove_entry(&target_token).unwrap();
+        // Private token, blacklist
+        if let Some(target_token) = target_token {
+            // Safe to unwrap here
+            let (token, part) = self.runtime_state.tokens_in_use.remove_entry(&target_token).unwrap();
 
-        if let Some(part) = self.blacklisted_tokens.insert(token, part) {
-            return Err(CoordinatorError::Error(anyhow!(
-                "Token {} was already blacklisted for participant {}!",
-                target_token,
-                part
-            )));
+            if let Some(part) = self.blacklisted_tokens.insert(token, part) {
+                return Err(CoordinatorError::Error(anyhow!(
+                    "Token {} was already blacklisted for participant {}!",
+                    target_token,
+                    part
+                )));
+            }
         }
 
         // Blacklist Ip address
