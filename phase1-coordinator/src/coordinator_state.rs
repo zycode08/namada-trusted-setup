@@ -21,7 +21,7 @@ use std::{
 use time::{Duration, OffsetDateTime};
 use tracing::*;
 
-pub const PRIVATE_TOKEN_PREFIX: &str = "put";
+pub const PRIVATE_TOKEN_PREFIX: &str = "put_";
 
 lazy_static! {
     static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
