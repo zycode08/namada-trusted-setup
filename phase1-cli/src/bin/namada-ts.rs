@@ -701,7 +701,7 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
     match branch {
         Branch::AnotherMachine => contrib_info.is_another_machine = true,
         Branch::Default(custom_seed) if custom_seed => contrib_info.is_own_seed_of_randomness = true,
-        _ => unreachable!(),
+        _ => (),
     }
 
     io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
