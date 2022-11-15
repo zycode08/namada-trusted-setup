@@ -25,8 +25,9 @@ use crate::{
         TOKENS_ZIP_FILE,
     },
     s3::S3Ctx,
+    storage::{Locator, Object},
     CoordinatorState,
-    Participant, storage::{Locator, Object},
+    Participant,
 };
 use rocket::{
     get,
@@ -59,7 +60,8 @@ pub async fn join_queue(
             token.clone(),
             10,
         )
-    }).await?
+    })
+    .await?
     .map_err(|e| ResponseError::CoordinatorError(e))?;
 
     Ok(Json(cohort))
@@ -350,41 +352,50 @@ pub async fn post_contribution_info(
 
 /// Uploads the attestation for a contribution
 #[post("/contributor/attestation", format = "json", data = "<request>")]
-pub async fn post_attestation( coordinator: &State<Coordinator>,
+pub async fn post_attestation(
+    coordinator: &State<Coordinator>,
     participant: Participant,
-    request: LazyJson<(u64, String)>,) -> Result<()> {
-        let (round, attestation) = request.0;
+    request: LazyJson<(u64, String)>,
+) -> Result<()> {
+    let (round, attestation) = request.0;
 
-        // Check url format
-        if let Err(e) = Url::parse(attestation.as_str()) {
-            return Err(ResponseError::IoError(e.to_string()))
+    // Check url format
+    if let Err(e) = Url::parse(attestation.as_str()) {
+        return Err(ResponseError::IoError(e.to_string()));
+    }
+
+    let read_lock = (*coordinator).clone().read_owned().await;
+    task::spawn_blocking(move || {
+        if !read_lock.is_current_contributor(&participant) && !read_lock.is_finished_contributor(&participant) {
+            // Only current or finished contributors are allowed to query this endpoint
+            return Err(crate::CoordinatorError::ParticipantUnauthorized);
         }
 
-        let read_lock = (*coordinator).clone().read_owned().await;
-        task::spawn_blocking(move || {
-            if !read_lock.is_current_contributor(&participant) && !read_lock.is_finished_contributor(&participant) {
-                // Only current or finished contributors are allowed to query this endpoint
-                return Err(crate::CoordinatorError::ParticipantUnauthorized);
+        // Check the provided round height matches the signing participant
+        match read_lock
+            .storage()
+            .get(&Locator::ContributionInfoFile { round_height: round })?
+        {
+            Object::ContributionInfoFile(f) => {
+                if f.public_key == participant.address() {
+                    Ok(())
+                } else {
+                    Err(crate::CoordinatorError::ParticipantRoundHeightInvalid)
+                }
             }
+            _ => Err(crate::CoordinatorError::StorageFailed),
+        }
+    })
+    .await?
+    .map_err(|e| ResponseError::CoordinatorError(e))?;
 
-            // Check the provided round height matches the signing participant
-            match read_lock.storage().get(&Locator::ContributionInfoFile{ round_height: round })? {
-                Object::ContributionInfoFile(f) => {
-                    if f.public_key == participant.address() {
-                        Ok(())
-                    } else {
-                        Err(crate::CoordinatorError::ParticipantRoundHeightInvalid)
-                    }
-                },
-                _ => Err(crate::CoordinatorError::StorageFailed)
-            }})
-        .await?.map_err(|e| ResponseError::CoordinatorError(e))?;
+    // Update the contribution info and the summary with the attestation
+    let mut write_lock = (*coordinator).clone().write_owned().await;
 
-        // Update the contribution info and the summary with the attestation
-        let mut write_lock = (*coordinator).clone().write_owned().await;
-
-        task::spawn_blocking(move || write_lock.update_contribution_info_attestation(round, attestation)).await?.map_err(|e| ResponseError::CoordinatorError(e))
-    }
+    task::spawn_blocking(move || write_lock.update_contribution_info_attestation(round, attestation))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))
+}
 
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
 #[cfg(debug_assertions)]

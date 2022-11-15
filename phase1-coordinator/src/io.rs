@@ -211,17 +211,11 @@ pub fn verify_signature(pubkey: String, signature: String, message: String) -> b
     let signature = ed25519_compact::Signature::from_slice(&hex::decode(signature).unwrap());
 
     match (pk, signature) {
-        (Ok(pk), Ok(signature)) => {
-            match pk.verify(&message, &signature) {
-                Ok(_) => true,
-                Err(_) => {
-                    false
-                },
-            }
-        }
-        _ => {
-            false   
-        }
+        (Ok(pk), Ok(signature)) => match pk.verify(&message, &signature) {
+            Ok(_) => true,
+            Err(_) => false,
+        },
+        _ => false,
     }
 }
 

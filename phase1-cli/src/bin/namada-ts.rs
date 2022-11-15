@@ -1,7 +1,7 @@
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
-    io::{self, KeyPairUser, verify_signature},
+    io::{self, verify_signature, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
     rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, UPDATE_TIME},
     storage::Object,
@@ -23,7 +23,8 @@ use phase1_cli::{
     requests,
     CeremonyOpt,
     CoordinatorUrl,
-    Token, VerifySignatureContribution,
+    Token,
+    VerifySignatureContribution,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -549,14 +550,24 @@ async fn contribution_loop(
                 println!("{}\n", ASCII_CONTRIBUTION_DONE.bright_yellow());
 
                 // Attestation
-                if "n" == io::get_user_input("Would you like to provide an attestation of your contribution? [y/n]".bright_yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                if "n"
+                    == io::get_user_input(
+                        "Would you like to provide an attestation of your contribution? [y/n]".bright_yellow(),
+                        Some(&Regex::new(r"^(?i)[yn]$").unwrap()),
+                    )
+                    .unwrap()
+                {
                     break;
                 } else {
                     loop {
-                        let attestation_url = io::get_user_input("Please enter a valid url for your attestation:".bright_yellow(), None).unwrap();
+                        let attestation_url =
+                            io::get_user_input("Please enter a valid url for your attestation:".bright_yellow(), None)
+                                .unwrap();
                         if Url::parse(attestation_url.as_str()).is_ok() {
                             // Send attestation to coordinator
-                            requests::post_attestation(&client, &coordinator, &keypair, &attestation_url).await.expect(&format!("{}", "Failed attestation upload".red().bold()));
+                            requests::post_attestation(&client, &coordinator, &keypair, &attestation_url)
+                                .await
+                                .expect(&format!("{}", "Failed attestation upload".red().bold()));
                             return;
                         }
                     }
@@ -720,7 +731,9 @@ async fn main() {
     match opt {
         CeremonyOpt::Contribute(branch) => {
             match branch {
-                phase1_cli::Branches::AnotherMachine { request } => contribution_prelude(request.url, request.token, Branch::AnotherMachine).await,
+                phase1_cli::Branches::AnotherMachine { request } => {
+                    contribution_prelude(request.url, request.token, Branch::AnotherMachine).await
+                }
                 phase1_cli::Branches::Default { request, custom_seed } => {
                     contribution_prelude(request.url, request.token, Branch::Default(custom_seed)).await
                 }
@@ -858,13 +871,17 @@ async fn main() {
             let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
         }
-        CeremonyOpt::VerifySignature(VerifySignatureContribution { pubkey, message, signature }) => {
+        CeremonyOpt::VerifySignature(VerifySignatureContribution {
+            pubkey,
+            message,
+            signature,
+        }) => {
             let result = verify_signature(pubkey, signature, message);
             if result {
                 println!("The contribution signature is correct.")
             } else {
                 println!("The contribution signature is not correct.")
             }
-        } 
+        }
     }
 }
