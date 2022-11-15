@@ -21,6 +21,8 @@ use std::{
 use time::{Duration, OffsetDateTime};
 use tracing::*;
 
+pub const PRIVATE_TOKEN_PREFIX: &str = "put";
+
 lazy_static! {
     static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
         Ok(s) if s == "true" => true,
@@ -1788,8 +1790,10 @@ impl CoordinatorState {
             self.runtime_state.current_ips.insert(ip, participant.clone());
         }
 
-        // Add token to the set of currenly known ones
-        self.runtime_state.tokens_in_use.insert(token, participant);
+        // Add token (if not FFA) to the set of currenly known ones
+        if token.starts_with(PRIVATE_TOKEN_PREFIX) {
+            self.runtime_state.tokens_in_use.insert(token, participant);
+        }
 
         Ok(())
     }
