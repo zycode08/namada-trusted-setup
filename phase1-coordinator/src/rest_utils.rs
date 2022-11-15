@@ -27,7 +27,6 @@ use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
 use lazy_static::lazy_static;
-use regex::Regex;
 use std::{borrow::Cow, convert::TryFrom, io::Cursor, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 use tracing::warn;
@@ -81,8 +80,6 @@ pub enum ResponseError {
     InvalidSignature,
     #[error("Authentification token for cohort {0} is invalid")]
     InvalidToken(usize),
-    #[error("Authentification token has an invalid token format")]
-    InvalidTokenFormat,
     #[error("Io Error: {0}")]
     IoError(String),
     #[error("Checksum of body doesn't match the expected one: expc {0}, act: {1}")]
@@ -127,7 +124,6 @@ impl<'r> Responder<'r, 'static> for ResponseError {
             ResponseError::InvalidSecret => Status::Unauthorized,
             ResponseError::InvalidSignature => Status::BadRequest,
             ResponseError::InvalidToken(_) => Status::Unauthorized,
-            ResponseError::InvalidTokenFormat => Status::BadRequest,
             ResponseError::MismatchingChecksum(_, _) => Status::BadRequest,
             ResponseError::MissingRequiredHeader(h) if h == CONTENT_LENGTH_HEADER => Status::LengthRequired,
             ResponseError::MissingRequiredHeader(_) => Status::BadRequest,
@@ -619,13 +615,6 @@ impl PostChunkRequest {
 /// Checks the validity of the token for the ceremony.
 /// Returns the current cohort index
 pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result<()> {
-    // Check if the token's format is correct
-    let regex = Regex::new(TOKEN_REGEX).unwrap();
-
-    if !regex.is_match(token) {
-        return Err(ResponseError::InvalidTokenFormat);
-    }
-
     // Check that token is not in use nor blacklisted (only if env is set)
     let read_lock = coordinator.read().await;
     if *TOKEN_BLACKLIST {
