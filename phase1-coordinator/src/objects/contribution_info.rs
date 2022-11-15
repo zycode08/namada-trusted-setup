@@ -95,7 +95,7 @@ pub struct ContributionInfo {
     // Signature of the contribution
     pub contribution_file_signature: String,
     /// Url providing an attestation of the contribution
-    pub attestation: Option<String>
+    pub attestation: Option<String>,
     // Some timestamps to get performance metrics of the ceremony
     pub timestamps: ContributionTimeStamps,
     // Signature of this struct, computed on the json string encoding of all the other fields of this struct
