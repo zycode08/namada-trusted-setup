@@ -546,9 +546,21 @@ async fn contribution_loop(
                                 contrib_info.contribution_hash,
                 format!("You also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in the \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
                                 );
-                println!("{}", ASCII_CONTRIBUTION_DONE.bright_yellow());
+                println!("{}\n", ASCII_CONTRIBUTION_DONE.bright_yellow());
 
-                break;
+                // Attestation
+                if "n" == io::get_user_input("Would you like to provide an attestation of your contribution? [y/n]".bright_yellow(), Some(&Regex::new(r"^(?i)[yn]$").unwrap())).unwrap() {
+                    break;
+                } else {
+                    loop {
+                        let attestation_url = io::get_user_input("Please enter a valid url for your attestation:".bright_yellow(), None).unwrap();
+                        if Url::parse(attestation_url.as_str()).is_ok() {
+                            // Send attestation to coordinator
+                            requests::post_attestation(&client, &coordinator, &keypair, &attestation_url).await.expect(&format!("{}", "Failed attestation upload".red().bold()));
+                            return;
+                        }
+                    }
+                }
             }
             ContributorStatus::Banned => {
                 println!(

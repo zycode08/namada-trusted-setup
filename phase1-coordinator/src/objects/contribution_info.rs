@@ -94,6 +94,8 @@ pub struct ContributionInfo {
     pub contribution_file_hash: String,
     // Signature of the contribution
     pub contribution_file_signature: String,
+    /// Url providing an attestation of the contribution
+    pub attestation: Option<String>
     // Some timestamps to get performance metrics of the ceremony
     pub timestamps: ContributionTimeStamps,
     // Signature of this struct, computed on the json string encoding of all the other fields of this struct
@@ -162,6 +164,7 @@ pub struct TrimmedContributionInfo {
     ceremony_round: u64,
     contribution_hash: String,
     contribution_hash_signature: String,
+    attestation: Option<String>,
     timestamps: TrimmedContributionTimeStamps,
 }
 
@@ -176,6 +179,7 @@ impl From<ContributionInfo> for TrimmedContributionInfo {
             ceremony_round: parent.ceremony_round,
             contribution_hash: parent.contribution_file_hash,
             contribution_hash_signature: parent.contribution_file_signature,
+            attestation: parent.attestation,
             timestamps: parent.timestamps.into(),
         }
     }
