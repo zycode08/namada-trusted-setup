@@ -78,12 +78,12 @@ pub struct ContributionInfo {
     pub email: Option<String>,
     // ed25519 public key, hex encoded
     pub public_key: String,
-    // User participates in incentivized program or not
-    pub is_incentivized: bool,
     // User can choose to contribute on another machine
     pub is_another_machine: bool,
     // User can choose the default method to generate randomness or his own.
     pub is_own_seed_of_randomness: bool,
+    // Cohort in which the participant joined the queue
+    pub joined_cohort: u64,
     // Round in which the contribution took place
     pub ceremony_round: u64,
     // Hash of the contribution run by masp-mpc, contained in the transcript
@@ -94,6 +94,8 @@ pub struct ContributionInfo {
     pub contribution_file_hash: String,
     // Signature of the contribution
     pub contribution_file_signature: String,
+    /// Url providing an attestation of the contribution
+    pub attestation: Option<String>,
     // Some timestamps to get performance metrics of the ceremony
     pub timestamps: ContributionTimeStamps,
     // Signature of this struct, computed on the json string encoding of all the other fields of this struct
@@ -154,24 +156,30 @@ impl ContributionInfo {
 /// A summarized version of [`ContributionInfo`]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TrimmedContributionInfo {
+    full_name: Option<String>,
     public_key: String,
     is_another_machine: bool,
     is_own_seed_of_randomness: bool,
+    joined_cohort: u64,
     ceremony_round: u64,
     contribution_hash: String,
     contribution_hash_signature: String,
+    attestation: Option<String>,
     timestamps: TrimmedContributionTimeStamps,
 }
 
 impl From<ContributionInfo> for TrimmedContributionInfo {
     fn from(parent: ContributionInfo) -> Self {
         Self {
+            full_name: parent.full_name,
             public_key: parent.public_key,
             is_another_machine: parent.is_another_machine,
             is_own_seed_of_randomness: parent.is_own_seed_of_randomness,
+            joined_cohort: parent.joined_cohort,
             ceremony_round: parent.ceremony_round,
-            contribution_hash: parent.contribution_hash,
-            contribution_hash_signature: parent.contribution_hash_signature,
+            contribution_hash: parent.contribution_file_hash,
+            contribution_hash_signature: parent.contribution_file_signature,
+            attestation: parent.attestation,
             timestamps: parent.timestamps.into(),
         }
     }
@@ -216,7 +224,6 @@ mod tests {
         // Test custom
         test_info.full_name = Some(String::from("Test Name"));
         test_info.email = Some(String::from("test_name@test.dev"));
-        test_info.is_incentivized = true;
         test_info.ceremony_round = 12;
         test_info.contribution_hash = String::from("Not a valid hash");
         test_info.contribution_hash_signature = String::from("Not a valid signature");

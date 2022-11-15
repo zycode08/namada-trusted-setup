@@ -25,20 +25,6 @@ In both cases it is possible to provide an optional `--custom-seed` for the RNG:
 
 For a visual overview of the contribution process refer to the [flow chart](#flowchart).
 
-## Incentivized program
-
-Namada will provide a reward for the contributors of the ceremony. When contributing, the CLI will ask if you are interested in taking part in this program: if the answer is yes then you will be asked to provide your name and email address.
-
-The client will then generate a mnemonic that you **NEED** to store safely somewhere. This file should then be passed to the following command
-
-```
-namada-ts export-keypair <PATH-TO-MNEMONIC-FILE>
-```
-
-which will generate a `wallet.toml` file containing your Namada account. You can then import the content of this file into your wallet.
-
-This address will be added to the Namada genesis file with the predefined amount of tokens. We'll compute the address from the public key that you used during the contribution, you don't need to communicate it to us.
-
 ## Building and contributing from source
 
 First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
@@ -69,7 +55,7 @@ mv target/release/namada-ts /usr/local/bin
 
 Start your contribution
 ```
-namada-ts contribute default https://contribute.namada.net
+namada-ts contribute default https://contribute.namada.net $TOKEN
 ```
 
 ## Contributing from prebuilt binaries (manual setup)
@@ -79,7 +65,7 @@ After download, you might need to give execution permissions with `chmod +x nama
 
 Finally start the client with:
 ```
-./namada-ts-{distrib}-{version} contribute default https://contribute.namada.net
+./namada-ts-{distrib}-{version} contribute default https://contribute.namada.net $TOKEN
 ```
 
 ## Contributing from prebuilt binaries (automated setup)
@@ -90,7 +76,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/anoma/nam
 
 and you are ready to contribute:
 ```
-namada-ts contribute default https://contribute.namada.net
+namada-ts contribute default https://contribute.namada.net $TOKEN
 ```
 
 ### Troubleshooting
@@ -105,7 +91,7 @@ You can generate the parameters on a machine that is offline or never connected 
 On the online machine give the following command:
 
 ```
-cargo run --release --bin namada-ts --features cli contribute another-machine https://contribute.namada.net
+cargo run --release --bin namada-ts --features cli contribute another-machine https://contribute.namada.net $TOKEN
 ```
 
 This will start the communication process to join the ceremony and download/upload the necessary files. On the offline machine use the following command:
@@ -121,7 +107,7 @@ You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. Th
 
 To use this feature, add the `--custom-seed` flag to your command:
 ```
-cargo run --release --bin namada-ts --features cli contribute default --custom-seed https://contribute.namada.net
+cargo run --release --bin namada-ts --features cli contribute default --custom-seed https://contribute.namada.net $TOKEN
 ```
 
 This flag is available also when contributing offline:
@@ -144,7 +130,7 @@ This section describes how it feels to contribute to the ceremony.
 
 ### Client Contribution Flow 
 
-1. The client will ask you if you want to take part in the incentivized program. If you answer 'yes', it will generate a secret mnemonic that derives your key pair.  Back up your mnemonic and keep it in a safe place! This is the only way to prove your contribution and claim your rewards later.
+1. The client will generate a secret mnemonic that derives your key pair.  Back up your mnemonic and keep it in a safe place! This is the only way to prove your contribution.
 
 2. Then, you will need to provide the unique token for your cohort you received by email. If the token is valid, you will join the queue of the ceremony. You will need to wait a bit until it is your turn. Each round lasts between 4 min and 20 min. During the whole ceremony, please neither close your terminal, nor your internet connection. If you stay offline for more than 2 min, the coordinator will kick you out from the queue.
 

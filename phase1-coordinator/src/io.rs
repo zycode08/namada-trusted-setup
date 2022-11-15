@@ -35,7 +35,6 @@ pub enum IOError {
 pub enum KeyPairUser {
     Contributor,
     Coordinator,
-    IncentivizedContributor,
 }
 
 type Result<T> = std::result::Result<T, IOError>;
@@ -160,9 +159,8 @@ pub fn keypair_from_mnemonic() -> Result<KeyPair> {
 
 /// Generates a new [`KeyPair`] from a randomly generated mnemonic.
 /// Cases:
-/// - Contributor -> generate keypair in the background without notifying the user
+/// - Contributor -> print and check the mnemonic with the user
 /// - Coordinator -> save the mnemonic to a file
-/// - IncentivizedContributor -> print and check the mnemonic with the user
 pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
     // Generate random mnemonic
     let mut rng = rand_06::thread_rng();
@@ -171,9 +169,8 @@ pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
         .into();
 
     match user {
-        KeyPairUser::Contributor => (),
         KeyPairUser::Coordinator => std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?,
-        KeyPairUser::IncentivizedContributor => {
+        KeyPairUser::Contributor => {
             // Print mnemonic to the user in a different terminal
             execute!(std::io::stdout(), EnterAlternateScreen)?;
             println!("{}", "Safely store your 24 words mnemonic:\n".bright_cyan());
@@ -214,17 +211,11 @@ pub fn verify_signature(pubkey: String, signature: String, message: String) -> b
     let signature = ed25519_compact::Signature::from_slice(&hex::decode(signature).unwrap());
 
     match (pk, signature) {
-        (Ok(pk), Ok(signature)) => {
-            match pk.verify(&message, &signature) {
-                Ok(_) => true,
-                Err(e) => {
-                    false
-                },
-            }
-        }
-        _ => {
-            false   
-        }
+        (Ok(pk), Ok(signature)) => match pk.verify(&message, &signature) {
+            Ok(_) => true,
+            Err(_) => false,
+        },
+        _ => false,
     }
 }
 

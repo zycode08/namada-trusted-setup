@@ -191,8 +191,8 @@ pub async fn post_join_queue(
     coordinator_address: &Url,
     keypair: &KeyPair,
     token: &String,
-) -> Result<()> {
-    submit_request::<String>(
+) -> Result<u64> {
+    let response = submit_request::<String>(
         client,
         coordinator_address,
         "contributor/join_queue",
@@ -202,7 +202,7 @@ pub async fn post_join_queue(
     )
     .await?;
 
-    Ok(())
+    Ok(response.json::<u64>().await?)
 }
 
 /// Send a request to the [Coordinator](`phase1-coordinator::Coordinator`) to lock the next [Chunk](`phase1-coordinator::objects::Chunk`).
@@ -421,6 +421,26 @@ pub async fn post_contribution_info(
     Ok(())
 }
 
+/// Send an attestation of the contribution to the Coordinator.
+pub async fn post_attestation(
+    client: &Client,
+    coordinator_address: &Url,
+    keypair: &KeyPair,
+    request_body: &String,
+) -> Result<()> {
+    submit_request::<String>(
+        client,
+        coordinator_address,
+        "/contributor/attestation",
+        Some(keypair),
+        None,
+        Request::Post(Some(request_body)),
+    )
+    .await?;
+
+    Ok(())
+}
+
 /// Query health endpoint of the Coordinator to check the connection
 pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Result<()> {
     submit_request::<()>(client, coordinator_address, "/healthcheck", None, None, Request::Get).await?;
@@ -429,6 +449,7 @@ pub async fn ping_coordinator(client: &Client, coordinator_address: &Url) -> Res
 }
 
 /// Retrieve the list of contributions, json encoded
+#[cfg(debug_assertions)]
 pub async fn get_contributions_info(coordinator_address: &Url) -> Result<Vec<u8>> {
     let client = Client::builder().brotli(true).build()?;
 

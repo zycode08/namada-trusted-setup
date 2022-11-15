@@ -25,6 +25,7 @@ use crate::{
         TOKENS_ZIP_FILE,
     },
     s3::S3Ctx,
+    storage::{Locator, Object},
     CoordinatorState,
     Participant,
 };
@@ -37,18 +38,19 @@ use rocket::{
     State,
 };
 
+use url::Url;
+
 /// Add the incoming contributor to the queue of contributors.
 #[post("/contributor/join_queue", format = "json", data = "<token>")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
     new_participant: NewParticipant,
     token: LazyJson<String>,
-) -> Result<()> {
+) -> Result<Json<u64>> {
     // NOTE: check on the token happens only here meaning that a contributor can join the ceremony at the very last moment of a cohort and
     // contribute effectively in the following cohort. Forcing the contribution to happen in the correct cohort would take more complicated checks
     // and could lower the amount of contributions received
-    rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
-
+    let cohort = rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     task::spawn_blocking(move || {
@@ -60,7 +62,9 @@ pub async fn join_queue(
         )
     })
     .await?
-    .map_err(|e| ResponseError::CoordinatorError(e))
+    .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    Ok(Json(cohort))
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
@@ -177,7 +181,7 @@ pub async fn stop_coordinator(_auth: ServerAuth, shutdown: Shutdown) {
 #[cfg(debug_assertions)]
 #[get("/verify")]
 pub async fn verify_chunks(coordinator: &State<Coordinator>, _auth: ServerAuth) -> Result<()> {
-    rest_utils::perform_verify_chunks((*coordinator).clone()).await
+    rest_utils::perform_verify_chunks((*coordinator).clone(), &S3Ctx::new().await?).await
 }
 
 /// Load new tokens to update the future cohorts. The `tokens` parameter is the serialized zip folder
@@ -346,7 +350,55 @@ pub async fn post_contribution_info(
     .map_err(|e| ResponseError::CoordinatorError(e))
 }
 
+/// Uploads the attestation for a contribution
+#[post("/contributor/attestation", format = "json", data = "<request>")]
+pub async fn post_attestation(
+    coordinator: &State<Coordinator>,
+    participant: Participant,
+    request: LazyJson<(u64, String)>,
+) -> Result<()> {
+    let (round, attestation) = request.0;
+
+    // Check url format
+    if let Err(e) = Url::parse(attestation.as_str()) {
+        return Err(ResponseError::IoError(e.to_string()));
+    }
+
+    let read_lock = (*coordinator).clone().read_owned().await;
+    task::spawn_blocking(move || {
+        if !read_lock.is_current_contributor(&participant) && !read_lock.is_finished_contributor(&participant) {
+            // Only current or finished contributors are allowed to query this endpoint
+            return Err(crate::CoordinatorError::ParticipantUnauthorized);
+        }
+
+        // Check the provided round height matches the signing participant
+        match read_lock
+            .storage()
+            .get(&Locator::ContributionInfoFile { round_height: round })?
+        {
+            Object::ContributionInfoFile(f) => {
+                if f.public_key == participant.address() {
+                    Ok(())
+                } else {
+                    Err(crate::CoordinatorError::ParticipantRoundHeightInvalid)
+                }
+            }
+            _ => Err(crate::CoordinatorError::StorageFailed),
+        }
+    })
+    .await?
+    .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    // Update the contribution info and the summary with the attestation
+    let mut write_lock = (*coordinator).clone().write_owned().await;
+
+    task::spawn_blocking(move || write_lock.update_contribution_info_attestation(round, attestation))
+        .await?
+        .map_err(|e| ResponseError::CoordinatorError(e))
+}
+
 /// Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
+#[cfg(debug_assertions)]
 #[get("/contribution_info")]
 pub async fn get_contributions_info(coordinator: &State<Coordinator>) -> Result<Vec<u8>> {
     let read_lock = (*coordinator).clone().read_owned().await;

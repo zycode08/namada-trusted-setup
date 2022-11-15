@@ -28,12 +28,13 @@ pub struct CoordinatorUrl {
     pub coordinator: Url,
 }
 
+/// Accepts both the ceremony token and the secret token for reserved endpoints
 #[derive(Debug, StructOpt)]
-pub struct CoordinatorState {
+pub struct RequestWithToken {
     #[structopt(flatten)]
     pub url: CoordinatorUrl,
     #[structopt(help = "The secret token required for the request")]
-    pub secret: String,
+    pub token: String,
 }
 
 #[derive(Debug, StructOpt)]
@@ -62,12 +63,12 @@ pub enum Branches {
     )]
     AnotherMachine {
         #[structopt(flatten)]
-        url: CoordinatorUrl,
+        request: RequestWithToken,
     },
     #[structopt(about = "The default contribution path, executes both communication and computation on this machine")]
     Default {
         #[structopt(flatten)]
-        url: CoordinatorUrl,
+        request: RequestWithToken,
         #[structopt(
             long,
             help = "Give a custom random seed (32 bytes / 64 characters in hexadecimal) for the ChaCha RNG"
@@ -120,7 +121,7 @@ pub struct VerifySignatureContribution {
     #[structopt(about = "The contribution message hash")]
     pub message: String,
     #[structopt(about = "The contribution signature")]
-    pub signature: String
+    pub signature: String,
 }
 
 #[derive(Debug, StructOpt)]
@@ -134,10 +135,11 @@ pub enum CeremonyOpt {
     ExportKeypair(MnemonicPath),
     #[structopt(about = "Generate the list of addresses of the contributors")]
     GenerateAddresses(Contributors),
+    #[cfg(debug_assertions)]
     #[structopt(about = "Get a list of all the contributions received")]
     GetContributions(CoordinatorUrl),
     #[structopt(about = "Get the state of the coordinator")]
-    GetState(CoordinatorState),
+    GetState(RequestWithToken),
     #[cfg(debug_assertions)]
     #[structopt(about = "Verify the pending contributions")]
     VerifyContributions(CoordinatorUrl),

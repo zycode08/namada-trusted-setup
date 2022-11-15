@@ -4,6 +4,7 @@ use rusoto_core::{region::Region, request::TlsError};
 use rusoto_credential::{AwsCredentials, ChainProvider, CredentialsError, ProvideAwsCredentials};
 use rusoto_s3::{
     util::{PreSignedRequest, PreSignedRequestOption},
+    DeleteObjectRequest,
     GetObjectRequest,
     HeadObjectRequest,
     PutObjectRequest,
@@ -74,6 +75,34 @@ impl S3Ctx {
             options,
             credentials,
         })
+    }
+
+    /// Upload contributors.json file to S3 for the frontend
+    pub(crate) async fn upload_contributions_info(&self, contributions_info: Vec<u8>) -> Result<()> {
+        // First delete the old file to allow triggering the lambda
+        let delete_object_request = DeleteObjectRequest {
+            bucket: self.bucket.clone(),
+            key: "contributors.json".to_string(),
+            ..Default::default()
+        };
+
+        self.client
+            .delete_object(delete_object_request)
+            .await
+            .map_or_else(|e| Err(S3Error::UploadError(e.to_string())), |_| Ok(()))?;
+
+        // Upload the updated file
+        let put_object_request = PutObjectRequest {
+            bucket: self.bucket.clone(),
+            key: "contributors.json".to_string(),
+            body: Some(StreamingBody::from(contributions_info)),
+            ..Default::default()
+        };
+
+        self.client
+            .put_object(put_object_request)
+            .await
+            .map_or_else(|e| Err(S3Error::UploadError(e.to_string())), |_| Ok(()))
     }
 
     /// Get the url of a challenge on S3.

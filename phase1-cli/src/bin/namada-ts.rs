@@ -1,9 +1,9 @@
 use phase1_coordinator::{
     authentication::{KeyPair, Production, Signature},
     commands::{Computation, RandomSource, SEED_LENGTH},
-    io::{self, KeyPairUser, verify_signature},
+    io::{self, verify_signature, KeyPairUser},
     objects::{ContributionFileSignature, ContributionInfo, ContributionState, TrimmedContributionInfo},
-    rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, TOKEN_REGEX, UPDATE_TIME},
+    rest_utils::{ContributorStatus, PostChunkRequest, TOKENS_ZIP_FILE, UPDATE_TIME},
     storage::Object,
 };
 
@@ -23,7 +23,8 @@ use phase1_cli::{
     requests,
     CeremonyOpt,
     CoordinatorUrl,
-    Token, VerifySignatureContribution,
+    Token,
+    VerifySignatureContribution,
 };
 use serde_json;
 use setup_utils::calculate_hash;
@@ -78,15 +79,14 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
-    println!("{}","If you decide to participate in the incentivized trusted setup,\nyou will need to give your full name (first and last name) and your email address.\n(Your personal data is for internal use and won't be published publicly!)".bright_cyan());
-    let incentivization = io::get_user_input(
-        "Do you want to participate in the incentivized trusted setup? [y/n]".bright_yellow(),
+    let anonymous = io::get_user_input(
+        "Do you want to participate anonymously (if not, you'll be asked to provide us with your name and email address)? [y/n]".bright_yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
 
-    if incentivization == "y" {
-        // Ask for personal info
+    // Ask for personal info
+    if anonymous == "n" {
         contrib_info.full_name = Some(io::get_user_input(
             "Please enter your full name (first and last name):".bright_yellow(),
             Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
@@ -95,8 +95,7 @@ fn initialize_contribution() -> Result<ContributionInfo> {
             "Please enter your email address:".bright_yellow(),
             Some(&Regex::new(r".+[@].+[.].+")?),
         )?);
-        contrib_info.is_incentivized = true;
-    };
+    }
 
     Ok(contrib_info)
 }
@@ -427,18 +426,10 @@ async fn contribution_loop(
     client: Arc<Client>,
     coordinator: Arc<Url>,
     keypair: Arc<KeyPair>,
+    token: String,
     mut contrib_info: ContributionInfo,
 ) {
     println!("{} Joining queue", "[3/11]".bold().dimmed());
-    println!(
-        "{}",
-        "You can only join the ceremony with the unique token you received by email for your cohort.".bright_cyan()
-    );
-    let token = io::get_user_input(
-        "Enter your token:".bright_yellow(),
-        Some(&Regex::new(TOKEN_REGEX).unwrap()),
-    )
-    .unwrap();
 
     let (prefix, internal_token) = token.split_once("_").unwrap();
 
@@ -464,15 +455,16 @@ async fn contribution_loop(
                 _ => (),
             }
         } else {
-            println!("The token provided is not valid.");
+            println!("The token provided is not base58 encoded.");
             process::exit(0);
         };
     }
 
-    requests::post_join_queue(&client, &coordinator, &keypair, &token)
+    let cohort = requests::post_join_queue(&client, &coordinator, &keypair, &token)
         .await
         .expect(&format!("{}", "Couldn't join the queue".red().bold()));
     contrib_info.timestamps.joined_queue = Utc::now();
+    contrib_info.joined_cohort = cohort;
 
     // Spawn heartbeat task to prevent the Coordinator from
     // dropping the contributor out of the ceremony in the middle of a contribution.
@@ -555,9 +547,31 @@ async fn contribution_loop(
                                 contrib_info.contribution_hash,
                 format!("You also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in the \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
                                 );
-                println!("{}", ASCII_CONTRIBUTION_DONE.bright_yellow());
+                println!("{}\n", ASCII_CONTRIBUTION_DONE.bright_yellow());
 
-                break;
+                // Attestation
+                if "n"
+                    == io::get_user_input(
+                        "Would you like to provide an attestation of your contribution? [y/n]".bright_yellow(),
+                        Some(&Regex::new(r"^(?i)[yn]$").unwrap()),
+                    )
+                    .unwrap()
+                {
+                    break;
+                } else {
+                    loop {
+                        let attestation_url =
+                            io::get_user_input("Please enter a valid url for your attestation:".bright_yellow(), None)
+                                .unwrap();
+                        if Url::parse(attestation_url.as_str()).is_ok() {
+                            // Send attestation to coordinator
+                            requests::post_attestation(&client, &coordinator, &keypair, &attestation_url)
+                                .await
+                                .expect(&format!("{}", "Failed attestation upload".red().bold()));
+                            return;
+                        }
+                    }
+                }
             }
             ContributorStatus::Banned => {
                 println!(
@@ -587,6 +601,7 @@ async fn close_ceremony(client: &Client, coordinator: &Url, keypair: &KeyPair) {
     }
 }
 
+#[cfg(debug_assertions)]
 #[inline(always)]
 async fn get_contributions(coordinator: &Url) {
     match requests::get_contributions_info(coordinator).await {
@@ -646,7 +661,7 @@ enum Branch {
 
 /// Performs the entire contribution cycle
 #[inline(always)]
-async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
+async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch) {
     // Check that the passed-in coordinator url is correct
     let client = Client::new();
     requests::ping_coordinator(&client, &url.coordinator)
@@ -686,26 +701,11 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
     match branch {
         Branch::AnotherMachine => contrib_info.is_another_machine = true,
         Branch::Default(custom_seed) if custom_seed => contrib_info.is_own_seed_of_randomness = true,
-        _ => (),
+        _ => unreachable!(),
     }
 
-    if contrib_info.is_incentivized {
-        println!("{}\n{}", "IMPORTANT".bright_red().underline().bold(),
-        "You are participating in the incentivized trusted setup.\nThe mnemonic generated in the next step is the ONLY way to recover your keypair that will receive rewards in Namada at genesis.".bright_red());
-    } else {
-        println!(
-            "{}",
-            "The CLI will generate in the background a keypair that is used to interact with the coordinator."
-                .bright_cyan()
-        );
-    }
     io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
-    let user = if contrib_info.is_incentivized {
-        KeyPairUser::IncentivizedContributor
-    } else {
-        KeyPairUser::Contributor
-    };
-    let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(user))
+    let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(KeyPairUser::Contributor))
         .await
         .unwrap()
         .expect(&format!("{}", "Error while generating the keypair".red().bold()));
@@ -717,6 +717,7 @@ async fn contribution_prelude(url: CoordinatorUrl, branch: Branch) {
         Arc::new(client),
         Arc::new(url.coordinator),
         Arc::new(keypair),
+        token,
         contrib_info,
     )
     .await;
@@ -730,9 +731,11 @@ async fn main() {
     match opt {
         CeremonyOpt::Contribute(branch) => {
             match branch {
-                phase1_cli::Branches::AnotherMachine { url } => contribution_prelude(url, Branch::AnotherMachine).await,
-                phase1_cli::Branches::Default { url, custom_seed } => {
-                    contribution_prelude(url, Branch::Default(custom_seed)).await
+                phase1_cli::Branches::AnotherMachine { request } => {
+                    contribution_prelude(request.url, request.token, Branch::AnotherMachine).await
+                }
+                phase1_cli::Branches::Default { request, custom_seed } => {
+                    contribution_prelude(request.url, request.token, Branch::Default(custom_seed)).await
                 }
                 phase1_cli::Branches::Offline { custom_seed } => {
                     if custom_seed {
@@ -831,11 +834,12 @@ async fn main() {
             .await
             .expect(&format!("{}", "Error while generating the addresses".red().bold()));
         }
+        #[cfg(debug_assertions)]
         CeremonyOpt::GetContributions(url) => {
             get_contributions(&url.coordinator).await;
         }
         CeremonyOpt::GetState(state) => {
-            let secret = state.secret.as_str();
+            let secret = state.token.as_str();
             get_coordinator_state(&state.url.coordinator, secret).await;
         }
         CeremonyOpt::UpdateCohorts(url) => {
@@ -867,13 +871,17 @@ async fn main() {
             let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
         }
-        CeremonyOpt::VerifySignature(VerifySignatureContribution { pubkey, message, signature }) => {
+        CeremonyOpt::VerifySignature(VerifySignatureContribution {
+            pubkey,
+            message,
+            signature,
+        }) => {
             let result = verify_signature(pubkey, signature, message);
             if result {
                 println!("The contribution signature is correct.")
             } else {
                 println!("The contribution signature is not correct.")
             }
-        } 
+        }
     }
 }

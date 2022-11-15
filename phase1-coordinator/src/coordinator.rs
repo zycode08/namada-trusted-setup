@@ -1709,6 +1709,48 @@ impl Coordinator {
         )
     }
 
+    /// Updates the contribution attestation and summary to storage at the appropriate locator.
+    pub(crate) fn update_contribution_info_attestation(
+        &mut self,
+        round: u64,
+        attestation: String,
+    ) -> Result<(), CoordinatorError> {
+        // Retrieve current file to update
+        let updated_info = match self
+            .storage
+            .get(&Locator::ContributionInfoFile { round_height: round })?
+        {
+            Object::ContributionInfoFile(info) => ContributionInfo {
+                attestation: Some(attestation),
+                ..info
+            },
+            _ => return Err(CoordinatorError::StorageFailed),
+        };
+
+        // Persist update to storage
+        self.storage.update(
+            &Locator::ContributionInfoFile { round_height: round },
+            Object::ContributionInfoFile(updated_info.clone()),
+        )?;
+
+        // Update the summary
+        let mut summary = match self.storage.get(&Locator::ContributionsInfoSummary)? {
+            Object::ContributionsInfoSummary(summary) => summary,
+            _ => return Err(CoordinatorError::StorageFailed),
+        };
+
+        match summary.get_mut((round - 1) as usize) {
+            Some(t) => *t = updated_info.into(),
+            None => return Err(CoordinatorError::StorageFailed),
+        };
+
+        // Persist update to storage
+        self.storage.update(
+            &Locator::ContributionsInfoSummary,
+            Object::ContributionsInfoSummary(summary),
+        )
+    }
+
     /// Appends current round summary to storage at the appropriate locator.
     pub(crate) fn update_contribution_summary(
         &mut self,
