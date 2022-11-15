@@ -40,6 +40,11 @@ def setup_ceremony_output_folder(config: Dict[str, str]) -> Tuple[bool, Union[st
         else:
             print("You need to remove {} folder first".format(output_folder))
             return False, None
+    else:
+        os.mkdir("{}-ceremony".format(ceremony_start_time))
+        os.mkdir("{}-ceremony/mailchimp".format(ceremony_start_time))
+        os.mkdir("{}-ceremony/coordinator".format(ceremony_start_time))
+        return True, output_folder
 
 
 def generate_token(ceremony_start: int, cohort_index: int, cohort_duration: int, is_ffa: bool = False):
@@ -85,9 +90,9 @@ def main(args: argparse.Namespace):
     ceremony_start = config["ceremony_start_utc"]
     cohort_duration = config["cohort_duration"]
     total_participant = len(emails)
-    ceremony_end = int(ceremony_start + cohort_duration * total_participant)
     total_cohorts = ceil(total_participant / config['participant_per_cohort'])
     ffa_total_cohorts = config["ffa_cohorts"]
+    ceremony_end = int(ceremony_start + cohort_duration * total_cohorts)
 
     print("Ceremony start: {}".format(format_timestamp_to_datetime(ceremony_start)))
     print("Ceremony end: {}".format(format_timestamp_to_datetime(ceremony_end)))

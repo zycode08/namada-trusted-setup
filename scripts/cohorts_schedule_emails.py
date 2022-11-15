@@ -22,6 +22,8 @@ ceremony_start_date = datetime.utcfromtimestamp(CEREMONY_START_TIMESTAMP)
 ceremony_announcement_date = datetime.strptime(
     CEREMONY_ANNOUNCEMENT_DATE, "%Y-%m-%d %H:%M:%S")
 
+NAMADA_TOKENS_PATH = NAMADA_TOKENS_PATH.format(CEREMONY_START_TIMESTAMP)
+
 campaign_settings_file = open('mc_campaign_settings.json')
 campaign_settings = json.load(campaign_settings_file)
 
@@ -161,11 +163,11 @@ segment_ids = create_and_load_segment_ids(emails)
 announce_ceremony(ceremony_announcement_date,
                   campaign_settings['spot_secured'], segment_ids)
 # REMINDER: 1 week
-schedule_campaign_for_all_cohorts(
-    calculate_cohort_reminder_1_week, ceremony_start_date, campaign_settings['reminder_1_week'], segment_ids)
+# schedule_campaign_for_all_cohorts(
+#     calculate_cohort_reminder_1_week, ceremony_start_date, campaign_settings['reminder_1_week'], segment_ids)
 # REMINDER: 1 day
-schedule_campaign_for_all_cohorts(
-    calculate_cohort_reminder_1_day, ceremony_start_date, campaign_settings['reminder_1_day'], segment_ids)
+# schedule_campaign_for_all_cohorts(
+#     calculate_cohort_reminder_1_day, ceremony_start_date, campaign_settings['reminder_1_day'], segment_ids)
 # Launch email
 schedule_campaign_for_all_cohorts(
     calculate_cohort_datetime, ceremony_start_date, campaign_settings['cohort_live'], segment_ids)
