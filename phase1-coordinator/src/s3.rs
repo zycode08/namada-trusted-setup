@@ -9,7 +9,7 @@ use rusoto_s3::{
     PutObjectRequest,
     S3Client,
     StreamingBody,
-    S3,
+    S3, DeleteObjectRequest,
 };
 use std::str::FromStr;
 use thiserror::Error;
@@ -78,6 +78,19 @@ impl S3Ctx {
 
     /// Upload contributors.json file to S3 for the frontend
     pub(crate) async fn upload_contributions_info(&self, contributions_info: Vec<u8>) -> Result<()> {
+        // First delete the old file to allow triggering the lambda
+        let delete_object_request = DeleteObjectRequest {
+            bucket: self.bucket.clone(),
+            key: "contributors.json".to_string(),
+            ..Default::default()
+        };
+
+        self.client
+            .delete_object(delete_object_request)
+            .await
+            .map_or_else(|e| Err(S3Error::UploadError(e.to_string())), |_| Ok(()))?;
+        
+        // Upload the updated file
         let put_object_request = PutObjectRequest {
             bucket: self.bucket.clone(),
             key: "contributors.json".to_string(),

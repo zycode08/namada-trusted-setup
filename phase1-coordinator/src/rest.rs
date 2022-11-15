@@ -37,18 +37,17 @@ use rocket::{
     State,
 };
 
-/// Add the incoming contributor to the queue of contributors.
+/// Add the incoming contributor to the queue of contributors. Returns the cohort of join
 #[post("/contributor/join_queue", format = "json", data = "<token>")]
 pub async fn join_queue(
     coordinator: &State<Coordinator>,
     new_participant: NewParticipant,
     token: LazyJson<String>,
-) -> Result<()> {
+) -> Result<Json<u64>> {
     // NOTE: check on the token happens only here meaning that a contributor can join the ceremony at the very last moment of a cohort and
     // contribute effectively in the following cohort. Forcing the contribution to happen in the correct cohort would take more complicated checks
     // and could lower the amount of contributions received
-    rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
-
+    let cohort = rest_utils::token_check((*coordinator).clone(), token.as_str()).await?;
     let mut write_lock = (*coordinator).clone().write_owned().await;
 
     task::spawn_blocking(move || {
@@ -58,9 +57,10 @@ pub async fn join_queue(
             token.clone(),
             10,
         )
-    })
-    .await?
-    .map_err(|e| ResponseError::CoordinatorError(e))
+    }).await?
+    .map_err(|e| ResponseError::CoordinatorError(e))?;
+
+    Ok(Json(cohort))
 }
 
 /// Lock a [Chunk](`crate::objects::Chunk`) in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.

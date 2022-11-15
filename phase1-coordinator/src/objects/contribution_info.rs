@@ -82,6 +82,8 @@ pub struct ContributionInfo {
     pub is_another_machine: bool,
     // User can choose the default method to generate randomness or his own.
     pub is_own_seed_of_randomness: bool,
+    // Cohort in which the participant joined the queue
+    pub joined_cohort: u64,
     // Round in which the contribution took place
     pub ceremony_round: u64,
     // Hash of the contribution run by masp-mpc, contained in the transcript
@@ -156,6 +158,7 @@ pub struct TrimmedContributionInfo {
     public_key: String,
     is_another_machine: bool,
     is_own_seed_of_randomness: bool,
+    joined_cohort: u64,
     ceremony_round: u64,
     contribution_hash: String,
     contribution_hash_signature: String,
@@ -169,6 +172,7 @@ impl From<ContributionInfo> for TrimmedContributionInfo {
             public_key: parent.public_key,
             is_another_machine: parent.is_another_machine,
             is_own_seed_of_randomness: parent.is_own_seed_of_randomness,
+            joined_cohort: parent.joined_cohort,
             ceremony_round: parent.ceremony_round,
             contribution_hash: parent.contribution_file_hash,
             contribution_hash_signature: parent.contribution_file_signature,

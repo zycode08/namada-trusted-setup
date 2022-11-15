@@ -620,7 +620,7 @@ impl PostChunkRequest {
 
 /// Checks the validity of the token for the ceremony.
 /// Returns the current cohort index
-pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result<()> {
+pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result<u64> {
     // Check if the token's format is correct
     let regex = Regex::new(TOKEN_REGEX).unwrap();
 
@@ -651,7 +651,7 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result
         return Err(ResponseError::InvalidToken(cohort + 1));
     }
 
-    Ok(())
+    Ok((cohort + 1) as u64)
 }
 
 /// Performs the verification of the pending contributions
