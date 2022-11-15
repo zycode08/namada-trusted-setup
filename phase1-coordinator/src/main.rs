@@ -238,7 +238,8 @@ pub async fn main() {
         rest::get_contributions_info,
         rest::get_coordinator_state,
         rest::get_healthcheck,
-        rest::update_cohorts
+        rest::update_cohorts,
+        rest::post_attestation
     ];
 
     #[cfg(not(debug_assertions))]
@@ -254,7 +255,8 @@ pub async fn main() {
         rest::post_contribution_info,
         rest::get_coordinator_state,
         rest::get_healthcheck,
-        rest::update_cohorts
+        rest::update_cohorts,
+        rest::post_attestation
     ];
 
     let build_rocket = rocket::build()
