@@ -512,8 +512,8 @@ async fn contribution_loop(
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
                 println!("{}\n{}\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy\n\n{}",
-                                                "Done! Thank you for your contribution! If your contribution is valid, it will appear on namada.net. Check it out!".green().bold(),
-                                                "Share your attestation that proves your contribution to the world:".bright_cyan(),
+                                                "Done! Thank you for your contribution! If your contribution is valid, it will appear on ceremony.namada.net. Check it out!".green().bold(),
+                                                "If you’d like to share that you contributed with your frens and the world, you can use:".bright_cyan(),
                                                 round_height,
                                 contrib_info.contribution_hash,
                 format!("You also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in the \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
