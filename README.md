@@ -21,8 +21,6 @@ The Namada Trusted Setup CLI exposes two ways to contribute:
 - **default**, performs the entire contribution on the current machine `default` 
 - **offline**, computes the contribution on a separate (possibly offline) machine (more details [here](#computation-on-another-machine))
 
-In both cases it is possible to provide an optional `--custom-seed` for the RNG: if this is not provided the CLI will ask you to type a random string as an additional source of entropy (sse [details](#custom-random-seed)).
-
 For a visual overview of the contribution process refer to the [flow chart](#flowchart).
 
 ## Building and contributing from source
@@ -101,20 +99,6 @@ cargo run --release --bin namada-ts --features cli contribute offline
 ```
 
 which will compute the contribution itself. This second command expects the file `challenge.params` got from the online machine to be available in the cwd and it will produce a `contribution.params` to be passed back to the online machine for shipment to the coordinator. The user will be responsible for moving these files around.
-
-### Custom random seed
-You can provide your own random seed (32 bytes) to initialize the ChaCha RNG. This is useful if you are using an external source of randomness or don't want to use the OS randomness. Some examples are atmospheric noise, radioactive elements or lava lite.
-
-To use this feature, add the `--custom-seed` flag to your command:
-```
-cargo run --release --bin namada-ts --features cli contribute default --custom-seed https://contribute.namada.net $TOKEN
-```
-
-This flag is available also when contributing offline:
-
-```
-cargo run --release --bin namada-ts --features cli contribute offline --custom-seed
-```
 
 ### Verify your contribution
 If you want to verify your contribution you can do it via CLI. After you have successfully contributed, a file called `namada_contributor_info_round_${round_height}.json` will be generated and saved in the same folder of the `namada-ts` binary. The file contains a json structure. You should copy the value following fields:
