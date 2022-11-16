@@ -122,7 +122,7 @@ If you want to verify your contribution you can do it via CLI. After you have su
 - `contribution_hash`
 - `contribution_hash_signature`
 
-and input them to `namada-ts verify-signature $public_key $contribution_hash $contribution_hash_signature`.
+and input them to `namada-ts verify-contribution $public_key $contribution_hash $contribution_hash_signature`.
 
 ## Understanding the ceremony
 
