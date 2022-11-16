@@ -421,10 +421,6 @@ async fn test_join_queue() {
     .await;
     assert!(response.is_err());
 
-    // Wrong request, invalid token format
-    response = requests::post_join_queue(&client, &url, &ctx.unknown_participant.keypair, &String::from("test")).await;
-    assert!(response.is_err());
-
     // Ok request
     requests::post_join_queue(
         &client,

@@ -444,13 +444,6 @@ fn test_join_queue() {
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
-    // Wrong request, invalid token format
-    req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("test")));
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::BadRequest);
-    assert!(response.body().is_some());
-
     // Ok request
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<String>(
@@ -462,7 +455,7 @@ fn test_join_queue() {
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    assert!(response.body().is_some());
 
     // Wrong request, IP already in queue
     req = client.post("/contributor/join_queue").remote(socket_address);
@@ -876,5 +869,5 @@ fn test_contribution() {
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    assert!(response.body().is_some());
 }
