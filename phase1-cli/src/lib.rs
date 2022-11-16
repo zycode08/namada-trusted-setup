@@ -149,5 +149,5 @@ pub enum CeremonyOpt {
     #[structopt(about = "Update manually the coordinator")]
     UpdateCoordinator(CoordinatorUrl),
     #[structopt(about = "Verify signature")]
-    VerifySignature(VerifySignatureContribution),
+    VerifyContribution(VerifySignatureContribution),
 }

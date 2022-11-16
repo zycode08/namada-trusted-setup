@@ -9,10 +9,6 @@ from datetime import datetime
 from math import ceil
 from typing import Dict, List, Tuple, Union
 
-FFA_TOKEN_PREFIX="ffa"
-PER_USER_TOKEN="put"
-
-
 def load_json(path: str) -> Dict[str, Union[int, str]]:
     return json.load(open(path, "r"))
 
@@ -47,13 +43,10 @@ def setup_ceremony_output_folder(config: Dict[str, str]) -> Tuple[bool, Union[st
         return True, output_folder
 
 
-def generate_token(ceremony_start: int, cohort_index: int, cohort_duration: int, is_ffa: bool = False):
-    if is_ffa:
-        return FFA_TOKEN_PREFIX + "_" + secrets.token_hex(nbytes=16)
-    
+def generate_token(ceremony_start: int, cohort_index: int, cohort_duration: int):    
     cohort_start = ceremony_start + cohort_duration * cohort_index
     cohort_end = cohort_start + cohort_duration
-    return PER_USER_TOKEN + "_" + base58.b58encode(json.dumps({
+    return base58.b58encode(json.dumps({
         "from": cohort_start,
         "to": cohort_end,
         "index": cohort_index + 1,
@@ -125,10 +118,13 @@ def main(args: argparse.Namespace):
         dump_mailchimp_data(output_folder, mailchimp_filename_format, cohort_index + 1, mailchimp_cohort_data)
         dump_coordinator_data(output_folder, cohort_filename_format, cohort_index + 1, coordinator_cohort_data)
 
-    ffa_token = generate_token(None, None, None, True)
-
     for ffa_cohort_index in range(ffa_total_cohorts):
-        dump_coordinator_data(output_folder, cohort_filename_format, total_cohorts + ffa_cohort_index + 1, [ffa_token])
+        coordinator_cohort_data = []
+        for _ in range(max_cohort_participant):
+            token = generate_token(ceremony_start, total_cohorts + ffa_cohort_index, cohort_duration)
+            coordinator_cohort_data.append(token)
+        
+        dump_coordinator_data(output_folder, cohort_filename_format, total_cohorts + ffa_cohort_index + 1, coordinator_cohort_data)
 
     dump_coordinator_data(output_folder, cohort_filename_format,  total_cohorts + ffa_total_cohorts + 1, [])
 

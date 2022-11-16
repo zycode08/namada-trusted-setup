@@ -644,34 +644,30 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
                 .bold()
         ));
 
-    let (prefix, internal_token) = token.split_once("_").unwrap();
-
-    if prefix == "put" {
-        let decoded_bytes = bs58::decode(internal_token.clone()).into_vec();
-        if let Ok(token_bytes) = decoded_bytes {
-            let decoded_token = String::from_utf8(token_bytes).expect("Can't decode the token");
-            let token_data: Token = serde_json::from_str(&decoded_token).expect("Can't deserialize the token.");
-            match token_data.is_valid_cohort() {
-                phase1_cli::TokenCohort::Finished => {
-                    println!("Your cohort round is {} and is already completed.", token_data.index);
-                    process::exit(0);
-                }
-                phase1_cli::TokenCohort::Pending => {
-                    let token_from_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.from));
-                    let token_to_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.to));
-                    println!(
-                        "Your cohort round is {} and will start at {} and finish at {}.",
-                        token_data.index, token_from_datetime, token_to_datetime
-                    );
-                    process::exit(0);
-                }
-                _ => (),
+    let decoded_bytes = bs58::decode(token.clone()).into_vec();
+    if let Ok(token_bytes) = decoded_bytes {
+        let decoded_token = String::from_utf8(token_bytes).expect("Can't decode the token");
+        let token_data: Token = serde_json::from_str(&decoded_token).expect("Can't deserialize the token.");
+        match token_data.is_valid_cohort() {
+            phase1_cli::TokenCohort::Finished => {
+                println!("Your cohort round is {} and is already completed.", token_data.index);
+                process::exit(0);
             }
-        } else {
-            println!("The token provided is not base58 encoded.");
-            process::exit(0);
-        };
-    }
+            phase1_cli::TokenCohort::Pending => {
+                let token_from_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.from));
+                let token_to_datetime = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(token_data.to));
+                println!(
+                    "Your cohort round is {} and will start at {} and finish at {}.",
+                    token_data.index, token_from_datetime, token_to_datetime
+                );
+                process::exit(0);
+            }
+            _ => (),
+        }
+    } else {
+        println!("The token provided is not base58 encoded.");
+        process::exit(0);
+    };
 
     println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
@@ -871,7 +867,7 @@ async fn main() {
             let client = Client::new();
             update_coordinator(&client, &url.coordinator, &keypair).await;
         }
-        CeremonyOpt::VerifySignature(VerifySignatureContribution {
+        CeremonyOpt::VerifyContribution(VerifySignatureContribution {
             pubkey,
             message,
             signature,
