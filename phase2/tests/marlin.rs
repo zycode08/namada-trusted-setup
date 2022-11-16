@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-    use phase2::{helpers::testing::generate_input, Phase1, Phase1Parameters, ProvingSystem};
+    use phase2::{helpers::testing::generate_input, Phase2, Phase2Parameters, ProvingSystem};
     use rand::thread_rng;
     use setup_utils::{blank_hash, CheckForCorrectness, UseCompression};
 
@@ -27,7 +27,7 @@ mod test {
     fn test_marlin_posw_bls12_377() {
         let powers = 18usize;
         let batch = 1usize << 16;
-        let parameters = Phase1Parameters::<Bls12_377>::new_full(ProvingSystem::Marlin, powers, batch);
+        let parameters = Phase2Parameters::<Bls12_377>::new_full(ProvingSystem::Marlin, powers, batch);
         let expected_response_length = parameters.get_length(UseCompression::No);
 
         // Get a non-mutable copy of the initial accumulator state.
@@ -39,9 +39,9 @@ mod test {
         let current_accumulator_hash = blank_hash();
         let mut rng = thread_rng();
         let (_, privkey) =
-            Phase1::key_generation(&mut rng, current_accumulator_hash.as_ref()).expect("could not generate keypair");
+            Phase2::key_generation(&mut rng, current_accumulator_hash.as_ref()).expect("could not generate keypair");
 
-        Phase1::computation(
+        Phase2::computation(
             &input,
             &mut output,
             UseCompression::No,
@@ -53,7 +53,7 @@ mod test {
         .unwrap();
 
         let deserialized =
-            Phase1::deserialize(&output, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
+            Phase2::deserialize(&output, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
         let tau_powers_g1 = deserialized.tau_powers_g1;
         let tau_powers_g2 = deserialized.tau_powers_g2;
         let alpha_powers_g1 = deserialized.alpha_tau_powers_g1;
@@ -169,7 +169,7 @@ mod test {
     fn test_marlin_sonic_pc() {
         let powers = 15usize;
         let batch = 1usize << 12;
-        let parameters = Phase1Parameters::<Bls12_377>::new_full(ProvingSystem::Marlin, powers, batch);
+        let parameters = Phase2Parameters::<Bls12_377>::new_full(ProvingSystem::Marlin, powers, batch);
         let expected_response_length = parameters.get_length(UseCompression::No);
 
         // Get a non-mutable copy of the initial accumulator state.
@@ -181,9 +181,9 @@ mod test {
         let current_accumulator_hash = blank_hash();
         let mut rng = thread_rng();
         let (_, privkey) =
-            Phase1::key_generation(&mut rng, current_accumulator_hash.as_ref()).expect("could not generate keypair");
+            Phase2::key_generation(&mut rng, current_accumulator_hash.as_ref()).expect("could not generate keypair");
 
-        Phase1::computation(
+        Phase2::computation(
             &input,
             &mut output,
             UseCompression::No,
@@ -195,7 +195,7 @@ mod test {
         .unwrap();
 
         let deserialized =
-            Phase1::deserialize(&output, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
+            Phase2::deserialize(&output, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
         let tau_powers_g1 = deserialized.tau_powers_g1;
         let tau_powers_g2 = deserialized.tau_powers_g2;
         let alpha_powers_g1 = deserialized.alpha_tau_powers_g1;
@@ -273,7 +273,7 @@ mod test {
     fn test_marlin_from_file() {
         let powers = 28usize;
         let batch = 64usize;
-        let parameters = Phase1Parameters::<Bls12_377>::new_full(ProvingSystem::Marlin, powers, batch);
+        let parameters = Phase2Parameters::<Bls12_377>::new_full(ProvingSystem::Marlin, powers, batch);
 
         // Try to load challenge file from disk.
         let reader = OpenOptions::new()
@@ -304,7 +304,7 @@ mod test {
         let mut rng = thread_rng();
 
         let deserialized =
-            Phase1::deserialize(&readable_map, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
+            Phase2::deserialize(&readable_map, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
         let tau_powers_g1 = deserialized.tau_powers_g1;
         let tau_powers_g2 = deserialized.tau_powers_g2;
         let alpha_powers_g1 = deserialized.alpha_tau_powers_g1;

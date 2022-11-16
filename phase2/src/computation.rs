@@ -1,7 +1,7 @@
 use super::*;
 use snarkvm_fields::{batch_inversion, Field};
 
-impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
+impl<'a, E: PairingEngine + Sync> Phase2<'a, E> {
     ///
     /// Phase 1 - Computation: Steps 5, 6, and 7
     ///
@@ -17,7 +17,7 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
         compressed_output: UseCompression,
         check_input_for_correctness: CheckForCorrectness,
         key: &PrivateKey<E>,
-        parameters: &'a Phase1Parameters<E>,
+        parameters: &'a Phase2Parameters<E>,
     ) -> Result<()> {
         let span = info_span!("phase2-computation");
         let _ = span.enter();
@@ -312,7 +312,7 @@ mod tests {
         let input_correctness = CheckForCorrectness::Full;
 
         for proving_system in &[ProvingSystem::Groth16, ProvingSystem::Marlin] {
-            let parameters = Phase1Parameters::<E>::new_full(*proving_system, powers, batch);
+            let parameters = Phase2Parameters::<E>::new_full(*proving_system, powers, batch);
             let expected_response_length = parameters.get_length(compressed_output);
 
             // Get a non-mutable copy of the initial accumulator state.
@@ -323,10 +323,10 @@ mod tests {
             // Construct our keypair using the RNG we created above
             let current_accumulator_hash = blank_hash();
             let mut rng = derive_rng_from_seed(b"curve_computation_test");
-            let (_, privkey) = Phase1::key_generation(&mut rng, current_accumulator_hash.as_ref())
+            let (_, privkey) = Phase2::key_generation(&mut rng, current_accumulator_hash.as_ref())
                 .expect("could not generate keypair");
 
-            Phase1::computation(
+            Phase2::computation(
                 &input,
                 &mut output,
                 compressed_input,
@@ -337,7 +337,7 @@ mod tests {
             )
             .unwrap();
 
-            let deserialized = Phase1::deserialize(&output, compressed_output, input_correctness, &parameters).unwrap();
+            let deserialized = Phase2::deserialize(&output, compressed_output, input_correctness, &parameters).unwrap();
 
             match proving_system {
                 ProvingSystem::Groth16 => {

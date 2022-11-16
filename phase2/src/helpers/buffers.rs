@@ -1,4 +1,4 @@
-use crate::{ContributionMode, Phase1Parameters, ProvingSystem};
+use crate::{ContributionMode, Phase2Parameters, ProvingSystem};
 use setup_utils::{BatchDeserializer, BatchSerializer, *};
 
 use snarkvm_curves::{AffineCurve, PairingEngine};
@@ -20,7 +20,7 @@ type SplitBuf<'a> = (&'a [u8], &'a [u8], &'a [u8], &'a [u8], &'a [u8]);
 /// Helper function to iterate over the accumulator in chunks.
 /// `action` will perform an action on the chunk
 pub(crate) fn iter_chunk(
-    parameters: &Phase1Parameters<impl PairingEngine>,
+    parameters: &Phase2Parameters<impl PairingEngine>,
     mut action: impl FnMut(usize, usize) -> Result<()>,
 ) -> Result<()> {
     // Determine the range to iterate over.
@@ -88,7 +88,7 @@ pub(crate) fn apply_powers<C: AffineCurve>(
 /// [TauG1, TauG2, AlphaG1, BetaG1, BetaG2]
 pub(crate) fn split_at_chunk_mut<'a, E: PairingEngine>(
     buffer: &'a mut [u8],
-    parameters: &'a Phase1Parameters<E>,
+    parameters: &'a Phase2Parameters<E>,
     compressed: UseCompression,
 ) -> SplitBufMut<'a> {
     let g1_size = buffer_size::<E::G1Affine>(compressed);
@@ -162,7 +162,7 @@ pub(crate) fn split_at_chunk_mut<'a, E: PairingEngine>(
 /// [TauG1, TauG2, AlphaG1, BetaG1, BetaG2]
 pub(crate) fn split_mut<'a, E: PairingEngine>(
     buffer: &'a mut [u8],
-    parameters: &'a Phase1Parameters<E>,
+    parameters: &'a Phase2Parameters<E>,
     compressed: UseCompression,
 ) -> SplitBufMut<'a> {
     match parameters.proving_system {
@@ -209,7 +209,7 @@ pub(crate) fn split_mut<'a, E: PairingEngine>(
 /// [TauG1, TauG2, AlphaG1, BetaG1, BetaG2]
 pub(crate) fn split<'a, E: PairingEngine>(
     buffer: &'a [u8],
-    parameters: &Phase1Parameters<E>,
+    parameters: &Phase2Parameters<E>,
     compressed: UseCompression,
 ) -> SplitBuf<'a> {
     match parameters.proving_system {

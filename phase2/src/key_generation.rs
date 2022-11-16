@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
+impl<'a, E: PairingEngine + Sync> Phase2<'a, E> {
     /// Constructs a keypair given an RNG and a 64-byte transcript `digest`.
     pub fn key_generation<R: Rng + CryptoRng>(rng: &mut R, digest: &[u8]) -> Result<(PublicKey<E>, PrivateKey<E>)> {
         if digest.len() != 64 {

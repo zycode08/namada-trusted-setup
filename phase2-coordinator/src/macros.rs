@@ -1,11 +1,11 @@
-/// Returns an instance for chunked `Phase1Parameters` given an instantiation of `PairingEngine`,
+/// Returns an instance for chunked `Phase2Parameters` given an instantiation of `PairingEngine`,
 /// an instance of `Settings`, and a chunk ID.
 #[macro_export]
-macro_rules! phase1_chunked_parameters {
+macro_rules! phase2_chunked_parameters {
     ($curve:ident, $settings:ident, $chunk_id:ident) => {{
-        use phase2::Phase1Parameters;
+        use phase2::Phase2Parameters;
 
-        Phase1Parameters::<$curve>::new_chunk(
+        Phase2Parameters::<$curve>::new_chunk(
             $settings.contribution_mode(),
             $chunk_id as usize,
             $settings.chunk_size(),
@@ -16,14 +16,14 @@ macro_rules! phase1_chunked_parameters {
     }};
 }
 
-/// Returns an instance for full `Phase1Parameters` given an instantiation of `PairingEngine`,
+/// Returns an instance for full `Phase2Parameters` given an instantiation of `PairingEngine`,
 /// an instance of `Settings`.
 #[macro_export]
-macro_rules! phase1_full_parameters {
+macro_rules! phase2_full_parameters {
     ($curve:ident, $settings:ident) => {{
-        use phase2::Phase1Parameters;
+        use phase2::Phase2Parameters;
 
-        Phase1Parameters::<$curve>::new_full($settings.proving_system(), $settings.power(), $settings.batch_size())
+        Phase2Parameters::<$curve>::new_full($settings.proving_system(), $settings.power(), $settings.batch_size())
     }};
 }
 
@@ -35,7 +35,7 @@ macro_rules! unverified_contribution_size {
     ($curve:ident, $settings:ident, $chunk_id:ident, $compressed:ident) => {{
         use setup_utils::UseCompression;
 
-        let parameters = phase1_chunked_parameters!($curve, $settings, $chunk_id);
+        let parameters = phase2_chunked_parameters!($curve, $settings, $chunk_id);
         match $compressed {
             UseCompression::Yes => parameters.contribution_size as u64,
             UseCompression::No => (parameters.accumulator_size + parameters.public_key_size) as u64,
@@ -51,7 +51,7 @@ macro_rules! verified_contribution_size {
     ($curve:ident, $settings:ident, $chunk_id:ident, $compressed:ident) => {{
         use setup_utils::UseCompression;
 
-        let parameters = phase1_chunked_parameters!($curve, $settings, $chunk_id);
+        let parameters = phase2_chunked_parameters!($curve, $settings, $chunk_id);
         match $compressed {
             UseCompression::Yes => (parameters.contribution_size - parameters.public_key_size) as u64,
             UseCompression::No => parameters.accumulator_size as u64,
@@ -84,7 +84,7 @@ macro_rules! chunk_size {
 #[macro_export]
 macro_rules! round_filesize {
     ($curve:ident, $settings:ident, $compressed:ident) => {{
-        let full_parameters = phase1_full_parameters!($curve, $settings);
+        let full_parameters = phase2_full_parameters!($curve, $settings);
         full_parameters.get_length($compressed) as u64
     }};
 }

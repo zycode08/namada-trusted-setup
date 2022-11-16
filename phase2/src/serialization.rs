@@ -1,11 +1,11 @@
 use super::*;
 
-impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
+impl<'a, E: PairingEngine + Sync> Phase2<'a, E> {
     pub fn serialize(
         &self,
         output: &mut [u8],
         compression: UseCompression,
-        parameters: &'a Phase1Parameters<E>,
+        parameters: &'a Phase2Parameters<E>,
     ) -> Result<()> {
         let elements = (
             self.tau_powers_g1.as_ref(),
@@ -24,11 +24,11 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
         input: &[u8],
         compression: UseCompression,
         check_input_for_correctness: CheckForCorrectness,
-        parameters: &'a Phase1Parameters<E>,
-    ) -> Result<Phase1<'a, E>> {
+        parameters: &'a Phase2Parameters<E>,
+    ) -> Result<Phase2<'a, E>> {
         let (tau_powers_g1, tau_powers_g2, alpha_tau_powers_g1, beta_tau_powers_g1, beta_g2) =
             accumulator::deserialize(input, compression, check_input_for_correctness, parameters)?;
-        Ok(Phase1 {
+        Ok(Phase2 {
             tau_powers_g1,
             tau_powers_g2,
             alpha_tau_powers_g1,
@@ -44,7 +44,7 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
         input: &[u8],
         output: &mut [u8],
         check_input_for_correctness: CheckForCorrectness,
-        parameters: &'a Phase1Parameters<E>,
+        parameters: &'a Phase2Parameters<E>,
     ) -> Result<()> {
         accumulator::decompress(input, output, check_input_for_correctness, parameters)?;
         Ok(())
@@ -61,30 +61,30 @@ mod tests {
     fn serialize_curve_test<E: PairingEngine + Sync>(compress: UseCompression, size: usize, batch: usize) {
         for proving_system in &[ProvingSystem::Groth16, ProvingSystem::Marlin] {
             // Create a small accumulator with some random state.
-            let parameters = Phase1Parameters::<E>::new_full(*proving_system, size, batch);
+            let parameters = Phase2Parameters::<E>::new_full(*proving_system, size, batch);
             let (buffer, accumulator) = generate_random_accumulator(&parameters, compress);
-            let deserialized = Phase1::deserialize(&buffer, compress, CheckForCorrectness::No, &parameters).unwrap();
+            let deserialized = Phase2::deserialize(&buffer, compress, CheckForCorrectness::No, &parameters).unwrap();
             assert_eq!(deserialized, accumulator);
         }
     }
 
     fn decompress_curve_test<E: PairingEngine>() {
         for proving_system in &[ProvingSystem::Groth16, ProvingSystem::Marlin] {
-            let parameters = Phase1Parameters::<E>::new_full(*proving_system, 2, 2);
+            let parameters = Phase2Parameters::<E>::new_full(*proving_system, 2, 2);
             // generate a random input compressed accumulator
             let (input, before) = generate_random_accumulator(&parameters, UseCompression::Yes);
             let mut output = generate_output(&parameters, UseCompression::No);
 
             // decompress the input to the output
-            Phase1::decompress(&input, &mut output, CheckForCorrectness::No, &parameters).unwrap();
+            Phase2::decompress(&input, &mut output, CheckForCorrectness::No, &parameters).unwrap();
 
             // deserializes the decompressed output
             let deserialized =
-                Phase1::deserialize(&output, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
+                Phase2::deserialize(&output, UseCompression::No, CheckForCorrectness::No, &parameters).unwrap();
             assert_eq!(deserialized, before);
 
             // trying to deserialize it as compressed should obviously fail
-            Phase1::deserialize(&output, UseCompression::Yes, CheckForCorrectness::No, &parameters).unwrap_err();
+            Phase2::deserialize(&output, UseCompression::Yes, CheckForCorrectness::No, &parameters).unwrap_err();
         }
     }
 
