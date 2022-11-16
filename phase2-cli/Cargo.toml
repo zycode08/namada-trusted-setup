@@ -6,7 +6,7 @@ homepage = "https://github.com/AleoHQ/aleo-setup"
 license = "MIT/Apache-2.0"
 name = "phase2-cli"
 repository = "https://github.com/AleoHQ/aleo-setup"
-version = "1.0.0-beta.10"
+version = "1.0.0-beta.11"
 
 [dependencies]
 phase2 = {path = "../phase2"}
