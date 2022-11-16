@@ -531,9 +531,12 @@ async fn contribution_loop(
                     break;
                 } else {
                     loop {
-                        let attestation_url =
-                            io::get_user_input("Please enter a valid url for your attestation (starting with http or https):".bright_yellow(), None)
-                                .unwrap();
+                        let attestation_url = io::get_user_input(
+                            "Please enter a valid url for your attestation (starting with http or https):"
+                                .bright_yellow(),
+                            None,
+                        )
+                        .unwrap();
                         if Url::parse(attestation_url.as_str()).is_ok() {
                             // Send attestation to coordinator
                             requests::post_attestation(
