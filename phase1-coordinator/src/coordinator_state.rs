@@ -1359,6 +1359,19 @@ impl CoordinatorState {
 
     ///
     /// Returns `true` if the given participant has finished contributing
+    /// in the provided round.
+    ///
+    pub fn is_finished_contributor_at_round(&self, participant: &Participant, round: u64) -> bool {
+        participant.is_contributor()
+            && self
+                .finished_contributors
+                .get(&round)
+                .get_or_insert(&HashMap::new())
+                .contains_key(participant)
+    }
+
+    ///
+    /// Returns `true` if the given participant has finished contributing
     /// in the current round.
     ///
     #[inline]

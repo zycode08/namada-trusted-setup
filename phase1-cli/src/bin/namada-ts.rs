@@ -511,7 +511,7 @@ async fn contribution_loop(
                     .expect(&format!("{}", "Couldn't read the contributor info file".red().bold()));
                 let contrib_info: ContributionInfo = serde_json::from_slice(&content).unwrap();
 
-                println!("{}\n{}\n\nI've contributed to @namadanetwork Trusted Setup Ceremony at round #{} with the contribution hash {}. Let's enable interchain privacy. #InterchainPrivacy\n\n{}",
+                println!("{}\n{}\n\nI've contributed to @namadanetwork #NamadaTrustedSetup at round #{} with the contribution hash {}. Let's enable #interchain privacy.\n\n{}",
                                                 "Done! Thank you for your contribution! If your contribution is valid, it will appear on ceremony.namada.net. Check it out!".green().bold(),
                                                 "If you’d like to share that you contributed with your frens and the world, you can use:".bright_cyan(),
                                                 round_height,
@@ -531,9 +531,12 @@ async fn contribution_loop(
                     break;
                 } else {
                     loop {
-                        let attestation_url =
-                            io::get_user_input("Please enter a valid url for your attestation:".bright_yellow(), None)
-                                .unwrap();
+                        let attestation_url = io::get_user_input(
+                            "Please enter a valid url for your attestation (starting with http or https):"
+                                .bright_yellow(),
+                            None,
+                        )
+                        .unwrap();
                         if Url::parse(attestation_url.as_str()).is_ok() {
                             // Send attestation to coordinator
                             requests::post_attestation(

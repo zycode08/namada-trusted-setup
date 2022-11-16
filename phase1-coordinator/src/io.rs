@@ -1,5 +1,8 @@
 use std::{fmt::Display, io::Write, ops::Deref};
 
+#[cfg(not(debug_assertions))]
+use std::process;
+
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
 use crossterm::{
@@ -11,8 +14,6 @@ use owo_colors::OwoColorize;
 use rand::prelude::SliceRandom;
 use regex::Regex;
 use thiserror::Error;
-#[cfg(not(debug_assertions))]
-use tracing::debug;
 
 const COORDINATOR_MNEMONIC_FILE: &str = "coordinator.mnemonic";
 const MNEMONIC_LEN: usize = 24;
@@ -245,10 +246,10 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
                 break;
             } else {
                 if attempt == 2 {
-                    debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
-                    return Err(IOError::CheckMnemonicError);
+                    eprintln!("Expected: {}, answer: {}\n{}", mnemonic_slice[i], response, "Run out of attempts for the mnemonic check. Client will shutdown, you'll need to restart the CLI".red().bold());
+                    process::exit(1);
                 } else {
-                    debug!("Wrong answer, retry");
+                    println!("{}", "Wrong answer, retry".red());
                 }
             }
         }
