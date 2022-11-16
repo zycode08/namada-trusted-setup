@@ -228,7 +228,7 @@ where
 }
 
 #[test]
-fn test_get_status() {
+fn get_status() {
     let access_token = "test-access_token";
     std::env::set_var("ACCESS_SECRET", access_token);
     let ctx = build_context();
@@ -270,7 +270,7 @@ fn get_serialized_tokens_zip(tokens: Vec<&str>) -> Vec<u8> {
 }
 
 #[test]
-fn test_update_cohorts() {
+fn update_cohorts() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -314,7 +314,7 @@ fn test_update_cohorts() {
 }
 
 #[test]
-fn test_stop_coordinator() {
+fn stop_coordinator() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -334,7 +334,7 @@ fn test_stop_coordinator() {
 }
 
 #[test]
-fn test_get_healthcheck() {
+fn get_healthcheck() {
     // Create status file
     let mut status_file = tempfile::NamedTempFile::new_in(".").unwrap();
     let file_content =
@@ -359,7 +359,7 @@ fn test_get_healthcheck() {
 }
 
 #[test]
-fn test_get_contributor_queue_status() {
+fn get_contributor_queue_status() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -385,7 +385,7 @@ fn test_get_contributor_queue_status() {
 }
 
 #[test]
-fn test_heartbeat() {
+fn heartbeat() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -405,7 +405,7 @@ fn test_heartbeat() {
 }
 
 #[test]
-fn test_update_coordinator() {
+fn update_coordinator() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -425,7 +425,24 @@ fn test_update_coordinator() {
 }
 
 #[test]
-fn test_join_queue() {
+fn wrong_post_attestation() {
+    let ctx = build_context();
+    let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
+
+    // Wrong, missing contribution
+    let mut req = client.post("/contributor/attestation");
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(1, String::from("https://namada.net"))),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+}
+
+#[test]
+fn join_queue() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -444,13 +461,6 @@ fn test_join_queue() {
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
-    // Wrong request, invalid token format
-    req = client.post("/contributor/join_queue").remote(socket_address);
-    req = set_request::<String>(req, &ctx.unknown_participant.keypair, Some(&format!("test")));
-    let response = req.dispatch();
-    assert_eq!(response.status(), Status::BadRequest);
-    assert!(response.body().is_some());
-
     // Ok request
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<String>(
@@ -462,7 +472,7 @@ fn test_join_queue() {
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    assert!(response.body().is_some());
 
     // Wrong request, IP already in queue
     req = client.post("/contributor/join_queue").remote(socket_address);
@@ -507,7 +517,7 @@ fn test_join_queue() {
 
 /// Test wrong usage of lock_chunk.
 #[test]
-fn test_wrong_lock_chunk() {
+fn wrong_lock_chunk() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -521,7 +531,7 @@ fn test_wrong_lock_chunk() {
 
 /// Test wrong usage of get_challenge.
 #[test]
-fn test_wrong_get_challenge() {
+fn wrong_get_challenge() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -537,7 +547,7 @@ fn test_wrong_get_challenge() {
 
 /// Test wrong usage of post_contribution_chunk.
 #[test]
-fn test_wrong_post_contribution_chunk() {
+fn wrong_post_contribution_chunk() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -564,7 +574,7 @@ fn test_wrong_post_contribution_chunk() {
 
 /// Test wrong usage of contribute_chunk.
 #[test]
-fn test_wrong_contribute_chunk() {
+fn wrong_contribute_chunk() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -608,7 +618,7 @@ fn test_wrong_contribute_chunk() {
 }
 
 #[test]
-fn test_wrong_verify() {
+fn wrong_verify() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -621,7 +631,7 @@ fn test_wrong_verify() {
 }
 
 #[test]
-fn test_wrong_post_contribution_info() {
+fn wrong_post_contribution_info() {
     let ctx = build_context();
     let client = Client::tracked(ctx.rocket).expect("Invalid rocket instance");
 
@@ -678,10 +688,11 @@ fn test_wrong_post_contribution_info() {
 /// - join_queue with already contributed token
 /// - Skip to second cohort
 /// - Try joinin queue with expired token
+/// - Try attestation
 /// - Try joinin queue with correct token
 ///
 #[test]
-fn test_contribution() {
+fn contribution() {
     const COHORT_TIME: u64 = 15;
     std::env::set_var("NAMADA_COHORT_TIME", COHORT_TIME.to_string()); // 15 seconds for each cohort
     use setup_utils::calculate_hash;
@@ -865,6 +876,52 @@ fn test_contribution() {
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
+    // Attestation
+
+    // Wrong url format
+    req = client.post("/contributor/attestation");
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(1, String::from("not_a_valid_url"))),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+
+    // Wrong round height
+    req = client.post("/contributor/attestation");
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(2, String::from("https://namada.net"))),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::InternalServerError);
+    assert!(response.body().is_some());
+
+    // Try attestation with wrong participant
+    req = client.post("/contributor/attestation");
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&(1, String::from("https://namada.net"))),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    assert!(response.body().is_some());
+
+    // Ok attestation
+    req = client.post("/contributor/attestation");
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(1, String::from("https://namada.net"))),
+    );
+    let response = req.dispatch();
+    assert_eq!(response.status(), Status::Ok);
+    assert!(response.body().is_none());
+
     // Try joining the queue with correct token
     req = client.post("/contributor/join_queue").remote(socket_address);
     req = set_request::<String>(
@@ -876,5 +933,5 @@ fn test_contribution() {
     );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
-    assert!(response.body().is_none());
+    assert!(response.body().is_some());
 }

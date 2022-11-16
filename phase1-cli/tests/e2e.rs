@@ -204,7 +204,7 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
 }
 
 #[tokio::test]
-async fn test_stop_coordinator() {
+async fn stop_coordinator() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -253,7 +253,7 @@ fn get_serialized_tokens_zip(tokens: Vec<&str>) -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn test_update_cohorts() {
+async fn update_cohorts() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -296,7 +296,7 @@ async fn test_update_cohorts() {
 }
 
 #[tokio::test]
-async fn test_get_status() {
+async fn get_status() {
     let access_token = "test-access_token";
     std::env::set_var("ACCESS_SECRET", access_token);
     // Spawn the server and get the test context
@@ -329,7 +329,7 @@ async fn test_get_status() {
 }
 
 #[tokio::test]
-async fn test_get_contributor_queue_status() {
+async fn get_contributor_queue_status() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -356,7 +356,7 @@ async fn test_get_contributor_queue_status() {
 }
 
 #[tokio::test]
-async fn test_heartbeat() {
+async fn heartbeat() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -378,7 +378,7 @@ async fn test_heartbeat() {
 }
 
 #[tokio::test]
-async fn test_update_coordinator() {
+async fn update_coordinator() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -403,7 +403,29 @@ async fn test_update_coordinator() {
 }
 
 #[tokio::test]
-async fn test_join_queue() {
+async fn wrong_post_attestation() {
+    let client = Client::new();
+    // Spawn the server and get the test context
+    let (ctx, _handle) = test_prelude().await;
+    // Wait for server startup
+    time::sleep(Duration::from_secs(1)).await;
+
+    // Wrong, missing contribution
+    let url = Url::parse(&ctx.coordinator_url).unwrap();
+    assert!(
+        requests::post_attestation(
+            &client,
+            &url,
+            &ctx.contributors[0].keypair,
+            &(1, String::from("https://namada.net"))
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn join_queue() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -419,10 +441,6 @@ async fn test_join_queue() {
         &String::from("9nFeNpukSn1eVwNc2vkfP7sQsLG3oS7623phb2Zzc23GAdXjuby4XAbwbWbx1uNaYrZorVLio4ZSt3u95sgi4fsS8hiZ3XkEttBF6q4461dGpoWv7er"),
     )
     .await;
-    assert!(response.is_err());
-
-    // Wrong request, invalid token format
-    response = requests::post_join_queue(&client, &url, &ctx.unknown_participant.keypair, &String::from("test")).await;
     assert!(response.is_err());
 
     // Ok request
@@ -461,7 +479,7 @@ async fn test_join_queue() {
 
 /// Test wrong usage of lock_chunk.
 #[tokio::test]
-async fn test_wrong_lock_chunk() {
+async fn wrong_lock_chunk() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, _) = test_prelude().await;
@@ -476,7 +494,7 @@ async fn test_wrong_lock_chunk() {
 
 /// Test wrong usage of contribute_chunk.
 #[tokio::test]
-async fn test_wrong_contribute_chunk() {
+async fn wrong_contribute_chunk() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -501,7 +519,7 @@ async fn test_wrong_contribute_chunk() {
 }
 
 #[tokio::test]
-async fn test_wrong_verify() {
+async fn wrong_verify() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, _) = test_prelude().await;
@@ -515,7 +533,7 @@ async fn test_wrong_verify() {
 }
 
 #[tokio::test]
-async fn test_wrong_post_contribution_info() {
+async fn wrong_post_contribution_info() {
     let client = Client::new();
     // Spawn the server and get the test context
     let (ctx, handle) = test_prelude().await;
@@ -552,10 +570,11 @@ async fn test_wrong_post_contribution_info() {
 /// - join_queue with already contributed token
 /// - Skip to second cohort
 /// - Try joinin queue with expired token
+/// - Try attestation
 /// - Try joinin queue with correct token
 ///
 #[tokio::test]
-async fn test_contribution() {
+async fn contribution() {
     use rand::Rng;
     use setup_utils::calculate_hash;
 
@@ -709,6 +728,48 @@ async fn test_contribution() {
     )
     .await;
     assert!(response.is_err());
+
+    // Attestation
+
+    // Wrong url format
+    let response = requests::post_attestation(
+        &client,
+        &url,
+        &ctx.contributors[0].keypair,
+        &(1, String::from("not_a_valid_url")),
+    )
+    .await;
+    assert!(response.is_err());
+
+    // Wrong round height
+    let response = requests::post_attestation(
+        &client,
+        &url,
+        &ctx.contributors[0].keypair,
+        &(2, String::from("https://namada.net")),
+    )
+    .await;
+    assert!(response.is_err());
+
+    // Try attestation with wrong participant
+    let response = requests::post_attestation(
+        &client,
+        &url,
+        &ctx.unknown_participant.keypair,
+        &(1, String::from("https://namada.net")),
+    )
+    .await;
+    assert!(response.is_err());
+
+    // Ok attestation
+    requests::post_attestation(
+        &client,
+        &url,
+        &ctx.contributors[0].keypair,
+        &(1, String::from("https://namada.net")),
+    )
+    .await
+    .unwrap();
 
     // Try joining the queue with correct token
     requests::post_join_queue(
