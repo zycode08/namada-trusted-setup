@@ -139,9 +139,9 @@ For instructions on how to ensure that the ceremony is executed properly, refer 
 # Directory Structure
 
 This repository contains several Rust crates that implement the different building blocks of the MPC. The high-level structure of the repository is as follows:
-- [`phase1-cli`](phase1-cli): Rust crate that provides a HTTP client that communicates with the REST API endpoints of the coordinator and uses the necessary cryptographic functions to contribute to the trusted setup.
-- [`phase1-coordinator`](phase1-coordinator): Rust crate that provides a coordinator library and a HTTP REST API that allow contributors to interact with the coordinator. The coordinator handles the operational steps of the ceremony like: adding a new contributor to the queue, authentificating a contributor, sending and receiving challenge files, removing inactive contributors, reattributing challenge file to a new contributor after a contributor dropped, verifying contributions, creating new files, etc.
-- [`phase1`](phase1) and [`setup-utils`](setup-utils): contain utils used in both the client and the coordinator.
+- [`phase2-cli`](phase2-cli): Rust crate that provides a HTTP client that communicates with the REST API endpoints of the coordinator and uses the necessary cryptographic functions to contribute to the trusted setup.
+- [`phase2-coordinator`](phase2-coordinator): Rust crate that provides a coordinator library and a HTTP REST API that allow contributors to interact with the coordinator. The coordinator handles the operational steps of the ceremony like: adding a new contributor to the queue, authentificating a contributor, sending and receiving challenge files, removing inactive contributors, reattributing challenge file to a new contributor after a contributor dropped, verifying contributions, creating new files, etc.
+- [`phase2`](phase2) and [`setup-utils`](setup-utils): contain utils used in both the client and the coordinator.
 - The remaining files contain configs for CI and deployment to AWS EC2 and S3 bucket.
 
 # Audits

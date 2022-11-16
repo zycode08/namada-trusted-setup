@@ -265,7 +265,7 @@ fn split_transcript<E: PairingEngine>(
 mod tests {
     use super::*;
     use crate::UseCompression;
-    use phase1::{
+    use phase2::{
         helpers::testing::{
             setup_verify,
             CheckForCorrectness as CheckForCorrectnessPhase1,

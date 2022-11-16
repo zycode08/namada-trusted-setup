@@ -1,4 +1,4 @@
-use phase1::helpers::testing::random_point_vec;
+use phase2::helpers::testing::random_point_vec;
 use setup_utils::{batch_exp, dense_multiexp, generate_powers_of_tau};
 
 use snarkvm_curves::{

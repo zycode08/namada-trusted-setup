@@ -1,4 +1,4 @@
-name: Build phase1-coordinator docker image
+name: Build phase2-coordinator docker image
 
 on:
   push:
