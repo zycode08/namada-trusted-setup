@@ -366,8 +366,8 @@ pub async fn post_attestation(
 
     let read_lock = (*coordinator).clone().read_owned().await;
     task::spawn_blocking(move || {
-        if !read_lock.is_current_contributor(&participant) && !read_lock.is_finished_contributor(&participant) {
-            // Only current or finished contributors are allowed to query this endpoint
+        if !read_lock.is_finished_contributor_at_round(&participant, round) {
+            // Only finished contributors are allowed to query this endpoint
             return Err(ResponseError::UnauthorizedParticipant(
                 participant,
                 "/contributor/attestation".to_string(),
