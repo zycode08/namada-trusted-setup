@@ -19,7 +19,7 @@ pub fn buffer_size<C: AffineCurve>(compression: UseCompression) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use phase1::helpers::testing::random_point_vec;
+    use phase2::helpers::testing::random_point_vec;
 
     use snarkvm_curves::bls12_377::{G1Affine, G2Affine};
 

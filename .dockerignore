@@ -4,7 +4,7 @@ Dockerfile
 target
 **/target
 **/phase1radix2m*
-phase1/challenge*
-phase1/response*
-phase1/transcript
-phase1/tmp_*
+phase2/challenge*
+phase2/response*
+phase2/transcript
+phase2/tmp_*
