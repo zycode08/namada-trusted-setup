@@ -7,10 +7,11 @@ use crate::{
     storage::{ContributionLocator, ContributionSignatureLocator},
     CoordinatorError,
     Participant,
+    coordinator_state::TOKEN_BLACKLIST
 };
 
 pub use crate::{
-    coordinator_state::{PRIVATE_TOKEN_PREFIX, TOKENS_PATH},
+    coordinator_state::TOKENS_PATH,
     s3::TOKENS_ZIP_FILE,
 };
 use blake2::Digest;
@@ -58,10 +59,6 @@ lazy_static! {
     };
     pub(crate) static ref ACCESS_SECRET: String =
         std::env::var("ACCESS_SECRET").expect("Missing required env ACCESS_SECRET");
-    static ref TOKEN_BLACKLIST: bool = match std::env::var("TOKEN_BLACKLIST") {
-        Ok(s) if s == "true" => true,
-        _ => false,
-    };
 }
 
 pub(crate) type Coordinator = Arc<RwLock<crate::Coordinator>>;
@@ -623,8 +620,8 @@ pub(crate) async fn token_check(coordinator: Coordinator, token: &str) -> Result
     // Check that token is not in use nor blacklisted (only if env is set)
     let read_lock = coordinator.read().await;
 
-    // Check that token is not in use nor blacklisted (only if env is set and token is not FFA)
-    if *TOKEN_BLACKLIST && token.starts_with(PRIVATE_TOKEN_PREFIX) {
+    // Check that token is not in use nor blacklisted (only if env is set)
+    if *TOKEN_BLACKLIST {
         if read_lock.state().is_token_in_use(token) {
             return Err(ResponseError::TokenAlreadyInUse);
         }
