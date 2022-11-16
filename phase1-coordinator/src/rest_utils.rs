@@ -2,18 +2,15 @@
 
 use crate::{
     authentication::{Production, Signature},
+    coordinator_state::TOKEN_BLACKLIST,
     objects::Task,
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
     CoordinatorError,
     Participant,
-    coordinator_state::TOKEN_BLACKLIST
 };
 
-pub use crate::{
-    coordinator_state::TOKENS_PATH,
-    s3::TOKENS_ZIP_FILE,
-};
+pub use crate::{coordinator_state::TOKENS_PATH, s3::TOKENS_ZIP_FILE};
 use blake2::Digest;
 use rocket::{
     catch,

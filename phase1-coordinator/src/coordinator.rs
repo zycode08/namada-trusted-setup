@@ -12,8 +12,8 @@ use crate::{
         ParticipantInfo,
         ResetCurrentRoundStorageAction,
         RoundMetrics,
+        IP_BAN,
         TOKEN_BLACKLIST,
-        IP_BAN
     },
     environment::{Deployment, Environment},
     objects::{
@@ -1136,7 +1136,7 @@ impl Coordinator {
                     if *TOKEN_BLACKLIST {
                         self.state.blacklist_participant_token(participant)?;
                     }
-        
+
                     if *IP_BAN {
                         self.state.blacklist_participant_ip(participant)?;
                     }

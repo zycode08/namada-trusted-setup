@@ -1530,16 +1530,16 @@ impl CoordinatorState {
     ///
     pub fn blacklist_participant_token(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
         let target_token = self
-        .runtime_state
-        .tokens_in_use
-        .iter()
-        .find(|(_, part)| *part == participant)
-        .ok_or(CoordinatorError::Error(anyhow!(
-            "Missing token for participant {}",
-            participant
-        )))?
-        .0
-        .clone();
+            .runtime_state
+            .tokens_in_use
+            .iter()
+            .find(|(_, part)| *part == participant)
+            .ok_or(CoordinatorError::Error(anyhow!(
+                "Missing token for participant {}",
+                participant
+            )))?
+            .0
+            .clone();
 
         // Safe to unwrap here
         let (token, part) = self.runtime_state.tokens_in_use.remove_entry(&target_token).unwrap();
@@ -1559,11 +1559,11 @@ impl CoordinatorState {
     ///
     pub fn blacklist_participant_ip(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
         if let Some(target_ip) = self
-        .runtime_state
-        .current_ips
-        .iter()
-        .find_map(|(ip, part)| if part == participant { Some(ip) } else { None })
-        .cloned()
+            .runtime_state
+            .current_ips
+            .iter()
+            .find_map(|(ip, part)| if part == participant { Some(ip) } else { None })
+            .cloned()
         {
             // Safe to unwrap here
             let (ip, part) = self.runtime_state.current_ips.remove_entry(&target_ip).unwrap();

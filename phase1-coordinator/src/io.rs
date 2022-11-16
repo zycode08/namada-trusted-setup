@@ -247,7 +247,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
                 if attempt == 2 {
                     debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
                     return Err(IOError::CheckMnemonicError);
-                }  else {
+                } else {
                     debug!("Wrong answer, retry");
                 }
             }
