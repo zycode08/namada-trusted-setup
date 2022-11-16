@@ -234,14 +234,23 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
     let mnemonic_slice: Vec<&'static str> = mnemonic.word_iter().collect();
 
     for &i in indexes[..3].iter() {
-        let response = get_user_input(
-            format!("Enter the word at index {} of your mnemonic:", i + 1).as_str(),
-            Some(&Regex::new(r"[[:alpha:]]+")?),
-        )?;
+        // 3 attempts for each word
+        for attempt in 0..3 {
+            let response = get_user_input(
+                format!("Enter the word at index {} of your mnemonic:", i + 1).as_str(),
+                Some(&Regex::new(r"[[:alpha:]]+")?),
+            )?;
 
-        if response != mnemonic_slice[i] {
-            debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
-            return Err(IOError::CheckMnemonicError);
+            if response == mnemonic_slice[i] {
+                break;
+            } else {
+                if attempt == 2 {
+                    debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
+                    return Err(IOError::CheckMnemonicError);
+                }  else {
+                    debug!("Wrong answer, retry");
+                }
+            }
         }
     }
 
