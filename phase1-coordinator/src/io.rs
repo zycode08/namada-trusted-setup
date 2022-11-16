@@ -1,4 +1,4 @@
-use std::{fmt::Display, io::Write, ops::Deref};
+use std::{fmt::Display, io::Write, ops::Deref, process};
 
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
@@ -246,7 +246,7 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
             } else {
                 if attempt == 2 {
                     eprintln!("{}", "Expected: {}, answer: {}\nRun out of attempts for the mnemonic check. Client will shutdown, you'll need to restart the CLI".red().bold(), mnemonic_slice[i], response);
-                    return Err(IOError::CheckMnemonicError);
+                    process::exit(1);
                 } else {
                     println!("{}", "Wrong answer, retry".red());
                 }
