@@ -21,14 +21,16 @@ use std::{
 use time::{Duration, OffsetDateTime};
 use tracing::*;
 
-pub const PRIVATE_TOKEN_PREFIX: &str = "put_";
-
 lazy_static! {
-    static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
+    pub static ref TOKENS_PATH: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
+    pub(crate) static ref TOKEN_BLACKLIST: bool = match std::env::var("TOKEN_BLACKLIST") {
         Ok(s) if s == "true" => true,
         _ => false,
     };
-    pub static ref TOKENS_PATH: String = std::env::var("NAMADA_TOKENS_PATH").unwrap_or_else(|_| "./tokens".to_string());
+    pub(crate) static ref IP_BAN: bool = match std::env::var("NAMADA_MPC_IP_BAN") {
+        Ok(s) if s == "true" => true,
+        _ => false,
+    };
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1524,32 +1526,38 @@ impl CoordinatorState {
     }
 
     ///
-    /// Moves the ip address and token from the list of currently in use to the black lists
+    /// Moves the token from the list of currently in use to the black list
     ///
-    pub fn blacklist_participant(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
-        // Blacklist token (if not FFA)
+    pub fn blacklist_participant_token(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
         let target_token = self
             .runtime_state
             .tokens_in_use
             .iter()
             .find(|(_, part)| *part == participant)
-            .map(|(t, _)| t.clone());
+            .ok_or(CoordinatorError::Error(anyhow!(
+                "Missing token for participant {}",
+                participant
+            )))?
+            .0
+            .clone();
 
-        // Private token, blacklist
-        if let Some(target_token) = target_token {
-            // Safe to unwrap here
-            let (token, part) = self.runtime_state.tokens_in_use.remove_entry(&target_token).unwrap();
+        // Safe to unwrap here
+        let (token, part) = self.runtime_state.tokens_in_use.remove_entry(&target_token).unwrap();
 
-            if let Some(part) = self.blacklisted_tokens.insert(token, part) {
-                return Err(CoordinatorError::Error(anyhow!(
-                    "Token {} was already blacklisted for participant {}!",
-                    target_token,
-                    part
-                )));
-            }
+        match self.blacklisted_tokens.insert(token, part) {
+            Some(part) => Err(CoordinatorError::Error(anyhow!(
+                "Token {} was already blacklisted for participant {}!",
+                target_token,
+                part
+            ))),
+            None => Ok(()),
         }
+    }
 
-        // Blacklist Ip address
+    ///
+    /// Moves the ip address from the list of currently in use to the black list
+    ///
+    pub fn blacklist_participant_ip(&mut self, participant: &Participant) -> Result<(), CoordinatorError> {
         if let Some(target_ip) = self
             .runtime_state
             .current_ips
@@ -1560,16 +1568,17 @@ impl CoordinatorState {
             // Safe to unwrap here
             let (ip, part) = self.runtime_state.current_ips.remove_entry(&target_ip).unwrap();
 
-            if let Some(part) = self.blacklisted_ips.insert(ip, part) {
-                return Err(CoordinatorError::Error(anyhow!(
+            match self.blacklisted_ips.insert(ip, part) {
+                Some(part) => Err(CoordinatorError::Error(anyhow!(
                     "Ip {} was already blacklisted for participant {}!",
                     target_ip,
                     part
-                )));
+                ))),
+                None => Ok(()),
             }
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     ///
@@ -1783,13 +1792,15 @@ impl CoordinatorState {
             (reliability_score, None, time.now_utc(), time.now_utc()),
         );
 
-        // Add ip (if any) to the set of currently known addresses
-        if let Some(ip) = participant_ip {
-            self.runtime_state.current_ips.insert(ip, participant.clone());
+        // Add ip (if env set and if any) to the set of currently known addresses
+        if *IP_BAN {
+            if let Some(ip) = participant_ip {
+                self.runtime_state.current_ips.insert(ip, participant.clone());
+            }
         }
 
-        // Add token (if not FFA) to the set of currenly known ones
-        if token.starts_with(PRIVATE_TOKEN_PREFIX) {
+        // Add token (if blacklisting) to the set of currenly known ones
+        if *TOKEN_BLACKLIST {
             self.runtime_state.tokens_in_use.insert(token, participant);
         }
 

@@ -12,6 +12,8 @@ use crate::{
         ParticipantInfo,
         ResetCurrentRoundStorageAction,
         RoundMetrics,
+        IP_BAN,
+        TOKEN_BLACKLIST,
     },
     environment::{Deployment, Environment},
     objects::{
@@ -1087,7 +1089,13 @@ impl Coordinator {
             self.storage.remove(&Locator::ContributionFile(response.clone()))?;
 
             // Blacklist participant's token and ip
-            self.state.blacklist_participant(participant)?;
+            if *TOKEN_BLACKLIST {
+                self.state.blacklist_participant_token(participant)?;
+            }
+
+            if *IP_BAN {
+                self.state.blacklist_participant_ip(participant)?;
+            }
 
             // Save the coordinator state in storage.
             self.save_state()?;
@@ -1125,7 +1133,13 @@ impl Coordinator {
                         .completed_task(participant, &completed_task, self.time.as_ref())?;
 
                     // Blacklist participant's token and ip
-                    self.state.blacklist_participant(participant)?;
+                    if *TOKEN_BLACKLIST {
+                        self.state.blacklist_participant_token(participant)?;
+                    }
+
+                    if *IP_BAN {
+                        self.state.blacklist_participant_ip(participant)?;
+                    }
 
                     // Save the coordinator state in storage.
                     self.save_state()?;

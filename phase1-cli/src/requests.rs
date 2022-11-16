@@ -426,9 +426,9 @@ pub async fn post_attestation(
     client: &Client,
     coordinator_address: &Url,
     keypair: &KeyPair,
-    request_body: &String,
+    request_body: &(u64, String),
 ) -> Result<()> {
-    submit_request::<String>(
+    submit_request::<(u64, String)>(
         client,
         coordinator_address,
         "/contributor/attestation",
