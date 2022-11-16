@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
+impl<'a, E: PairingEngine + Sync> Phase2<'a, E> {
     ///
     /// Phase 1: Aggregation
     ///
@@ -11,7 +11,7 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
     pub fn aggregation(
         inputs: &[(&[u8], UseCompression)],
         (output, compressed_output): (&mut [u8], UseCompression),
-        parameters: &Phase1Parameters<E>,
+        parameters: &Phase2Parameters<E>,
     ) -> Result<()> {
         let span = info_span!("phase2-aggregation");
         let _enter = span.enter();
@@ -209,7 +209,7 @@ mod tests {
 
             for chunk_index in 0..num_chunks {
                 // Generate a new parameter for this chunk.
-                let parameters = Phase1Parameters::<E>::new_chunk(
+                let parameters = Phase2Parameters::<E>::new_chunk(
                     ContributionMode::Chunked,
                     chunk_index,
                     batch,
@@ -229,7 +229,7 @@ mod tests {
                     // Construct the first contributor's keypair.
                     let (public_key_1, private_key_1) = {
                         let mut rng = derive_rng_from_seed(b"test_verify_transformation 1");
-                        Phase1::<E>::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
+                        Phase2::<E>::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
                     };
 
                     // Allocate the input/output vectors
@@ -237,7 +237,7 @@ mod tests {
                     let mut output_1 = generate_output(&parameters, compressed_output);
 
                     // Compute a chunked contribution.
-                    Phase1::computation(
+                    Phase2::computation(
                         &input,
                         &mut output_1,
                         compressed_input,
@@ -252,7 +252,7 @@ mod tests {
 
                     // Verify that the chunked contribution is correct.
                     assert!(
-                        Phase1::verification(
+                        Phase2::verification(
                             &input,
                             &output_1,
                             &public_key_1,
@@ -280,14 +280,14 @@ mod tests {
                     // Construct the second contributor's keypair, based on the first contributor's output.
                     let (public_key_2, private_key_2) = {
                         let mut rng = derive_rng_from_seed(b"test_verify_transformation 2");
-                        Phase1::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
+                        Phase2::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
                     };
 
                     // Generate a new output vector for the second contributor.
                     let mut output_2 = generate_output(&parameters, compressed_output);
 
                     // Compute a chunked contribution, based on the first contributor's output.
-                    Phase1::computation(
+                    Phase2::computation(
                         &output_1,
                         &mut output_2,
                         compressed_output,
@@ -302,7 +302,7 @@ mod tests {
 
                     // Verify that the chunked contribution is correct.
                     assert!(
-                        Phase1::verification(
+                        Phase2::verification(
                             &output_1,
                             &output_2,
                             &public_key_2,
@@ -319,7 +319,7 @@ mod tests {
                     // Verification will fail if the old hash is used.
                     if parameters.chunk_index == 0 {
                         assert!(
-                            Phase1::verification(
+                            Phase2::verification(
                                 &output_1,
                                 &output_2,
                                 &public_key_2,
@@ -351,7 +351,7 @@ mod tests {
 
             // Aggregate the right ones. Combining and verification should work.
 
-            let full_parameters = Phase1Parameters::<E>::new_full(*proving_system, powers, batch);
+            let full_parameters = Phase2Parameters::<E>::new_full(*proving_system, powers, batch);
             let mut output = generate_output(&full_parameters, compressed_output);
 
             // Flatten the {full_contribution} vector.
@@ -360,7 +360,7 @@ mod tests {
                 .map(|v| (v.as_slice(), compressed_output))
                 .collect::<Vec<_>>();
 
-            let parameters = Phase1Parameters::<E>::new(
+            let parameters = Phase2Parameters::<E>::new(
                 ContributionMode::Chunked,
                 0,
                 batch,
@@ -369,10 +369,10 @@ mod tests {
                 powers,
                 batch,
             );
-            Phase1::aggregation(&full_contribution, (&mut output, compressed_output), &parameters).unwrap();
+            Phase2::aggregation(&full_contribution, (&mut output, compressed_output), &parameters).unwrap();
 
-            let parameters = Phase1Parameters::<E>::new_full(*proving_system, powers, batch);
-            assert!(Phase1::aggregate_verification((&output, compressed_output, correctness), &parameters,).is_ok());
+            let parameters = Phase2Parameters::<E>::new_full(*proving_system, powers, batch);
+            assert!(Phase2::aggregate_verification((&output, compressed_output, correctness), &parameters,).is_ok());
         }
     }
 

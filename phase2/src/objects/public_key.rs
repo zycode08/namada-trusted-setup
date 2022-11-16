@@ -1,4 +1,4 @@
-use crate::Phase1Parameters;
+use crate::Phase2Parameters;
 use setup_utils::{Error, UseCompression};
 
 use snarkvm_curves::PairingEngine;
@@ -43,7 +43,7 @@ impl<E: PairingEngine> PublicKey<E> {
         &self,
         output_map: &mut [u8],
         accumulator_was_compressed: UseCompression,
-        parameters: &Phase1Parameters<E>,
+        parameters: &Phase2Parameters<E>,
     ) -> Result<(), Error> {
         let position = match accumulator_was_compressed {
             UseCompression::Yes => parameters.contribution_size - parameters.public_key_size,
@@ -59,7 +59,7 @@ impl<E: PairingEngine> PublicKey<E> {
     pub fn read(
         input_map: &[u8],
         accumulator_was_compressed: UseCompression,
-        parameters: &Phase1Parameters<E>,
+        parameters: &Phase2Parameters<E>,
     ) -> Result<Self, Error> {
         let position = match accumulator_was_compressed {
             UseCompression::Yes => parameters.contribution_size - parameters.public_key_size,

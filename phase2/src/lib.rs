@@ -31,7 +31,7 @@ use core::ops::Mul;
 use rand::{CryptoRng, Rng};
 use tracing::{debug, info, info_span, trace};
 
-/// `Phase1` is an object that participants of the ceremony contribute
+/// `Phase2` is an object that participants of the ceremony contribute
 /// randomness to. This object contains powers of trapdoor `tau` in G1 and in G2 over
 /// fixed generators, and additionally in G1 over two other generators of exponents
 /// `alpha` and `beta` over those fixed generators. In other words:
@@ -39,7 +39,7 @@ use tracing::{debug, info, info_span, trace};
 /// * (τ, τ<sup>2</sup>, ..., τ<sup>2<sup>22</sup> - 2</sup>, α, ατ, ατ<sup>2</sup>, ..., ατ<sup>2<sup>21</sup> - 1</sup>, β, βτ, βτ<sup>2</sup>, ..., βτ<sup>2<sup>21</sup> - 1</sup>)<sub>1</sub>
 /// * (β, τ, τ<sup>2</sup>, ..., τ<sup>2<sup>21</sup> - 1</sup>)<sub>2</sub>
 #[derive(Debug)]
-pub struct Phase1<'a, E: PairingEngine> {
+pub struct Phase2<'a, E: PairingEngine> {
     /// Groth16: tau^0, tau^1, tau^2, ..., tau^{TAU_POWERS_G1_LENGTH - 1}
     /// Marlin: tau^0, tau^1, tau^2, ..., tau^{TAU_POWERS_LENGTH - 1}
     pub tau_powers_g1: Vec<E::G1Affine>,
@@ -60,10 +60,10 @@ pub struct Phase1<'a, E: PairingEngine> {
     /// Hash chain hash
     pub hash: GenericArray<u8, U64>,
     /// The parameters used for the setup of this accumulator
-    pub parameters: &'a Phase1Parameters<E>,
+    pub parameters: &'a Phase2Parameters<E>,
 }
 
-impl<'a, E: PairingEngine> PartialEq for Phase1<'a, E> {
+impl<'a, E: PairingEngine> PartialEq for Phase2<'a, E> {
     fn eq(&self, other: &Self) -> bool {
         self.tau_powers_g1 == other.tau_powers_g1
             && self.tau_powers_g2 == other.tau_powers_g2

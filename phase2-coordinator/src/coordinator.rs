@@ -170,7 +170,7 @@ pub enum CoordinatorError {
     ParticipantUnauthorizedForChunkId { chunk_id: u64 },
     ParticipantWasDropped,
     PendingTasksMustContainResponseTask { response_task: Task },
-    Phase1Setup(setup_utils::Error),
+    Phase2Setup(setup_utils::Error),
     QueueIsEmpty,
     QueueWaitTimeIncomplete,
     ResponseHashSizeInvalid,
@@ -252,7 +252,7 @@ impl From<serde_json::Error> for CoordinatorError {
 
 impl From<setup_utils::Error> for CoordinatorError {
     fn from(error: setup_utils::Error) -> Self {
-        CoordinatorError::Phase1Setup(error)
+        CoordinatorError::Phase2Setup(error)
     }
 }
 

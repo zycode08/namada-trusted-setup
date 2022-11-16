@@ -1,7 +1,7 @@
 use phase2::{
     helpers::testing::{generate_input, setup_verify},
-    Phase1,
-    Phase1Parameters,
+    Phase2,
+    Phase2Parameters,
     ProvingSystem,
 };
 use setup_utils::*;
@@ -28,14 +28,14 @@ fn benchmark_initialization(c: &mut Criterion) {
                     group.sample_size(10);
                 }
 
-                let parameters = Phase1Parameters::<Bls12_377>::new_full(proof_system, power, power);
+                let parameters = Phase2Parameters::<Bls12_377>::new_full(proof_system, power, power);
                 let expected_challenge_length = parameters.get_length(*compression);
 
                 // count in `other` powers (G1 will be 2x that)
                 group.throughput(Throughput::Elements(power as u64));
                 group.bench_with_input(format!("{}", compression), &power, |b, _power| {
                     let mut output = vec![0; expected_challenge_length];
-                    b.iter(|| Phase1::initialization(&mut output, *compression, &parameters))
+                    b.iter(|| Phase2::initialization(&mut output, *compression, &parameters))
                 });
             }
         }
@@ -58,7 +58,7 @@ fn benchmark_computation(c: &mut Criterion) {
     // We gather data on various sizes.
     for power in 4..8 {
         for proof_system in proving_system {
-            let parameters = Phase1Parameters::<Bls12_377>::new_full(proof_system, power, batch);
+            let parameters = Phase2Parameters::<Bls12_377>::new_full(proof_system, power, batch);
 
             let (input, _) = generate_input(&parameters, compressed_input, correctness);
             let mut output = vec![0; parameters.get_length(compressed_output)];
@@ -66,7 +66,7 @@ fn benchmark_computation(c: &mut Criterion) {
 
             // Generate the private key.
             let mut rng = thread_rng();
-            let (_, private_key) = Phase1::key_generation(&mut rng, current_accumulator_hash.as_ref())
+            let (_, private_key) = Phase2::key_generation(&mut rng, current_accumulator_hash.as_ref())
                 .expect("could not generate keypair");
 
             group.throughput(Throughput::Elements(power as u64));
@@ -75,7 +75,7 @@ fn benchmark_computation(c: &mut Criterion) {
                 &power,
                 |b, _size| {
                     b.iter(|| {
-                        Phase1::computation(
+                        Phase2::computation(
                             &input,
                             &mut output,
                             compressed_input,
@@ -116,7 +116,7 @@ fn benchmark_verification(c: &mut Criterion) {
     for power in powers {
         for (compressed_input, compressed_output) in compression {
             for proof_system in proving_system {
-                let parameters = Phase1Parameters::<Bls12_377>::new_full(proof_system, power, batch);
+                let parameters = Phase2Parameters::<Bls12_377>::new_full(proof_system, power, batch);
 
                 let (input, output, pubkey, current_accumulator_hash) =
                     setup_verify(*compressed_input, correctness, *compressed_output, &parameters);
@@ -127,7 +127,7 @@ fn benchmark_verification(c: &mut Criterion) {
                     &power,
                     |b, _power| {
                         b.iter(|| {
-                            Phase1::verification(
+                            Phase2::verification(
                                 &input,
                                 &output,
                                 &pubkey,

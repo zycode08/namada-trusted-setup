@@ -1,6 +1,6 @@
 //! Accumulator which operates on batches of data
 
-use crate::{helpers::buffers::*, Phase1Parameters, ProvingSystem};
+use crate::{helpers::buffers::*, Phase2Parameters, ProvingSystem};
 use cfg_if::cfg_if;
 use setup_utils::{BatchDeserializer, BatchSerializer, Deserializer, Serializer, *};
 
@@ -159,7 +159,7 @@ cfg_if! {
             input: &[u8],
             output: &mut [u8],
             check_input_for_correctness: CheckForCorrectness,
-            parameters: &Phase1Parameters<E>,
+            parameters: &Phase2Parameters<E>,
         ) -> Result<()> {
             let compressed_input = UseCompression::Yes;
             let compressed_output = UseCompression::No;
@@ -266,7 +266,7 @@ pub fn serialize<E: PairingEngine>(
     elements: AccumulatorElementsRef<E>,
     output: &mut [u8],
     compressed: UseCompression,
-    parameters: &Phase1Parameters<E>,
+    parameters: &Phase2Parameters<E>,
 ) -> Result<()> {
     let (in_tau_g1, in_tau_g2, in_alpha_g1, in_beta_g1, in_beta_g2) = elements;
     let (tau_g1, tau_g2, alpha_g1, beta_g1, beta_g2) = split_mut(output, parameters, compressed);
@@ -289,7 +289,7 @@ pub fn deserialize<E: PairingEngine>(
     input: &[u8],
     compressed: UseCompression,
     check_input_for_correctness: CheckForCorrectness,
-    parameters: &Phase1Parameters<E>,
+    parameters: &Phase2Parameters<E>,
 ) -> Result<AccumulatorElements<E>> {
     // Get an immutable reference to the input chunks
     let (in_tau_g1, in_tau_g2, in_alpha_g1, in_beta_g1, in_beta_g2) = split(&input, parameters, compressed);

@@ -1,7 +1,7 @@
 use super::*;
 use setup_utils::rayon_cfg;
 
-impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
+impl<'a, E: PairingEngine + Sync> Phase2<'a, E> {
     ///
     /// Phase 1: Initialization
     ///
@@ -12,7 +12,7 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
     pub fn initialization(
         output: &mut [u8],
         compressed_output: UseCompression,
-        parameters: &'a Phase1Parameters<E>,
+        parameters: &'a Phase2Parameters<E>,
     ) -> Result<()> {
         let span = info_span!("phase2-initialization");
         let _ = span.enter();
@@ -64,17 +64,17 @@ mod tests {
 
     fn curve_initialization_test<E: PairingEngine>(powers: usize, batch: usize, compression: UseCompression) {
         for proving_system in &[ProvingSystem::Groth16, ProvingSystem::Marlin] {
-            let parameters = Phase1Parameters::<E>::new_full(*proving_system, powers, batch);
+            let parameters = Phase2Parameters::<E>::new_full(*proving_system, powers, batch);
             let expected_challenge_length = match compression {
                 UseCompression::Yes => parameters.contribution_size - parameters.public_key_size,
                 UseCompression::No => parameters.accumulator_size,
             };
 
             let mut output = vec![0; expected_challenge_length];
-            Phase1::initialization(&mut output, compression, &parameters).unwrap();
+            Phase2::initialization(&mut output, compression, &parameters).unwrap();
 
             let deserialized =
-                Phase1::deserialize(&output, compression, CheckForCorrectness::Full, &parameters).unwrap();
+                Phase2::deserialize(&output, compression, CheckForCorrectness::Full, &parameters).unwrap();
 
             let g1_zero = E::G1Affine::prime_subgroup_generator();
             let g2_zero = E::G2Affine::prime_subgroup_generator();

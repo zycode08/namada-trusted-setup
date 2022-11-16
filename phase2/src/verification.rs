@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
+impl<'a, E: PairingEngine + Sync> Phase2<'a, E> {
     /// Verifies that the accumulator was transformed correctly
     /// given the `PublicKey` and the so-far hash of the accumulator.
     /// This verifies a single chunk and checks only that the points
@@ -30,7 +30,7 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
         compressed_output: UseCompression,
         check_input_for_correctness: CheckForCorrectness,
         check_output_for_correctness: CheckForCorrectness,
-        parameters: &'a Phase1Parameters<E>,
+        parameters: &'a Phase2Parameters<E>,
     ) -> Result<()> {
         let span = info_span!("phase2-verification");
         let _ = span.enter();
@@ -363,7 +363,7 @@ impl<'a, E: PairingEngine + Sync> Phase1<'a, E> {
     /// This verifies the ratios in a given accumulator.
     pub fn aggregate_verification(
         (output, compressed_output, check_output_for_correctness): (&[u8], UseCompression, CheckForCorrectness),
-        parameters: &Phase1Parameters<E>,
+        parameters: &Phase2Parameters<E>,
     ) -> Result<()> {
         let span = info_span!("phase2-aggregate-verification");
         let _enter = span.enter();
@@ -632,7 +632,7 @@ mod tests {
         compressed_output: UseCompression,
     ) {
         for proving_system in &[ProvingSystem::Groth16, ProvingSystem::Marlin] {
-            let parameters = Phase1Parameters::<E>::new_full(*proving_system, total_size_in_log2, batch);
+            let parameters = Phase2Parameters::<E>::new_full(*proving_system, total_size_in_log2, batch);
 
             // allocate the input/output vectors
             let (input, _) = generate_input(&parameters, compressed_input, CheckForCorrectness::No);
@@ -641,11 +641,11 @@ mod tests {
             // Construct our keypair
             let current_accumulator_hash = blank_hash();
             let mut rng = derive_rng_from_seed(b"test_verify_transformation 1");
-            let (pubkey, privkey) = Phase1::key_generation(&mut rng, current_accumulator_hash.as_ref())
+            let (pubkey, privkey) = Phase2::key_generation(&mut rng, current_accumulator_hash.as_ref())
                 .expect("could not generate keypair");
 
             // transform the accumulator
-            Phase1::computation(
+            Phase2::computation(
                 &input,
                 &mut output,
                 compressed_input,
@@ -658,7 +658,7 @@ mod tests {
             // ensure that the key is not available to the verifier
             drop(privkey);
 
-            let res = Phase1::verification(
+            let res = Phase2::verification(
                 &input,
                 &output,
                 &pubkey,
@@ -673,13 +673,13 @@ mod tests {
 
             // subsequent participants must use the hash of the accumulator they received
             let current_accumulator_hash = calculate_hash(&output);
-            let (pubkey, privkey) = Phase1::key_generation(&mut rng, current_accumulator_hash.as_ref())
+            let (pubkey, privkey) = Phase2::key_generation(&mut rng, current_accumulator_hash.as_ref())
                 .expect("could not generate keypair");
 
             // generate a new output vector for the 2nd participant's contribution
             let mut output_2 = generate_output(&parameters, compressed_output);
             // we use the first output as input
-            Phase1::computation(
+            Phase2::computation(
                 &output,
                 &mut output_2,
                 compressed_output,
@@ -692,7 +692,7 @@ mod tests {
             // ensure that the key is not available to the verifier
             drop(privkey);
 
-            let res = Phase1::verification(
+            let res = Phase2::verification(
                 &output,
                 &output_2,
                 &pubkey,
@@ -707,11 +707,11 @@ mod tests {
 
             // verification will fail if the old hash is used
             let res =
-                Phase1::aggregate_verification((&output_2, compressed_output, CheckForCorrectness::Full), &parameters);
+                Phase2::aggregate_verification((&output_2, compressed_output, CheckForCorrectness::Full), &parameters);
             assert!(res.is_ok());
 
             // verification will fail if the old hash is used
-            let res = Phase1::verification(
+            let res = Phase2::verification(
                 &output,
                 &output_2,
                 &pubkey,
@@ -727,7 +727,7 @@ mod tests {
             /* Test is disabled for now as it doesn't always work and when it does, it panics.
             // verification will fail if even 1 byte is modified
             output_2[100] = 0;
-            let res = Phase1::verification(
+            let res = Phase2::verification(
                 &output,
                 &output_2,
                 &pubkey,
@@ -762,7 +762,7 @@ mod tests {
 
             for chunk_index in 0..num_chunks {
                 // Generate a new parameter for this chunk.
-                let parameters = Phase1Parameters::<E>::new_chunk(
+                let parameters = Phase2Parameters::<E>::new_chunk(
                     ContributionMode::Chunked,
                     chunk_index,
                     batch,
@@ -782,7 +782,7 @@ mod tests {
                     // Construct the first contributor's keypair.
                     let (public_key_1, private_key_1) = {
                         let mut rng = derive_rng_from_seed(b"test_verify_transformation 1");
-                        Phase1::<E>::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
+                        Phase2::<E>::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
                     };
 
                     // Allocate the input/output vectors
@@ -790,7 +790,7 @@ mod tests {
                     let mut output_1 = generate_output(&parameters, compressed_output);
 
                     // Compute a chunked contribution.
-                    Phase1::computation(
+                    Phase2::computation(
                         &input,
                         &mut output_1,
                         compressed_input,
@@ -805,7 +805,7 @@ mod tests {
 
                     // Verify that the chunked contribution is correct.
                     assert!(
-                        Phase1::verification(
+                        Phase2::verification(
                             &input,
                             &output_1,
                             &public_key_1,
@@ -832,14 +832,14 @@ mod tests {
                 // Construct the second contributor's keypair, based on the first contributor's output.
                 let (public_key_2, private_key_2) = {
                     let mut rng = derive_rng_from_seed(b"test_verify_transformation 2");
-                    Phase1::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
+                    Phase2::key_generation(&mut rng, digest.as_ref()).expect("could not generate keypair")
                 };
 
                 // Generate a new output vector for the second contributor.
                 let mut output_2 = generate_output(&parameters, compressed_output);
 
                 // Compute a chunked contribution, based on the first contributor's output.
-                Phase1::computation(
+                Phase2::computation(
                     &output_1,
                     &mut output_2,
                     compressed_output,
@@ -854,7 +854,7 @@ mod tests {
 
                 // Verify that the chunked contribution is correct.
                 assert!(
-                    Phase1::verification(
+                    Phase2::verification(
                         &output_1,
                         &output_2,
                         &public_key_2,
@@ -871,7 +871,7 @@ mod tests {
                 // Verification will fail if the old hash is used.
                 if parameters.chunk_index == 0 {
                     assert!(
-                        Phase1::verification(
+                        Phase2::verification(
                             &output_1,
                             &output_2,
                             &public_key_2,
@@ -890,7 +890,7 @@ mod tests {
                 // Verification will fail if even 1 byte is modified.
                 {
                     output_2[100] = 0;
-                    assert!(Phase1::verification(
+                    assert!(Phase2::verification(
                         &output_1,
                         &output_2,
                         &public_key_2,

@@ -46,7 +46,7 @@ impl<E: PairingEngine> CurveParameters<E> {
 
 /// The parameters used for the trusted setup ceremony
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Phase1Parameters<E> {
+pub struct Phase2Parameters<E> {
     /// The contribution mode
     pub contribution_mode: ContributionMode,
     /// The chunk index
@@ -80,7 +80,7 @@ pub struct Phase1Parameters<E> {
     pub hash_size: usize,
 }
 
-impl<E: PairingEngine> Phase1Parameters<E> {
+impl<E: PairingEngine> Phase2Parameters<E> {
     /// Constructs a new ceremony parameters object from the type of provided curve
     /// Panics if given batch_size = 0
     pub fn new_full(proving_system: ProvingSystem, total_size_in_log2: usize, batch_size: usize) -> Self {
