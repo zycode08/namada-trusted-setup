@@ -162,12 +162,12 @@ impl<E: PairingEngine> Groth16Params<E> {
     }
 
     /// Reads the first `num_constraints` coefficients from the provided processed
-    /// Phase 1 transcript with size `phase1_size`.
+    /// Phase 1 transcript with size `phase2_size`.
     pub fn read(
         reader: &mut [u8],
         compressed: UseCompression,
         check_input_for_correctness: CheckForCorrectness,
-        phase1_size: usize,
+        phase2_size: usize,
         num_constraints: usize,
     ) -> Result<Groth16Params<E>> {
         let span = info_span!("Groth16Utils_read");
@@ -183,7 +183,7 @@ impl<E: PairingEngine> Groth16Params<E> {
 
         // Split the transcript in the appropriate sections
         let (in_coeffs_g1, in_coeffs_g2, in_alpha_coeffs_g1, in_beta_coeffs_g1, in_h_g1) =
-            split_transcript::<E>(reader, phase1_size, num_constraints, compressed);
+            split_transcript::<E>(reader, phase2_size, num_constraints, compressed);
 
         info!("reading groth16 parameters...");
         // Read all elements in parallel
@@ -235,7 +235,7 @@ use crate::BatchDeserializer;
 /// splits the transcript from phase 1 after it's been prepared and converted to coefficient form
 fn split_transcript<E: PairingEngine>(
     input: &[u8],
-    phase1_size: usize,
+    phase2_size: usize,
     size: usize,
     compressed: UseCompression,
 ) -> SplitBuf {
@@ -244,16 +244,16 @@ fn split_transcript<E: PairingEngine>(
 
     // N elements per coefficient
     let (coeffs_g1, others) = input.split_at(g1_size * size);
-    let (_, others) = others.split_at((phase1_size - size) * g1_size);
+    let (_, others) = others.split_at((phase2_size - size) * g1_size);
 
     let (coeffs_g2, others) = others.split_at(g2_size * size);
-    let (_, others) = others.split_at((phase1_size - size) * g2_size);
+    let (_, others) = others.split_at((phase2_size - size) * g2_size);
 
     let (alpha_coeffs_g1, others) = others.split_at(g1_size * size);
-    let (_, others) = others.split_at((phase1_size - size) * g1_size);
+    let (_, others) = others.split_at((phase2_size - size) * g1_size);
 
     let (beta_coeffs_g1, others) = others.split_at(g1_size * size);
-    let (_, others) = others.split_at((phase1_size - size) * g1_size);
+    let (_, others) = others.split_at((phase2_size - size) * g1_size);
 
     // N-1 for the h coeffs
     let (h_coeffs, _) = others.split_at(g1_size * (size - 1));
@@ -265,45 +265,45 @@ fn split_transcript<E: PairingEngine>(
 mod tests {
     use super::*;
     use crate::UseCompression;
-    use phase1::{
+    use phase2::{
         helpers::testing::{
             setup_verify,
-            CheckForCorrectness as CheckForCorrectnessPhase1,
-            UseCompression as UseCompressionPhase1,
+            CheckForCorrectness as CheckForCorrectnessPhase2,
+            UseCompression as UseCompressionPhase2,
         },
-        Phase1,
-        Phase1Parameters,
+        Phase2,
+        Phase2Parameters,
         ProvingSystem,
     };
 
     use snarkvm_curves::bls12_377::Bls12_377;
 
-    fn read_write_curve<E: PairingEngine>(powers: usize, prepared_phase1_size: usize, compressed: UseCompression) {
-        fn compat(compression: UseCompression) -> UseCompressionPhase1 {
+    fn read_write_curve<E: PairingEngine>(powers: usize, prepared_phase2_size: usize, compressed: UseCompression) {
+        fn compat(compression: UseCompression) -> UseCompressionPhase2 {
             match compression {
-                UseCompression::Yes => UseCompressionPhase1::Yes,
-                UseCompression::No => UseCompressionPhase1::No,
+                UseCompression::Yes => UseCompressionPhase2::Yes,
+                UseCompression::No => UseCompressionPhase2::No,
             }
         }
 
-        fn compat_correctness(check_correctness: CheckForCorrectness) -> CheckForCorrectnessPhase1 {
+        fn compat_correctness(check_correctness: CheckForCorrectness) -> CheckForCorrectnessPhase2 {
             match check_correctness {
-                CheckForCorrectness::Full => CheckForCorrectnessPhase1::Full,
-                CheckForCorrectness::OnlyNonZero => CheckForCorrectnessPhase1::OnlyNonZero,
-                CheckForCorrectness::OnlyInGroup => CheckForCorrectnessPhase1::OnlyInGroup,
-                CheckForCorrectness::No => CheckForCorrectnessPhase1::No,
+                CheckForCorrectness::Full => CheckForCorrectnessPhase2::Full,
+                CheckForCorrectness::OnlyNonZero => CheckForCorrectnessPhase2::OnlyNonZero,
+                CheckForCorrectness::OnlyInGroup => CheckForCorrectnessPhase2::OnlyInGroup,
+                CheckForCorrectness::No => CheckForCorrectnessPhase2::No,
             }
         }
 
         let batch = ((1 << powers) << 1) - 1;
-        let params = Phase1Parameters::<E>::new_full(ProvingSystem::Groth16, powers, batch);
+        let params = Phase2Parameters::<E>::new_full(ProvingSystem::Groth16, powers, batch);
         let (_, output, _, _) = setup_verify(
             compat(compressed),
             compat_correctness(CheckForCorrectness::Full),
             compat(compressed),
             &params,
         );
-        let accumulator = Phase1::deserialize(
+        let accumulator = Phase2::deserialize(
             &output,
             compat(compressed),
             compat_correctness(CheckForCorrectness::Full),
@@ -312,7 +312,7 @@ mod tests {
         .unwrap();
 
         let groth_params = Groth16Params::<E>::new(
-            prepared_phase1_size,
+            prepared_phase2_size,
             accumulator.tau_powers_g1,
             accumulator.tau_powers_g2,
             accumulator.alpha_tau_powers_g1,
@@ -328,20 +328,20 @@ mod tests {
             &mut reader.get_mut(),
             compressed,
             CheckForCorrectness::Full,
-            prepared_phase1_size,
-            prepared_phase1_size, // phase2_size == prepared phase1 size
+            prepared_phase2_size,
+            prepared_phase2_size, // phase2_size == prepared phase2 size
         )
         .unwrap();
         reader.set_position(0);
         assert_eq!(deserialized, groth_params);
 
-        let subset = prepared_phase1_size / 2;
+        let subset = prepared_phase2_size / 2;
         let deserialized_subset = Groth16Params::<E>::read(
             &mut reader.get_mut(),
             compressed,
             CheckForCorrectness::Full,
-            prepared_phase1_size,
-            subset, // phase2 size is smaller than the prepared phase1 size
+            prepared_phase2_size,
+            subset, // phase2 size is smaller than the prepared phase2 size
         )
         .unwrap();
         assert_eq!(&deserialized_subset.coeffs_g1[..], &groth_params.coeffs_g1[..subset]);
@@ -361,17 +361,17 @@ mod tests {
     #[test]
     fn first_half_powers() {
         let power = 4 as usize;
-        let prepared_phase1_size = 2u32.pow(power as u32) as usize / 2;
-        read_write_curve::<Bls12_377>(power, prepared_phase1_size, UseCompression::Yes);
-        read_write_curve::<Bls12_377>(power, prepared_phase1_size, UseCompression::No);
+        let prepared_phase2_size = 2u32.pow(power as u32) as usize / 2;
+        read_write_curve::<Bls12_377>(power, prepared_phase2_size, UseCompression::Yes);
+        read_write_curve::<Bls12_377>(power, prepared_phase2_size, UseCompression::No);
     }
 
     #[test]
     fn phase2_equal_to_powers() {
         let power = 3 as usize;
-        let prepared_phase1_size = 2u32.pow(power as u32) as usize;
-        read_write_curve::<Bls12_377>(power, prepared_phase1_size, UseCompression::Yes);
-        read_write_curve::<Bls12_377>(power, prepared_phase1_size, UseCompression::No);
+        let prepared_phase2_size = 2u32.pow(power as u32) as usize;
+        read_write_curve::<Bls12_377>(power, prepared_phase2_size, UseCompression::Yes);
+        read_write_curve::<Bls12_377>(power, prepared_phase2_size, UseCompression::No);
     }
 
     #[test]

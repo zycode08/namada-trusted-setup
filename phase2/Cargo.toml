@@ -1,0 +1,57 @@
+[package]
+name = "phase2"
+version = "1.0.0-beta.10"
+authors = ["Sean Bowe", "Alex Vlasov", "The Aleo Team <hello@aleo.org>"]
+description = "Core logic for Phase 1"
+homepage = "https://github.com/AleoHQ/aleo-setup"
+repository = "https://github.com/AleoHQ/aleo-setup"
+license = "MIT/Apache-2.0"
+edition = "2018"
+
+[[bench]]
+name = "phase2"
+harness = false
+required-features = ["benchmark"]
+
+[dependencies]
+setup-utils = { path = "../setup-utils" }
+snarkvm-algorithms = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c", default-features = false }
+snarkvm-curves = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+snarkvm-fields = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+snarkvm-utilities = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+
+cfg-if = "1.0"
+criterion = { version = "0.3", optional = true }
+derivative = { version = "2", features = [ "use_core" ] }
+itertools = "0.10"
+rand = { version = "0.8" }
+rayon = { version = "1.4.1", optional = true }
+tracing = { version = "0.1.21" }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+phase2 = { path = "./", features = ["testing"] }
+snarkvm-marlin = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+snarkvm-polycommit = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+snarkvm-ledger = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+snarkvm-r1cs = { git = "https://github.com/AleoHQ/snarkVM.git", rev = "fc997c" }
+
+anyhow = { version = "1.0.37" }
+blake2 = { version = "0.9", default-features = false }
+memmap = { version = "0.7.0" }
+num-traits = { version = "0.2.12" }
+rand_chacha = { version = "0.3" }
+
+[features]
+default = []
+cli = ["parallel", "setup-utils/cli"]
+parallel = ["rayon", "setup-utils/parallel", "snarkvm-algorithms/parallel"]
+wasm = ["setup-utils/wasm"]
+
+benchmark = ["criterion"]
+testing = ["parallel"]
+
+[[test]]
+name = "marlin"
+path = "tests/marlin.rs"
+required-features = ["phase2/testing", "cli"]

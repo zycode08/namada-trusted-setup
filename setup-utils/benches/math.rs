@@ -1,4 +1,4 @@
-use phase1::helpers::testing::random_point_vec;
+use phase2::helpers::testing::random_point_vec;
 use setup_utils::{batch_exp, dense_multiexp, generate_powers_of_tau};
 
 use snarkvm_curves::{
@@ -38,7 +38,7 @@ pub fn generate_powers_of_tau_crossbeam<E: PairingEngine>(tau: &E::Fr, start: us
 }
 
 // Benchmark showing that the Rayon generator is faster
-fn benchmark_phase1(c: &mut Criterion) {
+fn benchmark_phase2(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
     let start = 0;
     let end = 50;
@@ -91,5 +91,5 @@ fn randomness<G: AffineCurve>(v: &[G], rng: &mut impl Rng) -> Vec<<G::ScalarFiel
     (0..v.len()).map(|_| G::ScalarField::rand(rng).to_repr()).collect()
 }
 
-criterion_group!(benches, benchmark_phase1, benchmark_batchexp, benchmark_multiexp);
+criterion_group!(benches, benchmark_phase2, benchmark_batchexp, benchmark_multiexp);
 criterion_main!(benches);

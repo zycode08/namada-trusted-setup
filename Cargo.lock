@@ -2274,7 +2274,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
-name = "phase1"
+name = "phase2"
 version = "1.0.0-beta.10"
 dependencies = [
  "anyhow",
@@ -2285,7 +2285,7 @@ dependencies = [
  "itertools",
  "memmap",
  "num-traits",
- "phase1",
+ "phase2",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",
@@ -2303,7 +2303,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "phase1-cli"
+name = "phase2-cli"
 version = "1.0.0-beta.10"
 dependencies = [
  "anyhow",
@@ -2322,8 +2322,8 @@ dependencies = [
  "memmap",
  "orion",
  "owo-colors",
- "phase1",
- "phase1-coordinator",
+ "phase2",
+ "phase2-coordinator",
  "rand 0.8.5",
  "regex",
  "reqwest",
@@ -2347,7 +2347,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "phase1-coordinator"
+name = "phase2-coordinator"
 version = "1.0.0-beta.10"
 dependencies = [
  "anyhow",
@@ -2371,7 +2371,7 @@ dependencies = [
  "memmap",
  "once_cell",
  "owo-colors",
- "phase1",
+ "phase2",
  "rand 0.6.5",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -3324,7 +3324,7 @@ dependencies = [
  "criterion",
  "crossbeam",
  "num_cpus",
- "phase1",
+ "phase2",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",

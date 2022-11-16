@@ -7,7 +7,7 @@ edition = "2018"
 [[bench]]
 name = "io"
 harness = false
-required-features = ["phase1"]
+required-features = ["phase2"]
 
 [[bench]]
 name = "math"
@@ -35,7 +35,7 @@ tracing = { version = "0.1.21" }
 typenum = { version = "1.11.2" }
 
 [dev-dependencies]
-phase1 = { path = "../phase1", features = ["testing"] }
+phase2 = { path = "../phase2", features = ["testing"] }
 
 criterion = { version = "0.3.1" }
 
@@ -44,3 +44,4 @@ default = []
 cli = ["parallel"]
 wasm = ["snarkvm-algorithms/wasm"]
 parallel = ["rayon", "snarkvm-algorithms/parallel"]
+phase2 = []
