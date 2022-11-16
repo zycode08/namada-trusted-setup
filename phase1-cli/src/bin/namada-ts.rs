@@ -536,7 +536,7 @@ async fn contribution_loop(
                                 .unwrap();
                         if Url::parse(attestation_url.as_str()).is_ok() {
                             // Send attestation to coordinator
-                            requests::post_attestation(&client, &coordinator, &keypair, &attestation_url)
+                            requests::post_attestation(&client, &coordinator, &keypair, &(round_height, attestation_url))
                                 .await
                                 .expect(&format!("{}", "Failed attestation upload".red().bold()));
                             return;
