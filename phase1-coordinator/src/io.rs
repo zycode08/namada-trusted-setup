@@ -245,10 +245,10 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
                 break;
             } else {
                 if attempt == 2 {
-                    debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
+                    eprintln!("{}", "Expected: {}, answer: {}\nRun out of attempts for the mnemonic check. Client will shutdown, you'll need to restart the CLI".red().bold(), mnemonic_slice[i], response);
                     return Err(IOError::CheckMnemonicError);
                 } else {
-                    debug!("Wrong answer, retry");
+                    println!("{}", "Wrong answer, retry".red());
                 }
             }
         }
