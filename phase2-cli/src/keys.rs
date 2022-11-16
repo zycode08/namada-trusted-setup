@@ -118,7 +118,7 @@ impl EncryptedKeypair {
 /// Make encryption secret key from a password.
 fn encryption_key(salt: &kdf::Salt, password: &[u8]) -> kdf::SecretKey {
     kdf::Password::from_slice(password)
-        .and_then(|password| kdf::derive_key(&password, salt, 3, 1 << 16, 32))
+        .and_then(|password| kdf::derive_key(&password, salt, 3, 1 << 17, 32))
         .expect("Generation of encryption secret key shouldn't fail")
 }
 
