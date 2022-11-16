@@ -413,9 +413,14 @@ async fn wrong_post_attestation() {
     // Wrong, missing contribution
     let url = Url::parse(&ctx.coordinator_url).unwrap();
     assert!(
-        requests::post_attestation(&client, &url, &ctx.contributors[0].keypair, &(1, String::from("https://namada.net")))
-            .await
-            .is_err()
+        requests::post_attestation(
+            &client,
+            &url,
+            &ctx.contributors[0].keypair,
+            &(1, String::from("https://namada.net"))
+        )
+        .await
+        .is_err()
     );
 }
 
@@ -763,7 +768,8 @@ async fn contribution() {
         &ctx.contributors[0].keypair,
         &(1, String::from("https://namada.net")),
     )
-    .await.unwrap();
+    .await
+    .unwrap();
 
     // Try joining the queue with correct token
     requests::post_join_queue(

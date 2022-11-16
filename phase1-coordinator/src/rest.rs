@@ -368,19 +368,26 @@ pub async fn post_attestation(
     task::spawn_blocking(move || {
         if !read_lock.is_current_contributor(&participant) && !read_lock.is_finished_contributor(&participant) {
             // Only current or finished contributors are allowed to query this endpoint
-            return Err(ResponseError::UnauthorizedParticipant(participant, "/contributor/attestation".to_string(), "Not a current nor finished contributor".to_string()));
+            return Err(ResponseError::UnauthorizedParticipant(
+                participant,
+                "/contributor/attestation".to_string(),
+                "Not a current nor finished contributor".to_string(),
+            ));
         }
 
         // Check the provided round height matches the signing participant
         match read_lock
             .storage()
-            .get(&Locator::ContributionInfoFile { round_height: round }).map_err(|e| ResponseError::CoordinatorError(e))?
+            .get(&Locator::ContributionInfoFile { round_height: round })
+            .map_err(|e| ResponseError::CoordinatorError(e))?
         {
             Object::ContributionInfoFile(f) => {
                 if f.public_key == participant.address() {
                     Ok(())
                 } else {
-                    Err(ResponseError::CoordinatorError(crate::CoordinatorError::ParticipantRoundHeightInvalid))
+                    Err(ResponseError::CoordinatorError(
+                        crate::CoordinatorError::ParticipantRoundHeightInvalid,
+                    ))
                 }
             }
             _ => Err(ResponseError::CoordinatorError(crate::CoordinatorError::StorageFailed)),

@@ -431,7 +431,11 @@ fn wrong_post_attestation() {
 
     // Wrong, missing contribution
     let mut req = client.post("/contributor/attestation");
-    req = set_request::<(u64, String)>(req, &ctx.contributors[0].keypair, Some(&(1, String::from("https://namada.net"))));
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(1, String::from("https://namada.net"))),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
@@ -876,28 +880,44 @@ fn contribution() {
 
     // Wrong url format
     req = client.post("/contributor/attestation");
-    req = set_request::<(u64, String)>(req, &ctx.contributors[0].keypair, Some(&(1, String::from("not_a_valid_url"))));
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(1, String::from("not_a_valid_url"))),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Wrong round height
     req = client.post("/contributor/attestation");
-    req = set_request::<(u64, String)>(req, &ctx.contributors[0].keypair, Some(&(2, String::from("https://namada.net"))));
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(2, String::from("https://namada.net"))),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::InternalServerError);
     assert!(response.body().is_some());
 
     // Try attestation with wrong participant
     req = client.post("/contributor/attestation");
-    req = set_request::<(u64, String)>(req, &ctx.unknown_participant.keypair, Some(&(1, String::from("https://namada.net"))));
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.unknown_participant.keypair,
+        Some(&(1, String::from("https://namada.net"))),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Unauthorized);
     assert!(response.body().is_some());
 
     // Ok attestation
     req = client.post("/contributor/attestation");
-    req = set_request::<(u64, String)>(req, &ctx.contributors[0].keypair, Some(&(1, String::from("https://namada.net"))));
+    req = set_request::<(u64, String)>(
+        req,
+        &ctx.contributors[0].keypair,
+        Some(&(1, String::from("https://namada.net"))),
+    );
     let response = req.dispatch();
     assert_eq!(response.status(), Status::Ok);
     assert!(response.body().is_none());
