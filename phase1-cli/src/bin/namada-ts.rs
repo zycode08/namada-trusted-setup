@@ -55,7 +55,7 @@ use bs58;
 const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
 
-const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nThis will generate the random seed that initializes the ChaCha random number generator.";
+const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nYou can type frenetically, smash your keyboard, or enter a string representation of your alternative source of entropy.\nThe only limitation is your terminal’s max command length.\nThis string will be hashed together with your OS randomness to produce the seed for ChaCha RNG";
 const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYou seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or an airgapped machine.";
 
 macro_rules! pretty_hash {
@@ -204,7 +204,7 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         RandomSource::Seed(seed)
     } else {
         let entropy = io::get_user_input(
-            "Frenetically type a random string to be used as entropy:".bright_yellow(),
+            "Frenetically type or enter your alternative source of entropy:".bright_yellow(),
             None,
         )?;
         RandomSource::Entropy(entropy)
