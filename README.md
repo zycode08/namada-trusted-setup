@@ -58,7 +58,7 @@ rustup update
 Once Rust is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
 ```
 git clone https://github.com/anoma/namada-trusted-setup.git
-cd namada-trusted-setup && git checkout v1.0.0-10
+cd namada-trusted-setup && git checkout v1.0.0-beta.11
 ```
 
 Build the binary:
