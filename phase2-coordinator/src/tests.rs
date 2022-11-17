@@ -5,11 +5,7 @@ use crate::{
     objects::Task,
     storage::{Disk, StorageLocator},
     testing::prelude::*,
-    Coordinator,
-    CoordinatorError,
-    MockTimeSource,
-    Participant,
-    Round,
+    Coordinator, CoordinatorError, MockTimeSource, Participant, Round,
 };
 use phase2::{helpers::CurveKind, ContributionMode, ProvingSystem};
 use time::OffsetDateTime;

@@ -2,10 +2,7 @@ use std::{collections::LinkedList, fmt::Debug, str::FromStr};
 
 use serde::{
     de::{self, Error},
-    Deserialize,
-    Deserializer,
-    Serialize,
-    Serializer,
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 use thiserror::Error;
 

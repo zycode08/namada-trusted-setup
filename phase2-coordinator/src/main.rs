@@ -14,9 +14,7 @@ use phase2_coordinator::environment::Testing;
 use phase2_coordinator::environment::Production;
 
 use rocket::{
-    self,
-    catchers,
-    routes,
+    self, catchers, routes,
     tokio::{
         self,
         sync::{
@@ -259,10 +257,9 @@ pub async fn main() {
         rest::post_attestation
     ];
 
-    let build_rocket = rocket::build()
-        .mount("/", routes)
-        .manage(coordinator.clone())
-        .register("/", catchers![
+    let build_rocket = rocket::build().mount("/", routes).manage(coordinator.clone()).register(
+        "/",
+        catchers![
             rest_utils::invalid_signature,
             rest_utils::unauthorized,
             rest_utils::missing_required_header,
@@ -270,7 +267,8 @@ pub async fn main() {
             rest_utils::unprocessable_entity,
             rest_utils::mismatching_checksum,
             rest_utils::invalid_header
-        ]);
+        ],
+    );
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Sleep until ceremony start time has been reached

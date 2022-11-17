@@ -20,11 +20,7 @@ use futures_util::StreamExt;
 use phase2_cli::{
     ascii_logo::{ASCII_CONTRIBUTION_DONE, ASCII_LOGO},
     keys::{self, EncryptedKeypair, TomlConfig},
-    requests,
-    CeremonyOpt,
-    CoordinatorUrl,
-    Token,
-    VerifySignatureContribution,
+    requests, CeremonyOpt, CoordinatorUrl, Token, VerifySignatureContribution,
 };
 use serde_json;
 use setup_utils::calculate_hash;

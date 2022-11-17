@@ -4,13 +4,7 @@ use rusoto_core::{region::Region, request::TlsError};
 use rusoto_credential::{AwsCredentials, ChainProvider, CredentialsError, ProvideAwsCredentials};
 use rusoto_s3::{
     util::{PreSignedRequest, PreSignedRequestOption},
-    DeleteObjectRequest,
-    GetObjectRequest,
-    HeadObjectRequest,
-    PutObjectRequest,
-    S3Client,
-    StreamingBody,
-    S3,
+    DeleteObjectRequest, GetObjectRequest, HeadObjectRequest, PutObjectRequest, S3Client, StreamingBody, S3,
 };
 use std::str::FromStr;
 use thiserror::Error;

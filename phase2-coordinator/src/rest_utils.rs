@@ -6,8 +6,7 @@ use crate::{
     objects::Task,
     s3::{S3Ctx, S3Error},
     storage::{ContributionLocator, ContributionSignatureLocator},
-    CoordinatorError,
-    Participant,
+    CoordinatorError, Participant,
 };
 
 pub use crate::{coordinator_state::TOKENS_PATH, s3::TOKENS_ZIP_FILE};

@@ -3,8 +3,7 @@ use crate::{
     environment::{Environment, Parameters, Testing},
     objects::{Participant, Round},
     storage::Disk,
-    Coordinator,
-    CoordinatorError,
+    Coordinator, CoordinatorError,
 };
 
 use once_cell::sync::Lazy;

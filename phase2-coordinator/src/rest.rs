@@ -9,33 +9,18 @@ use tracing::warn;
 use crate::{
     objects::{ContributionInfo, LockedLocators},
     rest_utils::{
-        self,
-        ContributorStatus,
-        Coordinator,
-        CurrentContributor,
-        LazyJson,
-        NewParticipant,
-        PostChunkRequest,
-        ResponseError,
-        Result,
-        Secret,
-        ServerAuth,
-        HEALTH_PATH,
-        TOKENS_PATH,
-        TOKENS_ZIP_FILE,
+        self, ContributorStatus, Coordinator, CurrentContributor, LazyJson, NewParticipant, PostChunkRequest,
+        ResponseError, Result, Secret, ServerAuth, HEALTH_PATH, TOKENS_PATH, TOKENS_ZIP_FILE,
     },
     s3::S3Ctx,
     storage::{Locator, Object},
-    CoordinatorState,
-    Participant,
+    CoordinatorState, Participant,
 };
 use rocket::{
-    get,
-    post,
+    get, post,
     serde::json::Json,
     tokio::{fs, task},
-    Shutdown,
-    State,
+    Shutdown, State,
 };
 
 use url::Url;

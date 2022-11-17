@@ -16,23 +16,17 @@ use phase2_coordinator::{
     rest_utils::{self, PostChunkRequest, TOKENS_ZIP_FILE},
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
-    ContributionFileSignature,
-    ContributionState,
-    Coordinator,
-    Participant,
+    ContributionFileSignature, ContributionState, Coordinator, Participant,
 };
 use rocket::{
-    catchers,
-    routes,
+    catchers, routes,
     tokio::{
         self,
         sync::RwLock,
         task::JoinHandle,
         time::{self, Duration},
     },
-    Error,
-    Ignite,
-    Rocket,
+    Error, Ignite, Rocket,
 };
 
 use async_stream::try_stream;
@@ -141,34 +135,40 @@ async fn test_prelude() -> (TestCtx, JoinHandle<Result<Rocket<Ignite>, Error>>) 
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let build = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::stop_coordinator,
-            rest::verify_chunks,
-            rest::get_contributor_queue_status,
-            rest::post_contribution_info,
-            rest::get_contributions_info,
-            rest::get_healthcheck,
-            rest::get_contribution_url,
-            rest::get_challenge_url,
-            rest::get_coordinator_state,
-            rest::update_cohorts,
-            rest::post_attestation
-        ])
+        .mount(
+            "/",
+            routes![
+                rest::join_queue,
+                rest::lock_chunk,
+                rest::contribute_chunk,
+                rest::update_coordinator,
+                rest::heartbeat,
+                rest::stop_coordinator,
+                rest::verify_chunks,
+                rest::get_contributor_queue_status,
+                rest::post_contribution_info,
+                rest::get_contributions_info,
+                rest::get_healthcheck,
+                rest::get_contribution_url,
+                rest::get_challenge_url,
+                rest::get_coordinator_state,
+                rest::update_cohorts,
+                rest::post_attestation
+            ],
+        )
         .manage(coordinator)
-        .register("/", catchers![
-            rest_utils::invalid_signature,
-            rest_utils::unauthorized,
-            rest_utils::missing_required_header,
-            rest_utils::io_error,
-            rest_utils::unprocessable_entity,
-            rest_utils::mismatching_checksum,
-            rest_utils::invalid_header
-        ]);
+        .register(
+            "/",
+            catchers![
+                rest_utils::invalid_signature,
+                rest_utils::unauthorized,
+                rest_utils::missing_required_header,
+                rest_utils::io_error,
+                rest_utils::unprocessable_entity,
+                rest_utils::mismatching_checksum,
+                rest_utils::invalid_header
+            ],
+        );
 
     let ignite = build.ignite().await.unwrap();
     let handle = tokio::spawn(ignite.launch());
@@ -387,11 +387,9 @@ async fn update_coordinator() {
 
     // Wrong, request from non-coordinator
     let url = Url::parse(&ctx.coordinator_url).unwrap();
-    assert!(
-        requests::get_update(&client, &url, &ctx.contributors[0].keypair)
-            .await
-            .is_err()
-    );
+    assert!(requests::get_update(&client, &url, &ctx.contributors[0].keypair)
+        .await
+        .is_err());
 
     // Ok
     requests::get_update(&client, &url, &ctx.coordinator.keypair)
@@ -412,16 +410,14 @@ async fn wrong_post_attestation() {
 
     // Wrong, missing contribution
     let url = Url::parse(&ctx.coordinator_url).unwrap();
-    assert!(
-        requests::post_attestation(
-            &client,
-            &url,
-            &ctx.contributors[0].keypair,
-            &(1, String::from("https://namada.net"))
-        )
-        .await
-        .is_err()
-    );
+    assert!(requests::post_attestation(
+        &client,
+        &url,
+        &ctx.contributors[0].keypair,
+        &(1, String::from("https://namada.net"))
+    )
+    .await
+    .is_err());
 }
 
 #[tokio::test]

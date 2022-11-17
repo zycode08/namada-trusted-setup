@@ -2,15 +2,8 @@ use crate::{
     environment::Environment,
     objects::{participant::*, Chunk},
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Disk,
-        Locator,
-        LocatorPath,
-        Object,
-        StorageAction,
-        StorageLocator,
-        UpdateAction,
+        ContributionLocator, ContributionSignatureLocator, Disk, Locator, LocatorPath, Object, StorageAction,
+        StorageLocator, UpdateAction,
     },
     CoordinatorError,
 };

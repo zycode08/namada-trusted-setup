@@ -5,8 +5,7 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError,
-    TimeSource,
+    CoordinatorError, TimeSource,
 };
 use anyhow::anyhow;
 use lazy_static::lazy_static;
@@ -3631,9 +3630,7 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState,
-        MockTimeSource,
-        SystemTimeSource,
+        CoordinatorState, MockTimeSource, SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

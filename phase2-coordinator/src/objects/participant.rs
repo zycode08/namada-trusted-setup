@@ -1,9 +1,7 @@
 use itertools::Itertools;
 use serde::{
     de::{Deserializer, Error},
-    Deserialize,
-    Serialize,
-    Serializer,
+    Deserialize, Serialize, Serializer,
 };
 use serde_diff::SerdeDiff;
 use std::fmt::{self};

@@ -1,8 +1,7 @@
 use crate::{
     environment::Environment,
     objects::{ContributionFileSignature, ContributionInfo, Round, TrimmedContributionInfo},
-    CoordinatorError,
-    CoordinatorState,
+    CoordinatorError, CoordinatorState,
 };
 use phase2::helpers::CurveKind;
 use snarkvm_curves::{bls12_377::Bls12_377, bw6_761::BW6_761};
@@ -29,7 +28,7 @@ pub struct ContributionLocator {
 pub const ANOMA_BASE_FILE_SIZE: u64 = 84_720_244; // 145_449_460 prod: 84_720_244, testing: 2_332
 #[cfg(debug_assertions)]
 pub const ANOMA_BASE_FILE_SIZE: u64 = 2_332; // prod: 84_720_244, testing: 2_332
-// With `masp-mpc` the contribution file grows by 1632 bytes on each new contribution
+                                             // With `masp-mpc` the contribution file grows by 1632 bytes on each new contribution
 #[cfg(not(debug_assertions))]
 pub const ANOMA_PER_ROUND_FILE_SIZE_INCREASE: u64 = 1_632; // prod: 1_632, testing: 544
 #[cfg(debug_assertions)]
