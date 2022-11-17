@@ -171,7 +171,7 @@ async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>, s3_ctx: &S3Ctx
     let key = format!("round_{}/chunk_0/contribution_0.verified", round_height);
 
     // If challenge is already on S3 (round rollback) immediately return the key
-    s3_ctx.get_challenge_url(key.clone()).await.is_some() {
+    if s3_ctx.get_challenge_url(key.clone()).await.is_some() {
         info!("Final challenge was already uploaded to S3");
         return Ok(());
     }
