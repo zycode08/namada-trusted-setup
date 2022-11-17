@@ -6,27 +6,20 @@ use phase2_coordinator::{
     authentication::{KeyPair, Production, Signature},
     objects::ContributionInfo,
     rest_utils::{
-        RequestContent,
-        SignatureHeaders,
-        ACCESS_SECRET_HEADER,
-        BODY_DIGEST_HEADER,
-        CONTENT_LENGTH_HEADER,
-        PUBKEY_HEADER,
-        SIGNATURE_HEADER,
+        RequestContent, SignatureHeaders, ACCESS_SECRET_HEADER, BODY_DIGEST_HEADER, CONTENT_LENGTH_HEADER,
+        PUBKEY_HEADER, SIGNATURE_HEADER,
     },
     ContributionFileSignature,
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
-    Client,
-    RequestBuilder,
-    Response,
-    Url,
+    Client, RequestBuilder, Response, Url,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::convert::{TryFrom, TryInto};
 use thiserror::Error;
+use tracing::debug;
 
 use crate::{ContributorStatus, LockedLocators, PostChunkRequest};
 
@@ -161,7 +154,7 @@ where
         match decapsulate_response(response).await {
             Ok(response) => return Ok(response),
             Err(e) => match e {
-                RequestError::Proxy(_) => eprintln!("CDN timeout expired, resubmitting the request..."),
+                RequestError::Proxy(_) => debug!("CDN timeout expired, resubmitting the request..."),
                 _ => return Err(e),
             },
         }

@@ -1,5 +1,8 @@
 use std::{fmt::Display, io::Write, ops::Deref};
 
+#[cfg(not(debug_assertions))]
+use std::process;
+
 use crate::authentication::KeyPair;
 use bip39::{Language, Mnemonic};
 use crossterm::{
@@ -11,8 +14,6 @@ use owo_colors::OwoColorize;
 use rand::prelude::SliceRandom;
 use regex::Regex;
 use thiserror::Error;
-#[cfg(not(debug_assertions))]
-use tracing::debug;
 
 const COORDINATOR_MNEMONIC_FILE: &str = "coordinator.mnemonic";
 const MNEMONIC_LEN: usize = 24;
@@ -173,7 +174,7 @@ pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
         KeyPairUser::Contributor => {
             // Print mnemonic to the user in a different terminal
             execute!(std::io::stdout(), EnterAlternateScreen)?;
-            println!("{}", "Safely store your 24 words mnemonic:\n".bright_cyan());
+            println!("{}", "Safely store your 24 words mnemonic. You will need it if your contribution is retroactively rewarded as a public good! And remember, the fancier your contribution, the more likely it is that it is considered a public good.\n".bright_cyan());
             println!("{}", mnemonic);
             println!(
                 "{}",
@@ -245,10 +246,10 @@ fn check_mnemonic(mnemonic: &Mnemonic) -> Result<()> {
                 break;
             } else {
                 if attempt == 2 {
-                    debug!("Expected: {}, answer: {}", mnemonic_slice[i], response);
-                    return Err(IOError::CheckMnemonicError);
+                    eprintln!("Expected: {}, answer: {}\n{}", mnemonic_slice[i], response, "Run out of attempts for the mnemonic check. Client will shutdown, you'll need to restart the CLI".red().bold());
+                    process::exit(1);
                 } else {
-                    debug!("Wrong answer, retry");
+                    println!("{}", "Wrong answer, retry".red());
                 }
             }
         }
@@ -263,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_seed_from_string() {
-        let mnemonic_ok_1 = "Safely store your 24 words mnemonic:
+        let mnemonic_ok_1 = "Safely store your 24 words mnemonic. You will need it if your contribution is retroactively rewarded as a public good! And remember, the fancier your contribution, the more likely it is that it is considered a public good.
         ======================================================
         1. scheme     2. drift      3. lava       4. crystal    
         5. miracle    6. average    7. admit      8. tuna       
@@ -280,7 +281,7 @@ mod tests {
         17. olive     18. pumpkin   19. trap      20. minute    
         21. history   22. enter     23. immense   24. settle";
 
-        let mnemonic_ok_3 = "Safely store your 24 words mnemonic:
+        let mnemonic_ok_3 = "Safely store your 24 words mnemonic. You will need it if your contribution is retroactively rewarded as a public good! And remember, the fancier your contribution, the more likely it is that it is considered a public good.
         ======================================================
         1. scheme2. drift      3. lava       4. crystal    
         5. miracle    6. average    7. admit      8. tuna       
@@ -290,7 +291,7 @@ mod tests {
         21. history   22. enter     23. immense   24. settle    
         ======================================================";
 
-        let mnemonic_wrong = "Safely store your 24 words mnemonic:
+        let mnemonic_wrong = "Safely store your 24 words mnemonic. You will need it if your contribution is retroactively rewarded as a public good! And remember, the fancier your contribution, the more likely it is that it is considered a public good.
         ======================================================
         1. scheme     drift      3. lava       4. crystal    
         5. miracle    6. average    7. admit      8. tuna       

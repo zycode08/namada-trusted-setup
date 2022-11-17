@@ -2,17 +2,10 @@ use crate::{
     environment::Environment,
     objects::{ContributionFileSignature, ContributionInfo, Round, TrimmedContributionInfo},
     storage::{
-        ContributionLocator,
-        ContributionSignatureLocator,
-        Locator,
-        Object,
-        ObjectReader,
-        ObjectWriter,
-        StorageLocator,
+        ContributionLocator, ContributionSignatureLocator, Locator, Object, ObjectReader, ObjectWriter, StorageLocator,
         StorageObject,
     },
-    CoordinatorError,
-    CoordinatorState,
+    CoordinatorError, CoordinatorState,
 };
 
 use anyhow::Result;

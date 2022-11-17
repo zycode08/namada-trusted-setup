@@ -5,8 +5,7 @@ use crate::{
         task::{initialize_tasks, Task},
     },
     storage::{Disk, Locator, Object},
-    CoordinatorError,
-    TimeSource,
+    CoordinatorError, TimeSource,
 };
 use anyhow::anyhow;
 use lazy_static::lazy_static;
@@ -1355,6 +1354,19 @@ impl CoordinatorState {
         };
 
         Ok(self.dropped_participants().contains(participant_info))
+    }
+
+    ///
+    /// Returns `true` if the given participant has finished contributing
+    /// in the provided round.
+    ///
+    pub fn is_finished_contributor_at_round(&self, participant: &Participant, round: u64) -> bool {
+        participant.is_contributor()
+            && self
+                .finished_contributors
+                .get(&round)
+                .get_or_insert(&HashMap::new())
+                .contains_key(participant)
     }
 
     ///
@@ -3618,9 +3630,7 @@ mod tests {
         coordinator_state::*,
         environment::{Parameters, Testing},
         testing::prelude::*,
-        CoordinatorState,
-        MockTimeSource,
-        SystemTimeSource,
+        CoordinatorState, MockTimeSource, SystemTimeSource,
     };
 
     fn fetch_task_for_verifier(state: &CoordinatorState) -> Option<Task> {

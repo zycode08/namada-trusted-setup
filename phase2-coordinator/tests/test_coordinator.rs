@@ -19,22 +19,12 @@ use phase2_coordinator::{
     objects::{ContributionInfo, LockedLocators, TrimmedContributionInfo},
     rest,
     rest_utils::{
-        self,
-        ContributorStatus,
-        PostChunkRequest,
-        ACCESS_SECRET_HEADER,
-        BODY_DIGEST_HEADER,
-        CONTENT_LENGTH_HEADER,
-        PUBKEY_HEADER,
-        SIGNATURE_HEADER,
-        TOKENS_ZIP_FILE,
+        self, ContributorStatus, PostChunkRequest, ACCESS_SECRET_HEADER, BODY_DIGEST_HEADER, CONTENT_LENGTH_HEADER,
+        PUBKEY_HEADER, SIGNATURE_HEADER, TOKENS_ZIP_FILE,
     },
     storage::{ContributionLocator, ContributionSignatureLocator, Object},
     testing::coordinator,
-    ContributionFileSignature,
-    ContributionState,
-    Coordinator,
-    Participant,
+    ContributionFileSignature, ContributionState, Coordinator, Participant,
 };
 use reqwest::header::{HeaderValue, CONTENT_TYPE};
 use rocket::{
@@ -43,8 +33,7 @@ use rocket::{
     local::blocking::{Client, LocalRequest},
     routes,
     tokio::sync::RwLock,
-    Build,
-    Rocket,
+    Build, Rocket,
 };
 use serde::Serialize;
 use sha2::Sha256;
@@ -137,34 +126,40 @@ fn build_context() -> TestCtx {
     let coordinator: Arc<RwLock<Coordinator>> = Arc::new(RwLock::new(coordinator));
 
     let rocket = rocket::build()
-        .mount("/", routes![
-            rest::join_queue,
-            rest::lock_chunk,
-            rest::contribute_chunk,
-            rest::update_coordinator,
-            rest::heartbeat,
-            rest::stop_coordinator,
-            rest::verify_chunks,
-            rest::get_contributor_queue_status,
-            rest::post_contribution_info,
-            rest::get_contributions_info,
-            rest::get_healthcheck,
-            rest::get_contribution_url,
-            rest::get_challenge_url,
-            rest::get_coordinator_state,
-            rest::update_cohorts,
-            rest::post_attestation
-        ])
+        .mount(
+            "/",
+            routes![
+                rest::join_queue,
+                rest::lock_chunk,
+                rest::contribute_chunk,
+                rest::update_coordinator,
+                rest::heartbeat,
+                rest::stop_coordinator,
+                rest::verify_chunks,
+                rest::get_contributor_queue_status,
+                rest::post_contribution_info,
+                rest::get_contributions_info,
+                rest::get_healthcheck,
+                rest::get_contribution_url,
+                rest::get_challenge_url,
+                rest::get_coordinator_state,
+                rest::update_cohorts,
+                rest::post_attestation
+            ],
+        )
         .manage(coordinator)
-        .register("/", catchers![
-            rest_utils::invalid_signature,
-            rest_utils::unauthorized,
-            rest_utils::missing_required_header,
-            rest_utils::io_error,
-            rest_utils::unprocessable_entity,
-            rest_utils::mismatching_checksum,
-            rest_utils::invalid_header
-        ]);
+        .register(
+            "/",
+            catchers![
+                rest_utils::invalid_signature,
+                rest_utils::unauthorized,
+                rest_utils::missing_required_header,
+                rest_utils::io_error,
+                rest_utils::unprocessable_entity,
+                rest_utils::mismatching_checksum,
+                rest_utils::invalid_header
+            ],
+        );
 
     // Create participants
     let test_participant1 = TestParticipant {
