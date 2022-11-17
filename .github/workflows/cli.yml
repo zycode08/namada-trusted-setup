@@ -1,9 +1,8 @@
-name: Build phase-1-cli
+name: Build phase-2-cli
 
 on:
   push:
-    branches:
-      - master
+    branches: [ main, production ]
   pull_request:
 
 concurrency:
