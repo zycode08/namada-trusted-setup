@@ -2275,7 +2275,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "phase2"
-version = "1.0.0-beta.11"
+version = "1.0.0-beta.10"
 dependencies = [
  "anyhow",
  "blake2 0.9.2",
@@ -2304,7 +2304,7 @@ dependencies = [
 
 [[package]]
 name = "phase2-cli"
-version = "1.0.0-beta.11"
+version = "1.0.0-beta.10"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2348,7 +2348,7 @@ dependencies = [
 
 [[package]]
 name = "phase2-coordinator"
-version = "1.0.0-beta.11"
+version = "1.0.0-beta.10"
 dependencies = [
  "anyhow",
  "base64",
@@ -3316,7 +3316,7 @@ dependencies = [
 
 [[package]]
 name = "setup-utils"
-version = "1.0.0-beta.11"
+version = "1.0.0-beta.10"
 dependencies = [
  "blake2 0.9.2",
  "blake2s_simd 0.5.11",
