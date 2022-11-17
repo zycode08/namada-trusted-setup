@@ -106,7 +106,7 @@ impl S3Ctx {
     }
 
     /// Get the url of a challenge on S3.
-    pub(crate) async fn get_challenge_url(&self, key: String) -> Option<String> {
+    pub async fn get_challenge_url(&self, key: String) -> Option<String> {
         let head = HeadObjectRequest {
             bucket: self.bucket.clone(),
             key: key.clone(),

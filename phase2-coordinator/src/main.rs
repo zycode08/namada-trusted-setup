@@ -166,10 +166,16 @@ async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>, s3_ctx: &S3Ctx
     info!("Saving final coordinator state");
     coordinator.write().await.shutdown()?;
 
-    // Upload last challenge to S3
+    // Upload last challenge to S3 (if needed)
     info!("Uploading final challenge to S3");
     let round_height = coordinator.read().await.current_round_height()?;
     let key = format!("round_{}/chunk_0/contribution_0.verified", round_height);
+
+    // If challenge is already on S3 (round rollback) immediately return the key
+    s3_ctx.get_challenge_url(key.clone()).await.is_some() {
+        return Ok(());
+    }
+
     let challenge = coordinator.read().await.get_challenge(round_height, 0, 0, true)?;
     let challenge_url = s3_ctx.upload_challenge(key, challenge).await?;
     info!("Last challenge uploaded at url: {}", challenge_url);
