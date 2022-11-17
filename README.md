@@ -2,28 +2,48 @@
 
 <h1 align="center">Namada Trusted Setup</h1>
 
-The Namada Trusted Setup Ceremony generates the public parameters for the Multi-Asset Shielded Pool (MASP) circuit and guarantees its security. Under the hood, a trusted setup ceremony is a multi-party computation (MPC) that lets many participants contribute randomness to the public parameters in a trustless manner. The setup is secure, as long as one participant is honest.
+The Namada Trusted Setup Ceremony generates the public parameters for the Multi-Asset Shielded Pool (MASP) circuit and guarantees its security. For more context, see the article [Announcing the Namada Trusted Setup](https://blog.namada.net/announcing-the-namada-trusted-setup-ceremony/). This repository contains the coordinator code and CLI for the Ceremony.
 
-# About Namada
+### Signing up for the Ceremony
 
-[Namada](https://namada.net/) is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus, that enables multi-asset private transfers for any native or non-native asset using a multi-asset shielded pool derived from the Sapling circuit. 
+- Participants signed through a public mailing list.
+- The registrations [closed at 00:00 UTC on the 15th of November 2022](https://twitter.com/namadanetwork/status/1592306386779742208?s=20&t=vbUGK9sZVB_eBJbDCSrhmg).
+
+### Ceremony dashboard
+
+During the ceremony, valid contributions will appear on the [Namada Ceremony Dashboard](http://ceremony.namada.net/)
+
+### About Namada
+
+[Namada](https://namada.net/) is a Proof-of-Stake layer 1 protocol for asset-agnostic, interchain privacy. Namada is Anoma's first fractal instance.
 
 To learn more about the protocol, we recommend the following resources:
 
-- [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
-- [Namada's specifications](https://specs.namada.net)
+- [Introducing Namada: Interchain Asset-agnostic Privacy](https://blog.namada.net/introducing-namada-interchain-asset-agnostic-privacy/)
+- [What is Namada?](https://blog.namada.net/what-is-namada/)
+- [Namada protocol specifications](https://specs.namada.net)
 
-# Participate in Namada Trusted Setup
-If you are interested in participating in the ceremony head over to the [Namada website](https://namada.net/trusted-setup.html) and [sign up to the newsletter](https://dev.us7.list-manage.com/subscribe?u=69adafe0399f0f2a434d8924b&id=9e747afc55) to be notified about the launch.
+# Participating
 
 The Namada Trusted Setup CLI exposes two ways to contribute:
 
 - **default**, performs the entire contribution on the current machine `default` 
 - **offline**, computes the contribution on a separate (possibly offline) machine (more details [here](#computation-on-another-machine))
 
-For a visual overview of the contribution process refer to the [flow chart](#flowchart).
+This documentation provides instructions to contribute:
 
-## Building and contributing from source
+1. By building the CLI from source
+2. From prebuilt binaries (manual setup)
+3. From prebuilt binaries (automated setup)
+
+Participants are also encouraged to participate via their custom clients. For more suggestions on best practices, refer to [`RECOMMENDATIONS.md`](RECOMMENDATIONS.md).
+
+## Contribution tokens
+
+- Each participant needs a unique token (`$TOKEN`) in order to participate in the ceremony. If your slot was confirmed, you should've received it by email before the start of the ceremony (09:00 UTC on the 19th of November 2022).
+- If you didn't receive a token but wish to participate, you can use the _first come, first served_ list of tokens during the free-for-all cohorts in the ceremony. Follow [@namadanetwork](https://twitter.com/namadanetwork) on Twitter for updates.
+
+## 1. Building and contributing from source
 
 First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
 ```
@@ -46,38 +66,43 @@ Build the binary:
 cargo build --release --bin namada-ts --features cli
 ```
 
-Move binary on `$PATH` (might require sudo)
+Move binary on `$PATH` (might require sudo):
 ```
 mv target/release/namada-ts /usr/local/bin 
 ```
 
-Start your contribution
+Start your contribution:
 ```
-namada-ts contribute default https://contribute.namada.net $TOKEN
+namada-ts contribute default https://ceremony.namada.net $TOKEN
 ```
 
-## Contributing from prebuilt binaries (manual setup)
+## 2. Contributing from prebuilt binaries (manual setup)
+
 We provide prebuilt `x86_64` binaries for Linux, MacOS and Windows. For this, go to the [Releases page](https://github.com/anoma/namada-trusted-setup/releases) and download the latest version of the client.
 
-After download, you might need to give execution permissions with `chmod +x namada-ts-{distrib}-{version}`.
+After download, you might need to give execution permissions with:
+```chmod +x namada-ts-{distrib}-{version}```
 
 Finally start the client with:
 ```
-./namada-ts-{distrib}-{version} contribute default https://contribute.namada.net $TOKEN
+./namada-ts-{distrib}-{version} contribute default https://ceremony.namada.net $TOKEN
 ```
 
-## Contributing from prebuilt binaries (automated setup)
+## 3. Contributing from prebuilt binaries (automated setup)
+
 If you are on Linux or MacOS, we also provide an install script to automate binary setup. You can run the following command:
+
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/anoma/namada-trusted-setup/main/install.sh | sh
 ```
 
 and you are ready to contribute:
 ```
-namada-ts contribute default https://contribute.namada.net $TOKEN
+namada-ts contribute default https://ceremony.namada.net $TOKEN
 ```
 
 ### Troubleshooting
+
 In MacOS, you might see appearing the warning "cannot be opened because the developer cannot be verified". To solve this, open the "Security & Privacy" control panel from System Preferences. In `general` tab, next to the info that the binary was prevented from running, click `Allow Anyway`. Run the binary again. This time a different prompt is shown. Click `Open` - the binary should run as you expect.
 
 ## Advanced features
@@ -89,7 +114,7 @@ You can generate the parameters on a machine that is offline or never connected 
 On the online machine give the following command:
 
 ```
-cargo run --release --bin namada-ts --features cli contribute another-machine https://contribute.namada.net $TOKEN
+cargo run --release --bin namada-ts --features cli contribute another-machine https://ceremony.namada.net $TOKEN
 ```
 
 This will start the communication process to join the ceremony and download/upload the necessary files. On the offline machine use the following command:
@@ -101,40 +126,40 @@ cargo run --release --bin namada-ts --features cli contribute offline
 which will compute the contribution itself. This second command expects the file `challenge.params` got from the online machine to be available in the cwd and it will produce a `contribution.params` to be passed back to the online machine for shipment to the coordinator. The user will be responsible for moving these files around.
 
 ### Verify your contribution
+
 If you want to verify your contribution you can do it via CLI. After you have successfully contributed, a file called `namada_contributor_info_round_${round_height}.json` will be generated and saved in the same folder of the `namada-ts` binary. The file contains a json structure. You should copy the value following fields:
+
 - `public_key`
 - `contribution_hash`
 - `contribution_hash_signature`
 
-and input them to `namada-ts verify-contribution $public_key $contribution_hash $contribution_hash_signature`.
+and input them to:
 
-## Understanding the ceremony
+```
+namada-ts verify-contribution $public_key $contribution_hash $contribution_hash_signature
+```
 
-This section describes how it feels to contribute to the ceremony.
+## Client Contribution Flow
 
-### Client Contribution Flow 
+1. The client will ask you if you want to contribute anonymously:
+    - If yes, your contribution will show as "anonymous" on the dashboard.
+    - If no, you'll be asked to provide a name and an email address.
 
-1. The client will generate a secret mnemonic that derives your key pair.  Back up your mnemonic and keep it in a safe place! This is the only way to prove your contribution.
+2. Generation of a mnemonic: every participant will be asked to generate a mnemonic. These are compatible with accounts on Namada and you will need it if you end up being rewarded for your contribution! 
+    - The CLI will request you to verify 3 phrases of your mnemonic.
+    - If you fail the verification, the CLI will crash and you'll have to start anew.
 
-2. Then, you will need to provide the unique token for your cohort you received by email. If the token is valid, you will join the queue of the ceremony. You will need to wait a bit until it is your turn. Each round lasts between 4 min and 20 min. During the whole ceremony, please neither close your terminal, nor your internet connection. If you stay offline for more than 2 min, the coordinator will kick you out from the queue.
+3. You will need to wait a bit until it is your turn. Each round lasts between 4 min and 20 min. During the whole ceremony, please neither close your terminal, nor your internet connection. If you stay offline for more than 2 min, the coordinator will kick you out from the queue.
 
-3. When it is your turn, the client will download the challenge from the coordinator and save it to the root folder. You have at most 20 minutes to compute your contribution and send it back to the coordinator. Be creative and good luck!
-#### Flowchart
-![Alt text](./ceremony-contribution-diagram.png?raw=true "Ceremony Contribution Flow")
+4. When it is your turn, the client will download the challenge from the coordinator and save it to the root folder. The client will request you to enter:
+    - A frenetically typed string
+    - Or a string representation of your alternative source of randomness
+    
+5. You have at most **20 minutes** to compute your contribution and send it back to the coordinator.
 
-# Overview of previous trusted setup ceremonies
+6. After successfully contributing, you can optionally submit a public attestation url (e.g. link to a tweet, article documenting your setup, video, etc). Note that the url must be `http` or `https`.
 
-Pairing based zk-SNARKs require the generation of certain parameters in order to achieve high efficiency (small proof sizes, fast proving and verifying time). These parameters are generated by another set of parameters which MUST remain secret. We call these secret parameters the "toxic waste". If a prover knows these secrets, [then they can generate valid proofs for invalid statements](https://medium.com/qed-it/how-toxic-is-the-waste-in-a-zksnark-trusted-setup-9b250d59bdb4), breaking soundness. This is undesired!
-
-In order to guarantee that no prover will ever know these secrets, we can generate them in a distributed manner. Each participant in this so-called "ceremony" will contribute to the generation of the parameters with their own secret. If at least 1 participant is honest and destroys their secret, then there should be no way for a malicious prover to create fake proofs.
-
-This repository contains implementations for the [BGM17](https://eprint.iacr.org/2017/1050) multi party computation. The ceremony is split 
-in two phases, one which generates the _Powers of Tau_, and one which "specializes" them to the provided arithmetic circuit for the Groth16 zk-SNARK and this is where we will construct our MASP zk-SNARK. 
-
-Note that the generated Powers of Tau can be re-used for any other Phase 2 setup, or for instantiating other mechanisms, such as the [KZG10](https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf) polynomial commitment scheme.
-
-For instructions on how to ensure that the ceremony is executed properly, refer to [`RECOMMENDATIONS.md`](RECOMMENDATIONS.md).
-
+7. If your contribution was valid, it'll show up on the dashboard!
 
 # Directory Structure
 
@@ -168,5 +193,4 @@ conditions.
 
 # Community support
 
-- [Discord](https://discord.com/invite/anoma) (Questions and discussions on Namada)
-- [Twitter](https://twitter.com/namadanetwork)
+- [Reddit](https://www.reddit.com/r/Namada/)
