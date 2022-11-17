@@ -198,7 +198,7 @@ impl S3Ctx {
     /// Retrieve the compressed token folder.
     pub async fn get_tokens(&self) -> Result<Vec<u8>> {
         let key = match std::env::var("AWS_S3_PROD") {
-            Ok(t) if t == "true" => format!("prod/{}", TOKENS_ZIP_FILE),
+            Ok(t) if t == "true" => format!("production/{}", TOKENS_ZIP_FILE),
             _ => format!("master/{}", TOKENS_ZIP_FILE),
         };
 
