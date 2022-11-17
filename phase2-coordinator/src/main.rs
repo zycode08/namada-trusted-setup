@@ -14,7 +14,9 @@ use phase2_coordinator::environment::Testing;
 use phase2_coordinator::environment::Production;
 
 use rocket::{
-    self, catchers, routes,
+    self,
+    catchers,
+    routes,
     tokio::{
         self,
         sync::{
@@ -65,9 +67,11 @@ async fn update_coordinator(coordinator: Arc<RwLock<Coordinator>>, recv: Receive
 /// NOTE: a possible improvement could be to perform the verification when the try_contribute function gets called, allowing us to remove this task and
 /// speed up the verification process. This would also allow us to immediately provide to a client the state of validity of its contribution. This improvement could
 /// be possible because we only have one contribution per round and one verifier (the coordinator's one). To implement this logic though, it would require a major rework of the phase2_coordinator logic.
-async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>, recv: Receiver<bool>) -> Result<()> {
-    let s3_ctx = S3Ctx::new().await?;
-
+async fn verify_contributions(
+    coordinator: Arc<RwLock<Coordinator>>,
+    recv: Receiver<bool>,
+    s3_ctx: S3Ctx,
+) -> Result<S3Ctx> {
     loop {
         tokio::time::sleep(UPDATE_TIME).await;
 
@@ -83,7 +87,7 @@ async fn verify_contributions(coordinator: Arc<RwLock<Coordinator>>, recv: Recei
         // Return if shutdown signal has been received on the channel
         if *recv.borrow() {
             info!("Received shutdown signal, exiting verify task");
-            return Ok(());
+            return Ok(s3_ctx);
         }
     }
 }
@@ -101,8 +105,7 @@ macro_rules! print_env {
 }
 
 /// Download tokens from S3, decompress and store them locally.
-async fn download_tokens() -> Result<()> {
-    let s3_ctx = S3Ctx::new().await?;
+async fn download_tokens(s3_ctx: &S3Ctx) -> Result<()> {
     let mut zip_file = std::fs::File::options()
         .read(true)
         .write(true)
@@ -147,9 +150,9 @@ async fn generate_secret() -> Result<()> {
 }
 
 /// Perform the steps to finalize the ceremony state before shut down
-async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> {
+async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>, s3_ctx: &S3Ctx) -> Result<()> {
     info!("Performing last contribution verification (if any)...");
-    if let Err(e) = rest_utils::perform_verify_chunks(coordinator.clone(), &S3Ctx::new().await?).await {
+    if let Err(e) = rest_utils::perform_verify_chunks(coordinator.clone(), s3_ctx).await {
         // Log any error without interrupting the shutdown procedure
         warn!("Ignoring error while performing last verification: {}", e);
     }
@@ -162,6 +165,14 @@ async fn finalize_ceremony(coordinator: Arc<RwLock<Coordinator>>) -> Result<()> 
 
     info!("Saving final coordinator state");
     coordinator.write().await.shutdown()?;
+
+    // Upload last challenge to S3
+    info!("Uploading final challenge to S3");
+    let round_height = coordinator.read().await.current_round_height()?;
+    let key = format!("round_{}/chunk_0/contribution_0.verified", round_height);
+    let challenge = coordinator.read().await.get_challenge(round_height, 0, 0, true)?;
+    let challenge_url = s3_ctx.upload_challenge(key, challenge).await?;
+    info!("Last challenge uploaded at url: {}", challenge_url);
 
     Ok(())
 }
@@ -204,7 +215,8 @@ pub async fn main() {
     let environment: Production = { Production::new(&keypair) };
 
     // Always download token files from S3 to check for updates
-    download_tokens().await.expect("Error while retrieving tokens");
+    let s3_ctx = S3Ctx::new().await.expect("Failed to instantiate S3 client");
+    download_tokens(&s3_ctx).await.expect("Error while retrieving tokens");
 
     // Initialize the coordinator
     let coordinator =
@@ -257,9 +269,10 @@ pub async fn main() {
         rest::post_attestation
     ];
 
-    let build_rocket = rocket::build().mount("/", routes).manage(coordinator.clone()).register(
-        "/",
-        catchers![
+    let build_rocket = rocket::build()
+        .mount("/", routes)
+        .manage(coordinator.clone())
+        .register("/", catchers![
             rest_utils::invalid_signature,
             rest_utils::unauthorized,
             rest_utils::missing_required_header,
@@ -267,8 +280,7 @@ pub async fn main() {
             rest_utils::unprocessable_entity,
             rest_utils::mismatching_checksum,
             rest_utils::invalid_header
-        ],
-    );
+        ]);
     let ignite_rocket = build_rocket.ignite().await.expect("Coordinator server didn't ignite");
 
     // Sleep until ceremony start time has been reached
@@ -303,7 +315,7 @@ pub async fn main() {
     let mut update_handle = rocket::tokio::spawn(update_coordinator(up_coordinator, rx.clone()));
 
     // Spawn task to verify the contributions periodically
-    let mut verify_handle = rocket::tokio::spawn(verify_contributions(verify_coordinator, rx));
+    let mut verify_handle = rocket::tokio::spawn(verify_contributions(verify_coordinator, rx, s3_ctx));
 
     // Spawn Rocket server task
     let mut rocket_handle = rocket::tokio::spawn(ignite_rocket.launch());
@@ -328,9 +340,19 @@ pub async fn main() {
                         rocket_handle
                     );
 
-                    if let Err(e) = v_res {
-                        warn!("Ignoring error while joining verify task: {}", e);
-                    }
+                    let s3_ctx = match v_res {
+                        Ok(inner_res) => match inner_res {
+                            Ok(s3_ctx) => s3_ctx,
+                            Err(e) => {
+                                warn!("Ignoring last error in verify task: {}", e);
+                                S3Ctx::new().await.expect("Failed to instantiate S3 client")
+                            },
+                        },
+                        Err(e) =>  {
+                            warn!("Ignoring error while joining verify task: {}", e);
+                            S3Ctx::new().await.expect("Failed to instantiate S3 client")
+                        },
+                    };
 
                     if let Err(e) = r_res {
                         warn!("Ignoring error while joining rocket task: {}", e);
@@ -338,14 +360,14 @@ pub async fn main() {
 
                     info!("Concurrent tasks terminated");
 
-                    finalize_ceremony(coordinator).await.expect("Failed ceremony state finalize");
+                    finalize_ceremony(coordinator, &s3_ctx).await.expect("Failed ceremony state finalize");
                 },
                 Err(e) => error!("Update of Coordinator failed: {}", e),
             }
         },
         verify_result = &mut verify_handle => {
             match verify_result.expect("Verify task panicked") {
-                Ok(()) => unreachable!(),
+                Ok(_) => unreachable!(),
                 Err(e) => error!("Verify of Coordinator failed: {}", e),
             }
         },
@@ -364,9 +386,19 @@ pub async fn main() {
                         update_handle
                     );
 
-                    if let Err(e) = v_res {
-                        warn!("Ignoring error while joining verify task: {}", e);
-                    }
+                    let s3_ctx = match v_res {
+                        Ok(inner_res) => match inner_res {
+                            Ok(s3_ctx) => s3_ctx,
+                            Err(e) => {
+                                warn!("Ignoring last error in verify task: {}", e);
+                                S3Ctx::new().await.expect("Failed to instantiate S3 client")
+                            },
+                        },
+                        Err(e) =>  {
+                            warn!("Ignoring error while joining verify task: {}", e);
+                            S3Ctx::new().await.expect("Failed to instantiate S3 client")
+                        },
+                    };
 
                     if let Err(e) = u_res {
                         warn!("Ignoring error while joining update task: {}", e);
@@ -374,7 +406,7 @@ pub async fn main() {
 
                     info!("Concurrent tasks terminated");
 
-                    finalize_ceremony(coordinator).await.expect("Failed ceremony state finalize");
+                    finalize_ceremony(coordinator, &s3_ctx).await.expect("Failed ceremony state finalize");
                 },
                 Err(e) => error!("Rocket failed: {}", e)
             }

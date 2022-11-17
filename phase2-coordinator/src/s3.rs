@@ -4,7 +4,13 @@ use rusoto_core::{region::Region, request::TlsError};
 use rusoto_credential::{AwsCredentials, ChainProvider, CredentialsError, ProvideAwsCredentials};
 use rusoto_s3::{
     util::{PreSignedRequest, PreSignedRequestOption},
-    DeleteObjectRequest, GetObjectRequest, HeadObjectRequest, PutObjectRequest, S3Client, StreamingBody, S3,
+    DeleteObjectRequest,
+    GetObjectRequest,
+    HeadObjectRequest,
+    PutObjectRequest,
+    S3Client,
+    StreamingBody,
+    S3,
 };
 use std::str::FromStr;
 use thiserror::Error;
@@ -121,7 +127,7 @@ impl S3Ctx {
     }
 
     /// Upload a challenge to S3. Returns the presigned url to get it.
-    pub(crate) async fn upload_challenge(&self, key: String, challenge: Vec<u8>) -> Result<String> {
+    pub async fn upload_challenge(&self, key: String, challenge: Vec<u8>) -> Result<String> {
         let put_object_request = PutObjectRequest {
             bucket: self.bucket.clone(),
             key: key.clone(),
