@@ -123,7 +123,7 @@ async fn generate_secret() -> Result<()> {
     let secret = hex::encode(secret_bytes);
     std::env::set_var("ACCESS_SECRET", &secret);
     let env = match std::env::var("AWS_S3_PROD") {
-        Ok(val) if val == "true" => "prod",
+        Ok(val) if val == "true" => "production",
         _ => "master",
     };
 
