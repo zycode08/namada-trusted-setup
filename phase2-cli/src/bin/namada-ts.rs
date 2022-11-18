@@ -659,7 +659,7 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
             _ => (),
         }
     } else {
-        eprintln!("The token provided is not base58 encoded.".red().bold());
+        eprintln!("{}", "The token provided is not base58 encoded.".red().bold());
         process::exit(0);
     };
 
@@ -667,7 +667,7 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
     let client = Client::new();
     if requests::ping_coordinator(&client, &url.coordinator)
         .await.is_err() {
-            eprintln!("ERROR: could not contact the Coordinator, please check the url you provided".red().bold());
+            eprintln!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold());
             process::exit(1);
         };
 
