@@ -138,15 +138,6 @@ and input them to:
 ```
 namada-ts verify-contribution $public_key $contribution_hash $contribution_hash_signature
 ```
-### Client Contribution Flow 
-
-1. The client will generate a secret mnemonic that derives your key pair.  Back up your mnemonic and keep it in a safe place! This is the only way to prove your contribution.
-
-2. Then, you will need to provide the unique token for your cohort you received by email. If the token is valid, you will join the queue of the ceremony. You will need to wait a bit until it is your turn. Each round lasts between 4 min and 20 min. During the whole ceremony, please neither close your terminal, nor your internet connection. If you stay offline for more than 2 min, the coordinator will kick you out from the queue.
-
-3. When it is your turn, the client will download the challenge from the coordinator and save it to the root folder. You have at most 20 minutes to compute your contribution and send it back to the coordinator. Be creative and good luck!
-<!-- #### Flowchart
-![Alt text](./ceremony-contribution-diagram.png?raw=true "Ceremony Contribution Flow") -->
 
 ## Client Contribution Flow
 
