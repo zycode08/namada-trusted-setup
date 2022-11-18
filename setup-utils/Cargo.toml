@@ -1,6 +1,6 @@
 [package]
 name = "setup-utils"
-version = "1.0.0-beta.11"
+version = "1.0.0"
 authors = ["Georgios Konstantopoulos <me@gakonst.com>", "The Aleo Team <hello@aleo.org>"]
 edition = "2018"
 

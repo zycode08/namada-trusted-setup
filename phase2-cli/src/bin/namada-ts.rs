@@ -52,7 +52,7 @@ const OFFLINE_CONTRIBUTION_FILE_NAME: &str = "contribution.params";
 const OFFLINE_CHALLENGE_FILE_NAME: &str = "challenge.params";
 
 const CUSTOM_SEED_MSG_NO: &str = "Enter a variable-length random string to be used as entropy in combination with your OS randomness.\nYou can type frenetically, smash your keyboard, or enter a string representation of your alternative source of entropy.\nThe only limitation is your terminal’s max command length.\nThis string will be hashed together with your OS randomness to produce the seed for ChaCha RNG";
-const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYou seed might come you from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or an airgapped machine.";
+const CUSTOM_SEED_MSG_YES: &str = "Provide your custom random seed to initialize the ChaCha random number generator.\nYour seed might come from an external source of randomness like atmospheric noise, radioactive elements, lava lite etc. or an airgapped machine.";
 
 macro_rules! pretty_hash {
     ($hash:expr) => {{
@@ -76,7 +76,7 @@ macro_rules! pretty_hash {
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
     let anonymous = io::get_user_input(
-        "Do you want to participate anonymously (if not, you'll be asked to provide us with your name and email address)? [y/n]".bright_yellow(),
+        "Do you want to participate anonymously (if not, you’ll be asked to provide us with your name and email address)? [y/n]".bright_yellow(),
         Some(&Regex::new(r"^(?i)[yn]$")?),
     )?
     .to_lowercase();
@@ -175,7 +175,7 @@ fn compute_contribution_offline() -> Result<()> {
     println!("{}", msg.bright_cyan());
 
     // Wait for the contribution file to be updated with randomness
-    // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because ther contributor has been dropped out of the ceremony
+    // NOTE: we don't actually check for the timeout on the 15 minutes. If the user takes more time than allowed to produce the file we'll keep going on in the contribution, at the following request the Coordinator will reply with an error because the contributor has been dropped out of the ceremony
     io::get_user_input(
         "When your contribution file is ready, press enter to upload it".bright_yellow(),
         None,
@@ -512,7 +512,7 @@ async fn contribution_loop(
                                                 "If you’d like to share that you contributed with your frens and the world, you can use:".bright_cyan(),
                                                 round_height,
                                 contrib_info.contribution_hash,
-                format!("You also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in the \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
+                format!("You’ll also find all the metadata of your contribution (ceremony round, contribution hash, public key, timestamps etc.) in \"namada_contributior_info_round_{}.json\"",round_height).as_str().bright_cyan()
                                 );
                 println!("{}\n", ASCII_CONTRIBUTION_DONE.bright_yellow());
 
@@ -637,17 +637,7 @@ enum Branch {
 /// Performs the entire contribution cycle
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch) {
-    // Check that the passed-in coordinator url is correct
-    let client = Client::new();
-    requests::ping_coordinator(&client, &url.coordinator)
-        .await
-        .expect(&format!(
-            "{}",
-            "ERROR: could not contact the Coordinator, please check the url you provided"
-                .red()
-                .bold()
-        ));
-
+    // Check the token info
     let decoded_bytes = bs58::decode(token.clone()).into_vec();
     if let Ok(token_bytes) = decoded_bytes {
         let decoded_token = String::from_utf8(token_bytes).expect("Can't decode the token");
@@ -669,9 +659,17 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
             _ => (),
         }
     } else {
-        println!("The token provided is not base58 encoded.");
+        eprintln!("{}", "The token provided is not base58 encoded.".red().bold());
         process::exit(0);
     };
+
+    // Check that the passed-in coordinator url is correct
+    let client = Client::new();
+    if requests::ping_coordinator(&client, &url.coordinator)
+        .await.is_err() {
+            eprintln!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold());
+            process::exit(1);
+        };
 
     println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
@@ -875,7 +873,18 @@ async fn main() {
             pubkey,
             message,
             signature,
+            parameter_path
         }) => {
+            if let Some(path) = parameter_path {
+                // Check hash of the parameters file
+                let contribution = std::fs::read(path).expect(&format!("{}", "Failed to read file".red().bold()));
+                let contribution_file_hash = calculate_hash(contribution.as_ref());
+                if hex::encode(contribution_file_hash) != message {
+                    eprintln!("{}", "The computed hash of the file does not match the provided one".red().bold());
+                    process::exit(1);
+                }
+            }
+
             let result = verify_signature(pubkey, signature, message);
             if result {
                 println!("The contribution signature is correct.")

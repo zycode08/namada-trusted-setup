@@ -116,12 +116,14 @@ impl Token {
 
 #[derive(Debug, StructOpt)]
 pub struct VerifySignatureContribution {
-    #[structopt(about = "The contribution public key")]
+    #[structopt(help = "The contribution public key")]
     pub pubkey: String,
-    #[structopt(about = "The contribution message hash")]
+    #[structopt(help = "The contribution message hash")]
     pub message: String,
-    #[structopt(about = "The contribution signature")]
+    #[structopt(help = "The contribution signature")]
     pub signature: String,
+    #[structopt(help = "The path to the contribution file", parse(try_from_str))]
+    pub parameter_path: Option<PathBuf>
 }
 
 #[derive(Debug, StructOpt)]
@@ -148,6 +150,6 @@ pub enum CeremonyOpt {
     #[cfg(debug_assertions)]
     #[structopt(about = "Update manually the coordinator")]
     UpdateCoordinator(CoordinatorUrl),
-    #[structopt(about = "Verify signature")]
+    #[structopt(about = "Verify a contribution")]
     VerifyContribution(VerifySignatureContribution),
 }
