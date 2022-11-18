@@ -637,17 +637,7 @@ enum Branch {
 /// Performs the entire contribution cycle
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch) {
-    // Check that the passed-in coordinator url is correct
-    let client = Client::new();
-    requests::ping_coordinator(&client, &url.coordinator)
-        .await
-        .expect(&format!(
-            "{}",
-            "ERROR: could not contact the Coordinator, please check the url you provided"
-                .red()
-                .bold()
-        ));
-
+    // Check the token info
     let decoded_bytes = bs58::decode(token.clone()).into_vec();
     if let Ok(token_bytes) = decoded_bytes {
         let decoded_token = String::from_utf8(token_bytes).expect("Can't decode the token");
@@ -669,9 +659,17 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
             _ => (),
         }
     } else {
-        println!("The token provided is not base58 encoded.");
+        eprintln!("{}", "The token provided is not base58 encoded.".red().bold());
         process::exit(0);
     };
+
+    // Check that the passed-in coordinator url is correct
+    let client = Client::new();
+    if requests::ping_coordinator(&client, &url.coordinator)
+        .await.is_err() {
+            eprintln!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold());
+            process::exit(1);
+        };
 
     println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
@@ -875,7 +873,18 @@ async fn main() {
             pubkey,
             message,
             signature,
+            parameter_path
         }) => {
+            if let Some(path) = parameter_path {
+                // Check hash of the parameters file
+                let contribution = std::fs::read(path).expect(&format!("{}", "Failed to read file".red().bold()));
+                let contribution_file_hash = calculate_hash(contribution.as_ref());
+                if hex::encode(contribution_file_hash) != message {
+                    eprintln!("{}", "The computed hash of the file does not match the provided one".red().bold());
+                    process::exit(1);
+                }
+            }
+
             let result = verify_signature(pubkey, signature, message);
             if result {
                 println!("The contribution signature is correct.")
