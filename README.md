@@ -45,7 +45,13 @@ Participants are also encouraged to participate via their custom clients. For mo
 
 ## 1. Building and contributing from source
 
-First, [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
+First, you will need to install some dependencies. On debian-based systems you can use:
+
+```
+sudo apt update && sudo apt install -y curl git build-essential pkg-config libssl-dev
+```
+
+After that, you'll need to [install Rust](https://www.rust-lang.org/tools/install) by entering the following command:
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -55,7 +61,7 @@ If you already have Rust installed, make sure it is the most up-to-date version:
 rustup update
 ```
 
-Once Rust is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
+Once everything is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
 ```
 git clone https://github.com/anoma/namada-trusted-setup.git
 cd namada-trusted-setup && git checkout v1.0.0-beta.11
