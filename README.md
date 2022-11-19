@@ -182,7 +182,7 @@ This repository contains several Rust crates that implement the different buildi
 
 The original implementation of the coordinator for the [Aleo Trusted Setup](https://github.com/AleoHQ/aleo-setup) was audited by: 
 
-- [Least Authority](https://leastauthority.com/blog/audit-of-aleo-trusted-setup-phase-1/)
+- [Least Authority](https://leastauthority.com/blog/audits/audit-of-aleo-trusted-setup-phase-1/)
 
 # License
 
