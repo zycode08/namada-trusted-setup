@@ -878,7 +878,7 @@ async fn main() {
             if let Some(path) = parameter_path {
                 // Check hash of the parameters file
                 let contribution = std::fs::read(path).expect(&format!("{}", "Failed to read file".red().bold()));
-                let contribution_file_hash = calculate_hash(contribution.as_ref());
+                let contribution_file_hash = calculate_hash(&contribution[64..]);
                 if hex::encode(contribution_file_hash) != message {
                     eprintln!("{}", "The computed hash of the file does not match the provided one".red().bold());
                     process::exit(1);
