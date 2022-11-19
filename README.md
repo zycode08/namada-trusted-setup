@@ -64,7 +64,7 @@ rustup update
 Once everything is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
 ```
 git clone https://github.com/anoma/namada-trusted-setup.git
-cd namada-trusted-setup && git checkout v1.0.1
+cd namada-trusted-setup && git checkout v1.1.0
 ```
 
 Build the binary:
@@ -182,7 +182,7 @@ This repository contains several Rust crates that implement the different buildi
 
 The original implementation of the coordinator for the [Aleo Trusted Setup](https://github.com/AleoHQ/aleo-setup) was audited by: 
 
-- [Least Authority](https://leastauthority.com/blog/audit-of-aleo-trusted-setup-phase-1/)
+- [Least Authority](https://leastauthority.com/blog/audits/audit-of-aleo-trusted-setup-phase-1/)
 
 # License
 
