@@ -64,7 +64,7 @@ rustup update
 Once everything is installed, clone the Namada Trusted Setup Ceremony GitHub repository and change directories into `namada-trusted-setup`:
 ```
 git clone https://github.com/anoma/namada-trusted-setup.git
-cd namada-trusted-setup && git checkout v1.0.1
+cd namada-trusted-setup && git checkout v1.1.0
 ```
 
 Build the binary:
