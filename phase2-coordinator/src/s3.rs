@@ -4,7 +4,13 @@ use rusoto_core::{region::Region, request::TlsError};
 use rusoto_credential::{AwsCredentials, ChainProvider, CredentialsError, ProvideAwsCredentials};
 use rusoto_s3::{
     util::{PreSignedRequest, PreSignedRequestOption},
-    DeleteObjectRequest, GetObjectRequest, HeadObjectRequest, PutObjectRequest, S3Client, StreamingBody, S3,
+    DeleteObjectRequest,
+    GetObjectRequest,
+    HeadObjectRequest,
+    PutObjectRequest,
+    S3Client,
+    StreamingBody,
+    S3,
 };
 use std::str::FromStr;
 use thiserror::Error;
@@ -87,9 +93,7 @@ impl S3Ctx {
 
         let mut attempt = 0u32;
 
-        while let Err(e) = self.client
-        .delete_object(delete_object_request.clone())
-        .await {
+        while let Err(e) = self.client.delete_object(delete_object_request.clone()).await {
             match e {
                 rusoto_core::RusotoError::Unknown(ref inner) => {
                     match inner.status.as_u16() {
@@ -104,11 +108,11 @@ impl S3Ctx {
                             let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                             attempt += 1;
                             time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
-                        },
-                        _ => return Err(S3Error::DeleteError(e.to_string()))
+                        }
+                        _ => return Err(S3Error::DeleteError(e.to_string())),
                     }
-                },
-                _ =>  return Err(S3Error::DeleteError(e.to_string()))
+                }
+                _ => return Err(S3Error::DeleteError(e.to_string())),
             }
         }
 
@@ -122,9 +126,7 @@ impl S3Ctx {
             ..Default::default()
         };
 
-        while let Err(e) = self.client
-        .put_object(put_object_request)
-        .await {
+        while let Err(e) = self.client.put_object(put_object_request).await {
             match e {
                 rusoto_core::RusotoError::Unknown(ref inner) => {
                     match inner.status.as_u16() {
@@ -146,11 +148,11 @@ impl S3Ctx {
                             let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                             attempt += 1;
                             time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
-                        },
-                        _ => return Err(S3Error::UploadError(e.to_string()))
+                        }
+                        _ => return Err(S3Error::UploadError(e.to_string())),
                     }
-                },
-                _ =>  return Err(S3Error::UploadError(e.to_string()))
+                }
+                _ => return Err(S3Error::UploadError(e.to_string())),
             }
         }
 
@@ -189,9 +191,7 @@ impl S3Ctx {
 
         let mut attempt = 0u32;
 
-        while let Err(e) = self.client
-        .put_object(put_object_request)
-        .await {
+        while let Err(e) = self.client.put_object(put_object_request).await {
             match e {
                 rusoto_core::RusotoError::Unknown(ref inner) => {
                     match inner.status.as_u16() {
@@ -213,11 +213,11 @@ impl S3Ctx {
                             let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                             attempt += 1;
                             time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
-                        },
-                        _ => return Err(S3Error::UploadError(e.to_string()))
+                        }
+                        _ => return Err(S3Error::UploadError(e.to_string())),
                     }
-                },
-                _ =>  return Err(S3Error::UploadError(e.to_string()))
+                }
+                _ => return Err(S3Error::UploadError(e.to_string())),
             }
         }
 
@@ -258,9 +258,7 @@ impl S3Ctx {
         let mut attempt = 0u32;
 
         let stream = loop {
-            match self.client
-            .get_object(get_request.clone())
-            .await {
+            match self.client.get_object(get_request.clone()).await {
                 Ok(i) => break i.body.ok_or(S3Error::EmptyContribution)?,
                 Err(e) => match e {
                     rusoto_core::RusotoError::Unknown(ref inner) => {
@@ -276,13 +274,13 @@ impl S3Ctx {
                                 let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                                 attempt += 1;
                                 time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
-                            },
-                            _ => return Err(S3Error::DownloadError(e.to_string()))
+                            }
+                            _ => return Err(S3Error::DownloadError(e.to_string())),
                         }
-                    },
-                    _ =>  return Err(S3Error::DownloadError(e.to_string()))
-                }
-            }  
+                    }
+                    _ => return Err(S3Error::DownloadError(e.to_string())),
+                },
+            }
         };
 
         stream.into_async_read().read_to_end(&mut buffer).await?;
