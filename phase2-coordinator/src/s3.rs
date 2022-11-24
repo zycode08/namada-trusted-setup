@@ -104,7 +104,7 @@ impl S3Ctx {
                             }
 
                             // Exponential backoff, https://docs.aws.amazon.com/elastictranscoder/latest/developerguide/error-handling.html#api-retries
-                            warn!("Retrying s3 request because of: {}", e);
+                            warn!("Retrying s3 delete contributors.json request because of: {}", e);
                             let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                             attempt += 1;
                             time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
@@ -144,7 +144,7 @@ impl S3Ctx {
                                 ..Default::default()
                             };
 
-                            warn!("Retrying s3 request because of: {}", e);
+                            warn!("Retrying s3 upload contributors.json request because of: {}", e);
                             let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                             attempt += 1;
                             time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
@@ -209,7 +209,7 @@ impl S3Ctx {
                                 ..Default::default()
                             };
 
-                            warn!("Retrying s3 request because of: {}", e);
+                            warn!("Retrying s3 upload challenge request because of: {}", e);
                             let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                             attempt += 1;
                             time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
@@ -270,7 +270,7 @@ impl S3Ctx {
                                 }
 
                                 // Exponential backoff, https://docs.aws.amazon.com/elastictranscoder/latest/developerguide/error-handling.html#api-retries
-                                warn!("Retrying s3 request because of: {}", e);
+                                warn!("Retrying s3 get object request because of: {}", e);
                                 let sleep_time = 2u32.pow(attempt) * BACKOFF_SLEEP_TIME_MILLISECS;
                                 attempt += 1;
                                 time::sleep(std::time::Duration::from_millis(sleep_time.into())).await;
