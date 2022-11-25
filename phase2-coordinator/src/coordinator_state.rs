@@ -2908,6 +2908,7 @@ impl CoordinatorState {
             .iter()
             .chain(self.current_verifiers.clone().iter())
             .filter_map(|(participant, participant_info)| {
+                // Check timeout on lock
                 let exceeded_chunk_names: Vec<String> = participant_info
                     .locked_chunks
                     .values()
@@ -2918,6 +2919,18 @@ impl CoordinatorState {
                     .map(|lock| lock.chunk_id.to_string())
                     .collect();
 
+                 // Check timeout on round assignation time in case the participant didn't lock the chunk
+                 let exceeded_round_timeout = match participant {
+                    Participant::Contributor(_) => match participant_info.started_at {
+                        Some(started_at) => (now - started_at) > participant_lock_timeout,
+                        None => {
+                            tracing::error!("Current contributor {} doesn't have an assigned round start time at current time {}", participant, now);
+                            false
+                        },
+                    },
+                    Participant::Verifier(_) => false,
+                };
+
                 if !self.is_coordinator_contributor(&participant) && !exceeded_chunk_names.is_empty() {
                     let exceeded_chunks_string: String = exceeded_chunk_names.join(", ");
 
@@ -2927,6 +2940,14 @@ impl CoordinatorState {
                         participant,
                         participant_lock_timeout.whole_seconds(),
                         exceeded_chunks_string,
+                    );
+                    Some(self.drop_participant(participant, time))
+                } else if !self.is_coordinator_contributor(&participant) && exceeded_round_timeout {
+                    tracing::warn!(
+                        "Dropping participant {} because it has exceeded the maximum ({:?}s) allowed time \
+                        it is allowed to contribute without locking a chunk.",
+                        participant,
+                        participant_lock_timeout.whole_seconds(),
                     );
                     Some(self.drop_participant(participant, time))
                 } else {
