@@ -173,30 +173,30 @@ pub fn generate_keypair(user: KeyPairUser) -> Result<KeyPair> {
         KeyPairUser::Coordinator => std::fs::write(COORDINATOR_MNEMONIC_FILE, mnemonic.to_string())?,
         KeyPairUser::Contributor => {
             // Print mnemonic to the user in a different terminal
-            execute!(std::io::stdout(), EnterAlternateScreen)?;
-            println!("{}", "Safely store your 24 words mnemonic. You will need it if your contribution is retroactively rewarded as a public good! And remember, the fancier your contribution, the more likely it is that it is considered a public good.\n".bright_cyan());
+            //execute!(std::io::stdout(), EnterAlternateScreen)?;
+            //println!("{}", "Safely store your 24 words mnemonic. You will need it if your contribution is retroactively rewarded as a public good! And remember, the fancier your contribution, the more likely it is that it is considered a public good.\n".bright_cyan());
             println!("{}", mnemonic);
-            println!(
-                "{}",
-                "The next step will be to verify if you've correctly written the words above.".bright_cyan()
-            );
-            get_user_input(format!("{}", "Press enter when you've done it".yellow()).as_str(), None)?;
-            execute!(std::io::stdout(), LeaveAlternateScreen)?;
+            //*println!(
+            //    "{}",
+            //    "The next step will be to verify if you've correctly written the words above.".bright_cyan()
+            //);
+            //get_user_input(format!("{}", "Press enter when you've done it".yellow()).as_str(), None)?;
+            //execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
-            #[cfg(not(debug_assertions))]
-            {
-                execute!(std::io::stdout(), EnterAlternateScreen)?;
-                let verification_outcome = check_mnemonic(&mnemonic);
-                execute!(std::io::stdout(), LeaveAlternateScreen)?;
+            //#[cfg(not(debug_assertions))]
+            //{
+            //    execute!(std::io::stdout(), EnterAlternateScreen)?;
+            //    let verification_outcome = check_mnemonic(&mnemonic);
+            //    execute!(std::io::stdout(), LeaveAlternateScreen)?;
 
-                match verification_outcome {
-                    Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
-                    Err(e) => {
-                        println!("{}", e.to_string().red().bold());
-                        return Err(e);
-                    }
-                }
-            }
+            //    match verification_outcome {
+            //        Ok(_) => println!("{}", "Mnemonic verification passed".green().bold()),
+            //        Err(e) => {
+            //            println!("{}", e.to_string().red().bold());
+            //            return Err(e);
+            //        }
+            //    }
+            //}
         }
     }
 

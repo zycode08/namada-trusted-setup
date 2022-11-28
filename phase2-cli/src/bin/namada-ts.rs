@@ -75,23 +75,23 @@ macro_rules! pretty_hash {
 #[inline(always)]
 fn initialize_contribution() -> Result<ContributionInfo> {
     let mut contrib_info = ContributionInfo::default();
-    let anonymous = io::get_user_input(
-        "Do you want to participate anonymously (if not, you’ll be asked to provide us with your name and email address)? [y/n]".bright_yellow(),
-        Some(&Regex::new(r"^(?i)[yn]$")?),
-    )?
-    .to_lowercase();
+    //let anonymous = io::get_user_input(
+    //    "Do you want to participate anonymously (if not, you’ll be asked to provide us with your name and email address)? [y/n]".bright_yellow(),
+    //    Some(&Regex::new(r"^(?i)[yn]$")?),
+    //)?
+    //.to_lowercase();
 
-    // Ask for personal info
-    if anonymous == "n" {
-        contrib_info.full_name = Some(io::get_user_input(
-            "Please enter your full name (first and last name):".bright_yellow(),
-            Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
-        )?);
-        contrib_info.email = Some(io::get_user_input(
-            "Please enter your email address:".bright_yellow(),
-            Some(&Regex::new(r".+[@].+[.].+")?),
-        )?);
-    }
+    //// Ask for personal info
+    //if anonymous == "n" {
+    //    contrib_info.full_name = Some(io::get_user_input(
+    //        "Please enter your full name (first and last name):".bright_yellow(),
+    //        Some(&Regex::new(r"(.|\s)*\S(.|\s)*")?),
+    //    )?);
+    //    contrib_info.email = Some(io::get_user_input(
+    //        "Please enter your email address:".bright_yellow(),
+    //        Some(&Regex::new(r".+[@].+[.].+")?),
+    //    )?);
+    //}
 
     Ok(contrib_info)
 }
@@ -199,10 +199,11 @@ fn compute_contribution(custom_seed: bool, challenge: &[u8], filename: &str) -> 
         }
         RandomSource::Seed(seed)
     } else {
-        let entropy = io::get_user_input(
+        /*let entropy = io::get_user_input(
             "Frenetically type or enter your alternative source of entropy:".bright_yellow(),
             None,
-        )?;
+        )?;*/
+        let entropy = "namadaOnepieceLuffyZoroNamiSanjiUsopp".to_string();
         RandomSource::Entropy(entropy)
     };
 
@@ -516,8 +517,10 @@ async fn contribution_loop(
                                 );
                 println!("{}\n", ASCII_CONTRIBUTION_DONE.bright_yellow());
 
+                break;
+
                 // Attestation
-                if "n"
+                /*if "n"
                     == io::get_user_input(
                         "Would you like to provide an attestation of your contribution? [y/n]".bright_yellow(),
                         Some(&Regex::new(r"^(?i)[yn]$").unwrap()),
@@ -546,7 +549,7 @@ async fn contribution_loop(
                             return;
                         }
                     }
-                }
+                }*/
             }
             ContributorStatus::Banned => {
                 println!(
@@ -638,7 +641,7 @@ enum Branch {
 #[inline(always)]
 async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch) {
     // Check the token info
-    let decoded_bytes = bs58::decode(token.clone()).into_vec();
+    /*let decoded_bytes = bs58::decode(token.clone()).into_vec();
     if let Ok(token_bytes) = decoded_bytes {
         let decoded_token = String::from_utf8(token_bytes).expect("Can't decode the token");
         let token_data: Token = serde_json::from_str(&decoded_token).expect("Can't deserialize the token.");
@@ -661,17 +664,17 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
     } else {
         eprintln!("{}", "The token provided is not base58 encoded.".red().bold());
         process::exit(0);
-    };
+    };*/
 
     // Check that the passed-in coordinator url is correct
     let client = Client::new();
-    if requests::ping_coordinator(&client, &url.coordinator)
+    /*if requests::ping_coordinator(&client, &url.coordinator)
         .await.is_err() {
             eprintln!("{}", "ERROR: could not contact the Coordinator, please check the url you provided".red().bold());
             process::exit(1);
-        };
+        };*/
 
-    println!("{}", ASCII_LOGO.bright_yellow());
+    //println!("{}", ASCII_LOGO.bright_yellow());
     println!("{}", "Welcome to the Namada Trusted Setup Ceremony!".bold());
 
     match branch {
@@ -690,10 +693,11 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
 
     // Contribute
     println!("{} Initializing contribution", "[1/11]".bold().dimmed());
-    let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
+    let mut contrib_info = ContributionInfo::default();
+    /*let mut contrib_info = tokio::task::spawn_blocking(initialize_contribution)
         .await
         .unwrap()
-        .expect(&format!("{}", "Error while initializing the contribution".red().bold()));
+        .expect(&format!("{}", "Error while initializing the contribution".red().bold()));*/
     println!("{} Generating keypair", "[2/11]".bold().dimmed());
 
     match branch {
@@ -702,7 +706,7 @@ async fn contribution_prelude(url: CoordinatorUrl, token: String, branch: Branch
         _ => (),
     }
 
-    io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
+    //io::get_user_input("Press enter to generate a keypair".bright_yellow(), None).unwrap();
     let keypair = tokio::task::spawn_blocking(move || io::generate_keypair(KeyPairUser::Contributor))
         .await
         .unwrap()
